@@ -1,10 +1,10 @@
 from bisect import bisect_right as stdlib_bisect_right
-from collections.abc import Iterable, Iterator, Sequence
+from collections.abc import Iterable, Iterator, Sequence, Set
 from pathlib import Path
 import re
 import shutil
 from typing import Any, Callable, Literal, Tuple, TypeAlias, TypeVar, TypeVarTuple
-from urllib.request import urlopen
+from urllib.request import Request, urlopen
 
 from .codepoint import (
     CodePoint,
@@ -14,6 +14,7 @@ from .codepoint import (
 )
 
 from .property import Category, EastAsianWidth
+from demicode import __version__
 
 # --------------------------------------------------------------------------------------
 # Curated Code Points
@@ -145,10 +146,16 @@ def _get_ucd_url(
     return f'https://www.unicode.org/Public/{prefix}/{path}'
 
 
+def _build_ucd_request(file: str, *, version: None | str = None) -> Request:
+    return Request(_get_ucd_url(file, version= version), None, {
+        'User-Agent': f'demicode {__version__}'
+    })
+
+
 _VERSION_PATTERN = re.compile('Version (?P<version>\d+[.]\d+[.]\d+)')
 
 def _get_ucd_version() -> str:
-    with urlopen(_get_ucd_url('ReadMe.txt')) as response:
+    with urlopen(_build_ucd_request('ReadMe.txt')) as response:
         text = response.read().decode('utf8')
     rematch = _VERSION_PATTERN.search(text)
     if rematch is None:
@@ -170,8 +177,8 @@ def _mirror_unicode_data(
 
     path = version_root / file
     if not path.exists():
-        url = _get_ucd_url(file, version=version)
-        with urlopen(url) as response, open(path, mode='wb') as local_file:
+        request = _build_ucd_request(file, version=version)
+        with urlopen(request) as response, open(path, mode='wb') as local_file:
             shutil.copyfileobj(response, local_file)
 
     return path

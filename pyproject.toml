@@ -15,7 +15,7 @@ dev = ["mypy", "flit"]
 repository = "https://github.com/apparebit/demicode"
 
 [project.scripts]
-demicode = "demicode.__main__"
+demicode = "demicode.__main__:main"
 
 [build-system]
 requires = ["flit_core >=3.4"]

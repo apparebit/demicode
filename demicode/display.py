@@ -18,7 +18,7 @@ from collections.abc import Iterator, Iterable
 from enum import auto, Enum
 import itertools
 
-from .ansi import Ansi
+from .render import Padding, Renderer
 from .codepoint import CodePoint
 from .ucd import UCD
 
@@ -61,31 +61,31 @@ MIN_NAME_LENGTH = 4
 def _max_name_length(width: int) -> int:
     if width <= CORE_WIDTH:
         return MIN_NAME_LENGTH
-    return min(width, 120) - CORE_WIDTH + MIN_NAME_LENGTH
+    return width - CORE_WIDTH + MIN_NAME_LENGTH
 
 
-def format_legend(width: int) -> str:
+def format_legend(renderer: Renderer) -> str:
     """Format the legend for lines formatted with `format_info`."""
-    flexible_spaces = _max_name_length(width) - MIN_NAME_LENGTH
+    flexible_spaces = _max_name_length(renderer.width) - MIN_NAME_LENGTH
 
     return (
-        Ansi.BG.MEDIUM_GREY
-        + (' ' * 18) + '\uFF23 Wd \uFF36' + (' ' * (CORE_WIDTH - 18 - 8))
-        + (' ' * flexible_spaces)
-        + Ansi.BG.DEFAULT + '\n' + Ansi.BG.MEDIUM_GREY
-        + LEGEND_CORE + (' ' * flexible_spaces)
-        + Ansi.BG.DEFAULT
+        renderer.legend(
+            (' ' * 18) + '\uFF23 Wd \uFF36' + (' ' * (CORE_WIDTH - 18 - 8))
+            + (' ' * flexible_spaces)
+        ) + '\n'
+        + renderer.legend(
+            LEGEND_CORE + (' ' * flexible_spaces)
+        )
     )
 
 
 def format_info(
+    renderer: Renderer,
     codepoint: CodePoint,
     *,
     start_column: int = 1,
     include_char_info: bool = True,
-    width: int = 80,
     presentation: Presentation = Presentation.PLAIN,
-    brightness: int = 0,
 ) -> Iterator[str]:
     """
     Format the fixed-width information for the given code point.
@@ -122,10 +122,10 @@ def format_info(
     elif UCD.is_line_break(codepoint):
         display = '\u23CE' # RETURN SYMBOL
     elif presentation is Presentation.TEXT_VARIATION:
-        assert UCD.has_variation(codepoint)
+        assert codepoint in UCD.with_variation
         display = f'{chr(codepoint)}\uFE0E' # Force text variation
     elif presentation is Presentation.EMOJI_VARIATION:
-        assert UCD.has_variation(codepoint)
+        assert codepoint in UCD.with_variation
         display = f'{chr(codepoint)}\uFE0F' # Force emoji variation
     elif presentation is Presentation.KEYCAP:
         assert codepoint in UCD.with_keycap
@@ -134,19 +134,15 @@ def format_info(
     else:
         display = chr(codepoint)
 
-    # Format against background and against foreground
-    bg_color = Ansi.BG.LIGHTER_GREY if brightness <= 0 else Ansi.BG.YELLOW
-    fg_color = Ansi.FG.DARK_GREY if brightness <= 1 else Ansi.FG.ORANGE
-    overflow_padding = 3 - wcwidth
-
-    yield Ansi.CHA(start_column + 1)
-    yield from (display, bg_color, ' ' * overflow_padding, Ansi.BG.DEFAULT)
-    yield Ansi.CHA(start_column + 5)
-    yield from (display, fg_color,'\u2588' * overflow_padding, Ansi.FG.DEFAULT)
+    # Render against background and against foreground
+    yield renderer.column(start_column + 1)
+    yield renderer.blot(display, Padding.BACKGROUND, 3 - wcwidth)
+    yield renderer.column(start_column + 5)
+    yield renderer.blot(display, Padding.FOREGROUND, 3 - wcwidth)
 
     # More information about the codepoint
     if include_char_info:
-        yield Ansi.CHA(start_column + 9)
+        yield renderer.column(start_column + 9)
         yield f'{str(codepoint):<8s} '
         yield '-- ' if category is None else f'{category.value} '
         east_asian_width = UCD.east_asian_width(codepoint)
@@ -154,7 +150,7 @@ def format_info(
         yield presentation.label
         age = UCD.age(codepoint)
         yield ' ---' if age is None else f'{age:>4s}'
-        yield Ansi.CHA(start_column + CORE_WIDTH - MIN_NAME_LENGTH)
+        yield renderer.column(start_column + CORE_WIDTH - MIN_NAME_LENGTH)
 
         name = UCD.name(codepoint)
         if name is None:
@@ -164,7 +160,7 @@ def format_info(
             name = f'{name} ({block})'
         if name_prefix is not None:
             name = name_prefix + name
-        max_length = _max_name_length(width)
+        max_length = _max_name_length(renderer.width)
         if len(name) > max_length:
             name = name[:max_length - 1] + '…'
         yield f'{name}'
@@ -173,57 +169,55 @@ def format_info(
 # --------------------------------------------------------------------------------------
 
 
+def add_presentation(
+    codepoints: Iterable[CodePoint]
+) -> Iterator[tuple[CodePoint, Presentation]]:
+    """
+    Turn the stream of code points into a stream of code points and their
+    presentation. For every code point in the given iterable, this generator
+    produces all possible text, emoji, and keycap variations.
+    """
+    for codepoint in codepoints:
+        if codepoint not in UCD.with_variation:
+            yield codepoint, Presentation.PLAIN
+            continue
+
+        yield codepoint, Presentation.TEXT_VARIATION
+        yield codepoint, Presentation.EMOJI_VARIATION
+
+        if codepoint in UCD.with_keycap:
+            yield codepoint, Presentation.KEYCAP
+
+
 def format_lines(
-    brightness: int,
-    width: int,
-    codepoints: Iterable[CodePoint],
+    renderer: Renderer,
+    codepoints: Iterable[tuple[CodePoint, Presentation]],
 ) -> Iterator[str]:
     """Emit the extended, per-line representation for all code points."""
-    for codepoint in codepoints:
-        if not UCD.has_variation(codepoint):
-            yield ''.join(format_info(codepoint, width=width, brightness=brightness))
-            continue
-
+    for codepoint, presentation in codepoints:
         yield ''.join(format_info(
+            renderer,
             codepoint,
-            width=width,
-            brightness=brightness,
-            presentation=Presentation.TEXT_VARIATION,
-        ))
-        yield ''.join(format_info(
-            codepoint,
-            width=width,
-            brightness=brightness,
-            presentation=Presentation.EMOJI_VARIATION,
-        ))
-
-        if codepoint not in UCD.with_keycap:
-            continue
-
-        yield ''.join(format_info(
-            codepoint,
-            width=width,
-            brightness=brightness,
-            presentation=Presentation.KEYCAP,
+            presentation=presentation,
         ))
 
 
 def format_grid_lines(
-    brightness: int,
-    width: int,
-    codepoints: Iterable[CodePoint],
+    renderer: Renderer,
+    codepoints: Iterable[tuple[CodePoint, Presentation]],
 ) -> Iterator[str]:
     """Emit the compact, grid-like representation for all code points."""
-    column_count = (min(width, 120) - 1) // 11
+    column_count = (renderer.width - 1) // 11
     while True:
         line = ''.join(itertools.chain.from_iterable(
             format_info(
+                renderer,
                 codepoint,
-                include_char_info=False,
+                presentation=presentation,
                 start_column=count * 11 + 2,
-                brightness=brightness,
+                include_char_info=False,
             )
-            for count, codepoint
+            for count, (codepoint, presentation)
             in enumerate(itertools.islice(codepoints, column_count))
         ))
         if line == '':

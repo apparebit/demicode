@@ -1,9 +1,7 @@
+from collections.abc import Iterator
 from enum import Enum
 from types import NotImplementedType
 from typing import Any, NamedTuple, Self, SupportsInt, SupportsIndex
-
-
-# --------------------------------------------------------------------------------------
 
 
 class CodePoint(int):
@@ -108,6 +106,13 @@ class CodePointRange(NamedTuple):
 
     def to_sequence(self) -> 'CodePointSequence':
         raise TypeError(f'Unable to convert range {self} to sequence')
+
+    def codepoints(self) -> Iterator[CodePoint]:
+        cursor = self.start
+        yield cursor
+        while cursor < self.stop:
+            cursor = CodePoint(cursor + 1)
+            yield cursor
 
     def __repr__(self) -> str:
         return f'CodePointRange({self.start}, {self.stop})'

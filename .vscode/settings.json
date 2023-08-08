@@ -1,6 +1,8 @@
 {
     "cSpell.words": [
         "demicode",
-        "vstring"
+        "islight",
+        "vstring",
+        "wcwidth"
     ]
 }

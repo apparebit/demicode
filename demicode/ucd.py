@@ -19,63 +19,73 @@ from .property import Category, EastAsianWidth
 # Curated Code Points
 
 
-_KEYCAPS = tuple(CodePoint.of(cp) for cp in '#*0123456789')
-_SELECTION = tuple(CodePoint.of(cp) for cp in (
+_KEYCAPS = frozenset(CodePoint.of(cp) for cp in '#*0123456789')
+_CURATED_SELECTION = tuple(CodePoint.of(cp) for cp in (
     ' ',
     '\u2588',
-    '\u3000',  # IDEOGRAPHIC SPACE
     '\u200B',  # ZERO WIDTH SPACE
-    '\u2029',  # PARAGRAPH SEPARATOR
     '#',
-    '6',
-    'A',
-    'a',
-    'ä',
-    'Í',
-    'ñ',
-    'ó',
-    'z',
-    '©',
-    '…',
     '‱',
     '℃',
-    '№',
-    '™',
     '∫',
     '∬',
     '∭',
     '⨌',
-    '☘︎',
     '♀︎',
     '⚢',
     '♋︎',
-    '♨︎',
-    '⚑',
-    '✓',
-    '➤',
     '\u27FF', # LONG RIGHTWARDS SQUIGGLE ARROW
+    '\u23E9', # BLACK RIGHT-POINTING DOUBLE TRIANGLE 6.0
+    '\u23ED', # BLACK RIGHT-POINTING DOUBLE TRIANGLE WITH VERTICAL BAR 6.0
+    '-',      # HYPHEN-MINUS
+    '\u2212', # MINUS SIGN
+    '\u2013', # EN DASH
     '\u2014', # EM DASH
     '\u2E3A', # TWO EM DASH
     '\u2E3B', # THREE EM DASH
     '凌',
     '遲',
-    '\u26CE',      # OPHIUCHUS, 6.0
-    '\u27CB',      # MATHEMATICAL RISING DIAGONAL, 6.1
-    '\u20BA',      # TURKISH LIRA SIGN, 6.2
     '\U0001F0BF',  # PLAYING CARD RED JOKER, 7.0
+    '｟',
     '\U0001F918',  # SIGN OF THE HORNS, 8.0
     '\U0001F9DB',  # VAMPIRE, 10.0
     '\U0001F991',  # SQUID, 9.0
-    '｟',
-    'G',
-    'S',
     '｠',
+    '©',
     '\U0001F12F',  # COPYLEFT SYMBOL, 11.0
     '\u2BFF',      # HELLSCHREIBER PAUSE SYMBOL, 12.0
     # (proposal http://www.unicode.org/L2/L2017/17151r-hell-pause-char.pdf)
     '\U0001FBF6',  # SEGMENTED DIGIT SIX, 13.0
     '\U0001F7F0',  # HEAVY EQUALS SIGN, 14.0
     '\U0001FAE8',  # SHAKING FACE, 15.0
+))
+
+_ARROWS = tuple(CodePoint.of(cp) for cp in (
+    '\u2190', # leftwards arrow
+    '\u27F5', # long leftwards arrow
+    '\u2192', # rightwards arrow
+    '\u27F6', # long rightwards arrow
+    '\u2194', # left right arrow
+    '\u27F7', # long left right arrow
+    '\u21D0', # leftwards double arrow
+    '\u27F8', # long leftwards double arrow
+    '\u21D2', # rightwards double arrow
+    '\u27F9', # long rightwards double arrow
+    '\u21D4', # left right double arrow
+    '\u27FA', # long left right double arrow
+    '\u21A4', # leftwards arrow from bar
+    '\u27FB', # long leftwards arrow from bar
+    '\u21A6', # rightwards arrow from bar
+    '\u27FC', # long rightwards arrow from bar
+    '\u2906', # leftwards double arrow from bar
+    '\u27FD', # long leftwards double arrow from bar
+    '\u2907', # rightwards double arrow from bar
+    '\u27FE', # long rightwards double arrow from bar
+    '\u21DC', # leftwards squiggle arrow
+    '\u2B33', # long leftwards squiggle arrow
+    '\u21DD', # rightwards squiggle arrow
+    '\u27FF', # long rightwards squiggle arrow
+
 ))
 
 _LINE_BREAKS = tuple(CodePoint.of(cp) for cp in (
@@ -241,6 +251,10 @@ def _ingest(
         return _collect(_parse_records(handle), converter)
 
 
+# --------------------------------------------------------------------------------------
+# Retrieval of Specific Data
+
+
 def _retrieve_general_info(
     path: Path, version: None | str = None
 ) -> tuple[list[tuple[CodePointRange, str, str]], dict[CodePoint, tuple[str, str]]]:
@@ -316,6 +330,36 @@ def _retrieve_variations(path: Path, version: None | str = None) -> list[CodePoi
     return list(dict.fromkeys(data))
 
 
+def _retrieve_misc_props(
+    path: Path, version: None | str = None
+) -> dict[str, set[CodePoint]]:
+    _, data = _ingest(
+        version, 'PropList.txt', path, lambda cp, p: (cp.to_range(), p[0]))
+
+    # It might be a good idea to actually measure performance and memory impact
+    # of bisecting ranges versus hashing code points. Until such times, however,
+    # I prefer the set-based interface.
+
+    misc_props: dict[str, set[CodePoint]] = {
+        'White_Space': set(),
+        'Dash': set(),
+        'Noncharacter_Code_Point': set(),
+        'Variation_Selector': set(),
+    }
+
+    for datum in data:
+        if datum[1] in misc_props:
+            codepoints = misc_props[datum[1]]
+            for cp in datum[0].codepoints():
+                codepoints.add(cp)
+
+    return misc_props
+
+
+# --------------------------------------------------------------------------------------
+# Look Up
+
+
 def _bisect_ranges(
     range_data: Sequence[tuple[CodePointRange, *Tuple[Any, ...]]], # type: ignore
     codepoint: CodePoint,
@@ -371,35 +415,74 @@ class UnicodeCharacterDatabase:
         self._block_ranges = _retrieve_blocks(path, version)
         self._age_ranges = _retrieve_ages(path, version)
         self._width_default, self._width_ranges = _retrieve_widths(path, version)
-        self._variations = _retrieve_variations(path, version)
-        self._variation_set = frozenset(self._variations)
+        self._variations = frozenset(_retrieve_variations(path, version))
+        misc_props = _retrieve_misc_props(path, version)
+        self._whitespace = frozenset(misc_props['White_Space'])
+        self._dash = frozenset(misc_props['Dash'])
+        self._noncharacter = frozenset(misc_props['Noncharacter_Code_Point'])
+        self._selector = frozenset(misc_props['Variation_Selector'])
         self._is_prepared = True
 
-    def _ingest(
-        self, file_name: str, converter: Callable[[_CodePoints, _Properties], _T]
-    ) -> tuple[list[_T], list[_T]]:
-        path = _mirror_unicode_data(file_name, self.path, version=self.version)
-        with open(path, mode='r', encoding='utf8') as file:
-            return _collect(_parse_records(file), converter)
+    @property
+    def curated_selection(self) -> tuple[CodePoint,...]:
+        """
+        Some code points to show off the current abysmal fixed-width state.
+        Obviously, this is not a Unicode standard property.
+        """
+        return _CURATED_SELECTION
 
     @property
-    def with_selection(self) -> Sequence[CodePoint]:
-        """Some code points to show off the current abysmal fixed-width state."""
-        return _SELECTION
+    def with_arrow(self) -> tuple[CodePoint,...]:
+        """Matching short and long arrows."""
+        return _ARROWS
 
     @property
-    def with_keycap(self) -> Sequence[CodePoint]:
+    def with_dash(self) -> Set[CodePoint]:
+        """All code points with Unicode's Dash property."""
+        self.prepare()
+        return self._dash
+
+    @property
+    def with_keycap(self) -> Set[CodePoint]:
         """All code points that can be modified with U+20E3 as keycaps."""
         return _KEYCAPS
 
     @property
-    def with_variation(self) -> Sequence[CodePoint]:
-        """All code points that have text and emoji variations."""
-        self._prepare()
+    def with_noncharacter(self) -> Set[CodePoint]:
+        """All code points with Unicode's Noncharacter_Code_Point property."""
+        self.prepare()
+        return self._noncharacter
+
+    @property
+    def with_selector(self) -> Set[CodePoint]:
+        """
+        All code points with Unicode's Variation_Selector property. This
+        property is very much different from `with_variation`. This property
+        returns code points that trigger variations, whereas the other property
+        returns code points that participate in variations.
+        """
+        self.prepare()
+        return self._selector
+
+    @property
+    def with_variation(self) -> Set[CodePoint]:
+        """
+        All code points that participate with text and emoji variations, i.e.,
+        can be displayed as more conventional black and white glyphs as well as
+        colorful squarish emoji. This property is very much different from
+        `with_selector`, which produces the code points triggering variations.
+        """
+        self.prepare()
         return self._variations
 
+    @property
+    def with_whitespace(self) -> Set[CodePoint]:
+        """All code points with Unicode's White_Space property."""
+        self.prepare()
+        return self._whitespace
+
     def _resolve_info(self, codepoint: CodePoint, offset: int) -> None | str:
-        self._prepare()
+        self.prepare()
         try:
             return self._info_entries[codepoint][offset]
         except KeyError:
@@ -423,7 +506,7 @@ class UnicodeCharacterDatabase:
         ranges: Sequence[tuple[CodePointRange, *_Ts]],  # type: ignore
         default: _U,
     ) -> _T | _U:
-        self._prepare()
+        self.prepare()
         record = ranges[_bisect_ranges(ranges, codepoint)]
         return record[1] if codepoint in record[0] else default
 
@@ -439,11 +522,6 @@ class UnicodeCharacterDatabase:
         """Look up the code point's East Asian width."""
         w = self._resolve(codepoint, self._width_ranges, self._width_default)
         return EastAsianWidth(w)
-
-    def has_variation(self, codepoint: CodePoint) -> bool:
-        """Determine whether the code point has text and emoji variations."""
-        self._prepare()
-        return codepoint in self._variation_set
 
     # ----------------------------------------------------------------------------------
     # Non-standard fixed width per https://www.cl.cam.ac.uk/~mgk25/ucs/wcwidth.c

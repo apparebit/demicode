@@ -397,16 +397,86 @@ class UnicodeCharacterDatabase:
 
     Currently, the UCD instance used by this package is a global singleton that
     is eagerly created. At the same time, the singleton does not load the
-    necessary data until needed, making it possible to update path and version.
+    necessary data until needed, making it possible to update path and version
+    through the `use_path` and `use_version` methods.
     """
 
+    VERSIONS = (
+        (4, 1),
+        (5, 0),
+        (5, 1),
+        (5, 2),
+        (6, 0),
+        (6, 1),
+        (6, 2),
+        (6, 3),
+        (7, 0),
+        (8, 0),
+        (9, 0),
+        (10, 0),
+        (11, 0),
+        (12, 0),
+        (12, 1),
+        (13, 0),
+        (14, 0),
+        (15, 0),
+    )
+
+    @classmethod
+    def check_version(cls, version: None | str) -> None | str:
+        if version is None:
+            return None
+
+        # Convert to tuple[int]
+        try:
+            vrs = tuple(int(v) for v in version.split('.'))
+        except ValueError:
+            raise ValueError(f'malformed UCD version "{version}"')
+
+        # Normalize to three components
+        if (count := len(vrs)) < 3:
+            vrs += (0,) * (3 - count)
+        elif count > 3:
+            raise ValueError(f'malformed UCD version "{version}"')
+
+        # If within range of known supported versions, validate version.
+        first, next_major = cls.VERSIONS[0], cls.VERSIONS[-1][0]
+        if vrs[:2] < first:
+            raise ValueError(f'UCD version {version} before first supported 4.1')
+        if vrs[0] < next_major and (vrs[-1] != 0 or vrs[:2] not in cls.VERSIONS):
+            raise ValueError(f'nonexistent UCD version "{version}"')
+
+        return '.'.join(str(v) for v in vrs)
 
     def __init__(self, path: Path, version: None | str = None) -> None:
-        self.path = path
-        self.version = version
+        self._path = path
+        self._version = version
         self._is_prepared: bool = False
 
-    def _prepare(self) -> None:
+    @property
+    def path(self) -> Path:
+        return self._path
+
+    @property
+    def version(self) -> str:
+        return self._version
+
+    def use_path(self, path: Path) -> None:
+        if self._is_prepared:
+            raise ValueError('trying to update UCD path after UCD has been ingested')
+        if not path.exists():
+            raise ValueError(f'UCD path "{path}" does not exist')
+        if not path.is_dir():
+            raise ValueError(f'UCD path "{path}" is not a directory')
+        self._path = path
+
+    def use_version(self, version: str) -> None:
+        if self._is_prepared:
+            raise ValueError('trying to update UCD version after UCD has been ingested')
+        self._version = self.check_version(version)
+
+
+    def prepare(self) -> None:
         if self._is_prepared:
             return
         path, version = self.path, self.version

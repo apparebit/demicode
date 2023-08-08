@@ -332,9 +332,13 @@ def _retrieve_widths(
 
 
 def _retrieve_variations(path: Path, version: None | str = None) -> list[CodePoint]:
+    # emoji-variation-sequences.txt became available with Unicode 13.0.0 only
+    if version is not None and tuple(int(v) for v in version.split('.')) < (13,):
+        return []
+
     _, data = _ingest(
         version, 'emoji-variation-sequences.txt', path, lambda cp, _: cp.first)
-    return list(dict.fromkeys(data))
+    return list(dict.fromkeys(data)) # Remove all duplicates
 
 
 def _retrieve_misc_props(

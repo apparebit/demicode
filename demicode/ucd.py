@@ -1,18 +1,18 @@
 from bisect import bisect_right as stdlib_bisect_right
-from collections.abc import Iterable, Iterator, Sequence, Set
+from collections.abc import Sequence, Set
 from pathlib import Path
 import re
 import shutil
-from typing import Any, Callable, Literal, Tuple, TypeAlias, TypeVar, TypeVarTuple
+from typing import Any, TypeVar, TypeVarTuple
 from urllib.request import Request, urlopen
 
 from .codepoint import (
     CodePoint,
     CodePointRange,
-    CodePointSequence,
     RangeLimit,
 )
 
+from .parser import ingest
 from .property import Category, EastAsianWidth
 from demicode import __version__
 
@@ -154,7 +154,7 @@ def _build_ucd_request(file: str, *, version: None | str = None) -> Request:
 
 _VERSION_PATTERN = re.compile('Version (?P<version>\d+[.]\d+[.]\d+)')
 
-def _get_ucd_version() -> str:
+def retrieve_latest_ucd_version() -> str:
     with urlopen(_build_ucd_request('ReadMe.txt')) as response:
         text = response.read().decode('utf8')
     rematch = _VERSION_PATTERN.search(text)
@@ -163,15 +163,14 @@ def _get_ucd_version() -> str:
     return rematch.group('version')
 
 
-def _mirror_unicode_data(
-    file: str,
+def mirror_unicode_data(
     root: Path,
-    *,
-    version: None | str = None,
+    file: str,
+    version: None | str,
 ) -> Path:
     """Locally mirror a file from the Unicode Character Database."""
 
-    effective_version = _get_ucd_version() if version is None else version
+    effective_version = retrieve_latest_ucd_version() if version is None else version
     version_root = root / effective_version
     version_root.mkdir(parents=True, exist_ok=True)
 
@@ -185,88 +184,14 @@ def _mirror_unicode_data(
 
 
 # --------------------------------------------------------------------------------------
-# Parsing UCD Files
-
-
-_T = TypeVar('_T')
-_U = TypeVar('_U')
-_Ts = TypeVarTuple('_Ts')
-_Tag: TypeAlias = None | Literal['default']
-_CodePoints: TypeAlias = CodePoint | CodePointRange | CodePointSequence
-_Properties: TypeAlias = tuple[str, ...]
-
-
-def _parse_record(line: str) -> tuple[_CodePoints, _Properties]:
-    line, _, _ = line.partition('#')
-    codepoints, *properties = [f.strip() for f in line.strip().split(';')]
-    first_codepoint, *more_codepoints = codepoints.split()
-
-    if len(more_codepoints) == 0:
-        start, _, stop = first_codepoint.partition('..')
-        if stop:
-            return CodePointRange.of(start, stop), tuple(properties)
-        else:
-            return CodePoint.of(start), tuple(properties)
-
-    sequence = CodePointSequence.of(first_codepoint, *more_codepoints)
-    return sequence, tuple(properties)
-
-
-_EOF = '# EOF'
-_MISSING = '# @missing:'
-
-def _parse_records(
-    lines: Iterable[str]
-) -> Iterator[tuple[_Tag, _CodePoints, _Properties]]:
-    for line in lines:
-        if line in ('', '\n'):
-            continue
-        elif line.startswith(_EOF):
-            return
-        elif line.startswith(_MISSING):
-            yield  'default', *_parse_record(line[len(_MISSING):].strip())
-        elif line[0] == '#':
-            continue
-        else:
-            yield None, *_parse_record(line)
-
-
-def _collect(
-    property_records: Iterable[tuple[_Tag, _CodePoints, _Properties]],
-    converter: Callable[[_CodePoints, _Properties], _T],
-) -> tuple[list[_T], list[_T]]:
-    defaults: list[_T] = []
-    records: list[_T] = []
-
-    for tag, codepoints, properties in property_records:
-        if tag is None:
-            records.append(converter(codepoints, properties))
-        else:
-            defaults.append(converter(codepoints, properties))
-
-    return defaults, records
-
-
-def _ingest(
-    version: None | str,
-    file: str,
-    path: Path,
-    converter: Callable[[_CodePoints, _Properties], _T],
-) -> tuple[list[_T], list[_T]]:
-    path = _mirror_unicode_data(file, path, version=version)
-    with open(path, mode='r', encoding='utf8') as handle:
-        return _collect(_parse_records(handle), converter)
-
-
-# --------------------------------------------------------------------------------------
 # Retrieval of Specific Data
 
 
 def _retrieve_general_info(
     path: Path, version: None | str = None
 ) -> tuple[list[tuple[CodePointRange, str, str]], dict[CodePoint, tuple[str, str]]]:
-    _, data = _ingest(
-        version, 'UnicodeData.txt', path, lambda cp, p: (cp.first, p[0], p[1]))
+    path = mirror_unicode_data(path, 'UnicodeData.txt', version)
+    _, data = ingest(path, lambda cp, p: (cp.first, p[0], p[1]))
 
     info_ranges: list[tuple[CodePointRange, str, str]] = []
     info_entries: dict[CodePoint, tuple[str, str]] = {}
@@ -305,24 +230,24 @@ def _retrieve_general_info(
 def _retrieve_blocks(
     path: Path, version: None | str = None
 ) -> list[tuple[CodePointRange, str]]:
-    _, data = _ingest(
-        version, 'Blocks.txt', path, lambda cp, p: (cp.to_range(), p[0]))
+    path = mirror_unicode_data(path, 'Blocks.txt', version)
+    _, data = ingest(path, lambda cp, p: (cp.to_range(), p[0]))
     return data
 
 
 def _retrieve_ages(
     path: Path, version: None | str = None
 ) -> list[tuple[CodePointRange, str]]:
-    _, data = _ingest(
-        version, 'DerivedAge.txt', path, lambda cp, p: (cp.to_range(), p[0]))
+    path = mirror_unicode_data(path, 'DerivedAge.txt', version)
+    _, data = ingest(path, lambda cp, p: (cp.to_range(), p[0]))
     return sorted(data, key=lambda d: d[0])
 
 
 def _retrieve_widths(
     path: Path, version: None | str = None
 ) -> tuple[str, list[tuple[CodePointRange, str]]]:
-    defaults, data = _ingest(
-        version, 'EastAsianWidth.txt', path, lambda cp, p: (cp.to_range(), p[0]))
+    path = mirror_unicode_data(path, 'EastAsianWidth.txt', version)
+    defaults, data = ingest(path, lambda cp, p: (cp.to_range(), p[0]))
     if len(defaults) != 1:
         raise ValueError(f'"EastAsianWidth.txt" with {len(defaults)} instead of one')
     if defaults[0][0] != RangeLimit.ALL:
@@ -336,16 +261,16 @@ def _retrieve_variations(path: Path, version: None | str = None) -> list[CodePoi
     if version is not None and tuple(int(v) for v in version.split('.')) < (13,):
         return []
 
-    _, data = _ingest(
-        version, 'emoji-variation-sequences.txt', path, lambda cp, _: cp.first)
+    path = mirror_unicode_data(path, 'emoji-variation-sequences.txt', version)
+    _, data = ingest(path, lambda cp, _: cp.first)
     return list(dict.fromkeys(data)) # Remove all duplicates
 
 
 def _retrieve_misc_props(
     path: Path, version: None | str = None
 ) -> dict[str, set[CodePoint]]:
-    _, data = _ingest(
-        version, 'PropList.txt', path, lambda cp, p: (cp.to_range(), p[0]))
+    path = mirror_unicode_data(path, 'PropList.txt', version)
+    _, data = ingest(path, lambda cp, p: (cp.to_range(), p[0]))
 
     # It might be a good idea to actually measure performance and memory impact
     # of bisecting ranges versus hashing code points. Until such times, however,
@@ -372,7 +297,7 @@ def _retrieve_misc_props(
 
 
 def _bisect_ranges(
-    range_data: Sequence[tuple[CodePointRange, *Tuple[Any, ...]]], # type: ignore
+    range_data: Sequence[tuple[CodePointRange, *tuple[Any, ...]]], # type: ignore
     codepoint: CodePoint,
 ) -> int:
     idx = stdlib_bisect_right(range_data, codepoint, key=lambda rd: rd[0].stop)
@@ -394,6 +319,10 @@ def _bisect_ranges(
 # --------------------------------------------------------------------------------------
 # The UCD
 
+
+_T = TypeVar('_T')
+_Ts = TypeVarTuple('_Ts')
+_U = TypeVar('_U')
 
 class UnicodeCharacterDatabase:
     """
@@ -469,7 +398,7 @@ class UnicodeCharacterDatabase:
         return self._path
 
     @property
-    def version(self) -> str:
+    def version(self) -> None | str:
         return self._version
 
     def use_path(self, path: Path) -> None:
@@ -584,7 +513,7 @@ class UnicodeCharacterDatabase:
     def _resolve(
         self,
         codepoint: CodePoint,
-        ranges: Sequence[tuple[CodePointRange, *_Ts]],  # type: ignore
+        ranges: Sequence[tuple[CodePointRange, *_Ts]], # type: ignore[valid-type]
         default: _U,
     ) -> _T | _U:
         self.prepare()

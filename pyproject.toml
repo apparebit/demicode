@@ -1,10 +1,11 @@
 [project]
 name = "demicode"
 description = "Fixed-width display of Unicode is deeply broken"
+readme = "README.md"
 requires-python = ">=3.11"
 license = {text = "Apache 2.0"}
 authors = [{name = "Robert Grimm", email="rgrimm@alum.mit.edu"}]
-keywords= ["Unicode", "fixed-width", "East Asian width", "wcwidth", "apocalypse"]
+keywords= ["Unicode", "fixed-width", "East Asian width", "wcwidth", "hot mess"]
 dynamic = ["version"]
 
 [project.optional-dependencies]
@@ -14,7 +15,7 @@ dev = ["mypy", "flit"]
 repository = "https://github.com/apparebit/demicode"
 
 [project.scripts]
-demicode = "demicode.__main__:main"
+demicode = "demicode.__main__"
 
 [build-system]
 requires = ["flit_core >=3.4"]

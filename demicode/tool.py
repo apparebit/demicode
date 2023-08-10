@@ -1,10 +1,8 @@
 import argparse
 from collections.abc import Iterable, Sequence
 import itertools
-import os
 from pathlib import Path
 import re
-import sys
 from textwrap import dedent
 
 from .codepoint import CodePoint
@@ -61,29 +59,44 @@ def configure_parser() -> argparse.ArgumentParser:
 
     cp_group = parser.add_argument_group('select code points')
     cp_group.add_argument(
-        '--with-arrow',
+        '--with-arrows',
         action='store_true',
-        help='include codepoints for regular and long arrows',
+        help='include codepoints for matching regular and long arrows',
     )
     cp_group.add_argument(
-        '--with-dash',
+        '--with-dashes',
         action='store_true',
         help='include codepoints with Unicode\'s Dash property',
     )
     cp_group.add_argument(
-        '--with-keycap',
-        action='store_true',
-        help='include codepoints that combine with U+20E3\nfor keycaps'
-    )
-    cp_group.add_argument(
-        '--with-selection',
-        action='store_true',
-        help='include curated selection of codepoints'
-    )
-    cp_group.add_argument(
-        '--with-variation',
+        '--with-emoji-variation',
         action='store_true',
         help='include all codepoints that have text and\nemoji variations'
+    )
+    cp_group.add_argument(
+        '--with-keycaps',
+        action='store_true',
+        help='include codepoints that combine with U+20E3\ninto enclosing keycaps'
+    )
+    cp_group.add_argument(
+        '--with-lingchi',
+        action='store_true',
+        help='include several highlights for incoherent\nand inconsistent widths'
+    )
+    cp_group.add_argument(
+        '--with-mad-dash',
+        action='store_true',
+        help ='include indistinguishable dashes'
+    )
+    cp_group.add_argument(
+        '--with-version-oracle',
+        action='store_true',
+        help='include emoji that date supported Unicode version'
+    )
+    cp_group.add_argument(
+        '--with-curation',
+        action='store_true',
+        help='include curated selection of codepoints'
     )
     cp_group.add_argument(
         'codepoints',
@@ -139,10 +152,7 @@ def run(arguments: Sequence[str]) -> int:
     parser = configure_parser()
     options = parser.parse_args(arguments[1:])
 
-    width, height = os.get_terminal_size()
-    height -= 1
     renderer = Renderer(
-        width,
         Mode.DARK if options.in_dark_mode else Mode.LIGHT,
         options.bright
     )
@@ -166,27 +176,35 @@ def run(arguments: Sequence[str]) -> int:
         print()
         print(renderer.strong('Code Points with Given Property'))
         print()
-        print(f'    dash         : {len(UCD.with_dash):4,d}')
-        print(f'    keycap       : {len(UCD.with_keycap):4,d}')
-        print(f'    noncharacter : {len(UCD.with_noncharacter):4,d}')
-        print(f'    selector     : {len(UCD.with_selector):4,d}')
-        print(f'    text v emoji : {len(UCD.with_variation):4,d}')
-        print(f'    white space  : {len(UCD.with_whitespace):4,d}')
+        print(f'    dash            : {len(UCD.dashes):4,d}')
+        print(f'    keycap          : {len(UCD.with_keycap):4,d}')
+        print(f'    noncharacter    : {len(UCD.noncharacters):4,d}')
+        print(f'    selector        : {len(UCD.selectors):4,d}')
+        print(f'    emoji variation : {len(UCD.with_emoji_variation):4,d}')
+        print(f'    white space     : {len(UCD.whitespace):4,d}')
         print()
         return 0
 
     # ---------------------------------------- Determine code points to display
-    codepoints: list[Iterable[CodePoint]] = []
-    if options.with_arrow:
-        codepoints.append(UCD.with_arrow)
-    if options.with_dash:
-        codepoints.append(sorted(UCD.with_dash))
-    if options.with_keycap:
+    codepoints: list[Iterable[CodePoint|str]] = []
+    if options.with_arrows:
+        codepoints.append(UCD.arrows)
+    if options.with_dashes:
+        codepoints.append(sorted(UCD.dashes))
+    if options.with_emoji_variation:
+        codepoints.append(sorted(UCD.with_emoji_variation))
+    if options.with_keycaps:
         codepoints.append(sorted(UCD.with_keycap))
-    if options.with_selection:
-        codepoints.append(UCD.curated_selection)
-    if options.with_variation:
-        codepoints.append(sorted(UCD.with_variation))
+    if options.with_lingchi:
+        codepoints.append(UCD.lingchi)
+    if options.with_mad_dash:
+        codepoints.append(UCD.mad_dash)
+    if options.with_version_oracle:
+        codepoints.append(UCD.version_oracle)
+    if options.with_curation:
+        codepoints.append(UCD.mad_dash)
+        codepoints.append(UCD.lingchi)
+        codepoints.append(UCD.version_oracle)
     if options.codepoints:
         # Both hexadecimal numbers and characters are recognized.
         for argument in options.codepoints:
@@ -205,21 +223,24 @@ def run(arguments: Sequence[str]) -> int:
     # ----------------------------------------------------- Display code points
     if options.as_grid:
         page_lines(
-            height,
+            renderer,
             None,
             format_grid_lines(
                 renderer,
-                add_presentation(itertools.chain.from_iterable(codepoints)),
-            )
+                add_presentation(
+                    itertools.chain.from_iterable(codepoints),
+                    headings=False
+                ),
+            ),
         )
     else:
         page_lines(
-            height,
+            renderer,
             format_legend(renderer),
             format_lines(
                 renderer,
                 add_presentation(itertools.chain.from_iterable(codepoints)),
-            )
+            ),
         )
 
     # -------------------------------------------------------------------- Done

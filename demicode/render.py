@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from enum import StrEnum
+import os
 
 
 CSI = '\x1b['
@@ -13,11 +14,21 @@ def CHA(column: int) -> str:
     return f'{CSI}{column}G'
 
 
+def bg(color: int | str) -> str:
+    return f'48;5;{color}'
+
+
+def fg(color: int | str) -> str:
+    return f'38;5;{color}'
+
+
 @dataclass(frozen=True, slots=True)
 class Theme:
     legend: str
+    heading: str
     blot_highlight: str
     blot_obstruction: str
+    hint: str
     very_strong: str
     error: str
 
@@ -25,15 +36,19 @@ class Theme:
     def of(
         cls,
         legend: str,
+        heading: str,
         blot_highlight: str,
         blot_obstruction: str,
+        hint: str,
         very_strong: str,
         error: str,
     ) -> 'Theme':
         return cls(
             SGR(legend),
+            SGR(heading),
             SGR(blot_highlight),
             SGR(blot_obstruction),
+            SGR(hint),
             SGR(very_strong),
             SGR(error),
         )
@@ -44,15 +59,15 @@ class Styles:
     BOLD = SGR('1')
 
     LIGHT = (
-        Theme.of('48;5;252', '48;5;254', '38;5;244', '1', '1;38;5;160'),
-        Theme.of('48;5;252', '48;5;220', '38;5;244', '1', '1;38;5;160'),
-        Theme.of('48;5;252', '48;5;220', '38;5;202', '1;48;5;218', '1;38;5;160'),
+        Theme.of(bg(252), fg('246;3'), bg(254), fg(244), fg(246), '1', fg('160;1')),
+        Theme.of(bg(252), fg('246;3'), bg(220), fg(244), fg(246), '1', fg('160;1')),
+        Theme.of(bg(252), fg('246;3'), bg(220), fg(202), fg(246), bg('218;1'), fg('160;1')),
     )
 
     DARK = (
-        Theme.of('48;5;240', '48;5;238', '38;5;244', '1', '1;38;5;88'),
-        Theme.of('48;5;240', '48;5;53', '38;5;244', '1', '1;38;5;88'),
-        Theme.of('48;5;240', '48;5;53', '38;5;93', '1;48;5;218', '1;38;5;88'),
+        Theme.of(bg(240), fg('245;3'), bg(238), fg(244), fg(245), '1', fg('88;1')),
+        Theme.of(bg(240), fg('245;3'), bg(53),  fg(244), fg(245), '1', fg('88;1')),
+        Theme.of(bg(240), fg('245;3'), bg(53),  fg(93),  fg(245), bg('218;1'), fg('88;1')),
     )
 
 
@@ -69,9 +84,24 @@ class Padding(StrEnum):
 class Renderer:
     """A line-oriented console renderer using ANSI escape codes."""
 
-    def __init__(self, width: int, mode: Mode, brightness: int) -> None:
-        self._width = min(120, width)
+    def __init__(self, mode: Mode, brightness: int) -> None:
         self._theme = getattr(Styles, mode.value)[min(2, max(0, brightness))]
+        self.refresh()
+
+    def refresh(self) -> None:
+        """
+        Refresh the renderer's width and height reading of the terminal. Given
+        that demicode's output is not buffered and hence cannot be reflown after
+        the fact, it makes little sense to immediately respond to terminal size
+        changes. Instead, this method provides a more controlled, polling-based
+        solution, to be utilized by the pager.
+        """
+        width, self._height = os.get_terminal_size()
+        self._width = min(120, width)
+
+    @property
+    def height(self) -> int:
+        return self._height
 
     @property
     def width(self) -> int:
@@ -82,6 +112,9 @@ class Renderer:
 
     def legend(self, text: str) -> str:
         return f'{self._theme.legend}{text}{Styles.RESET}'
+
+    def heading(self, text: str) -> str:
+        return f'{self._theme.heading}{text}{Styles.RESET}'
 
     def blot(self, text: str, padding: Padding, width: int) -> str:
         if padding is Padding.BACKGROUND:
@@ -98,6 +131,9 @@ class Renderer:
                 + (padding.value * width)
                 + Styles.RESET
             )
+
+    def hint(self, text:str) -> str:
+        return f'{self._theme.hint}{text}{Styles.RESET}'
 
     def strong(self, text: str) -> str:
         return f'{Styles.BOLD}{text}{Styles.RESET}'

@@ -3,7 +3,8 @@ from collections.abc import Sequence, Set
 from pathlib import Path
 import re
 import shutil
-from typing import Any, TypeVar, TypeVarTuple
+import time
+from typing import Any, Self, TypeVar, TypeVarTuple
 from urllib.request import Request, urlopen
 
 from .codepoint import (
@@ -20,48 +21,77 @@ from demicode import __version__
 # Curated Code Points
 
 
-_KEYCAPS = frozenset(CodePoint.of(cp) for cp in '#*0123456789')
-_CURATED_SELECTION = tuple(CodePoint.of(cp) for cp in (
-    ' ',
-    '\u2588',
-    '\u200B',  # ZERO WIDTH SPACE
-    '#',
+def prep(text: str) -> str | CodePoint:
+    return text if text[0] == '\u0001' else CodePoint.of(text)
+
+_MAD_DASH = tuple(prep(text) for text in (
+    '\u0001A Mad Dash',
+    '-',           # HYPHEN-MINUS
+    '\u2212',      # MINUS SIGN
+    '\u2013',      # EN DASH
+    '\u2014',      # EM DASH
+    '\uFF0D',      # FULLWIDTH HYPHEN-MINUS
+    '\u2E3A',      # TWO EM DASH
+    '\u2E3B',      # THREE EM DASH
+))
+
+_LINGCHI = tuple(prep(text) for text in (
+    '\u0001Death by a Thousand Cuts',
+    '\u200B',      # ZERO WIDTH SPACE
+    ' ',           # SPACE
+    '\u2588',      # FULL BLOCK
     '‱',
     '℃',
     '∫',
     '∬',
     '∭',
     '⨌',
+    '\u21A6',      # rightwards arrow from bar
+    '\u27FC',      # long rightwards arrow from bar
     '♀︎',
     '⚢',
     '♋︎',
-    '\u27FF', # LONG RIGHTWARDS SQUIGGLE ARROW
-    '\u23E9', # BLACK RIGHT-POINTING DOUBLE TRIANGLE 6.0
-    '\u23ED', # BLACK RIGHT-POINTING DOUBLE TRIANGLE WITH VERTICAL BAR 6.0
-    '-',      # HYPHEN-MINUS
-    '\u2212', # MINUS SIGN
-    '\u2013', # EN DASH
-    '\u2014', # EM DASH
-    '\u2E3A', # TWO EM DASH
-    '\u2E3B', # THREE EM DASH
-    '凌',
+    '凌',          # https://en.wikipedia.org/wiki/Lingchi
     '遲',
-    '\U0001F0BF',  # PLAYING CARD RED JOKER, 7.0
-    '｟',
-    '\U0001F918',  # SIGN OF THE HORNS, 8.0
-    '\U0001F9DB',  # VAMPIRE, 10.0
-    '\U0001F991',  # SQUID, 9.0
-    '｠',
-    '©',
-    '\U0001F12F',  # COPYLEFT SYMBOL, 11.0
-    '\u2BFF',      # HELLSCHREIBER PAUSE SYMBOL, 12.0
-    # (proposal http://www.unicode.org/L2/L2017/17151r-hell-pause-char.pdf)
-    '\U0001FBF6',  # SEGMENTED DIGIT SIX, 13.0
-    '\U0001F7F0',  # HEAVY EQUALS SIGN, 14.0
+    '!',
+    '\uFF01',      # FULLWIDTH EXCLAMATION MARK
+    '\u2755',      # WHITE EXCLAMATION MARK ORNAMENT
+    '\u2757',      # HEAVY EXCLAMATION MARK SYMBOL
+    '\u2763',      # HEART HEART EXCLAMATION MARK ORNAMENT
+    '#',           # NUMBER SIGN (Emoji 2.0, not part of Unicode update)
+))
+
+_VERSION_ORACLE = tuple(prep(text) for text in (
+    '\u0001Emoji Version Oracle', # Comprising Emoji with Wide as East Asian Width
+    # Nothing for 3.0 nor for 3.1
+    '\u303D',      # PART ALTERNATION MARK, 3.2
+    '\u26A1',      # HIGH VOLTAGE, 4.0
+    '\u2693',      # ANCHOR, 4.1
+    # Nothing for 5.0
+    '\u2B50',      # STAR, 5.1
+    '\u26D4',      # NO ENTRY, 5.2
+    '\u23E9',      # BLACK RIGHT-POINTING DOUBLE TRIANGLE 6.0
+    '\u23ED',      # BLACK RIGHT-POINTING DOUBLE TRIANGLE WITH VERTICAL BAR 6.0
+    '\U0001F62C',  # GRIMACING FACE, 6.1
+    '\U0001F596',  # VULCAN SALUTE, 7.0
+    '\U0001F3DD',  # DESERT ISLAND, 7.0
+    '\U0001F918',  # SIGN OF THE HORNS, 8.0 (Emoji 1.0, covering Unicode 1.1--8.0)
+    # Emoji 2.0?
+    '\U0001F991',  # SQUID, 9.0 (Emoji 3.0)
+    # Emoji 4.0 added new ZWJ sequences only
+    '\U0001F9DB',  # VAMPIRE, 10.0 (Emoji 5.0)
+    # There are no Emoji 6--10. Versions align with Unicode thereafter
+    '\U0001F973',  # PARTYING FACE, 11.0
+    '\U0001F9A9',  # FLAMINGO, 12.0
+    # 12.1 added new ZWJ sequences only and wasn't part of Unicode update
+    '\U0001FA86',  # NESTING DOLLS, 13.0
+    # 13.1 added new ZWJ sequences only and wasn't part of Unicode update
+    '\U0001FAA9',  # MIRROR BALL, 14.0
     '\U0001FAE8',  # SHAKING FACE, 15.0
 ))
 
-_ARROWS = tuple(CodePoint.of(cp) for cp in (
+_ARROWS = tuple(prep(text) for text in (
+    '\u0001An Arrow’s Flight',
     '\u2190', # leftwards arrow
     '\u27F5', # long leftwards arrow
     '\u2192', # rightwards arrow
@@ -86,17 +116,6 @@ _ARROWS = tuple(CodePoint.of(cp) for cp in (
     '\u2B33', # long leftwards squiggle arrow
     '\u21DD', # rightwards squiggle arrow
     '\u27FF', # long rightwards squiggle arrow
-
-))
-
-_LINE_BREAKS = tuple(CodePoint.of(cp) for cp in (
-    '\x0A', # LINE FEED
-    '\x0B', # LINE TABULATION
-    '\x0C', # FORM FEED
-    '\x0D', # CARRIAGE RETURN
-    '\x85', # NEXT LINE
-    '\u2028', # LINE SEPARATOR (Zl)
-    '\u2029', # PARAGRAPH SEPARATOR (Zp)
 ))
 
 _EXTRA_TEST_POINTS = tuple(CodePoint.of(cp) for cp in (
@@ -120,19 +139,95 @@ _EXTRA_TEST_POINTS = tuple(CodePoint.of(cp) for cp in (
 ))
 
 
+_COMBINE_WITH_ENCLOSING_KEYCAPS = frozenset(CodePoint.of(cp) for cp in '#*0123456789')
+
+_FULLWIDTH_PUNCTUATION = frozenset(CodePoint.of(cp) for cp in (
+    '\uFF01', '\uFF0C', '\uFF0E', '\uFF1A', '\uFF1B', '\uFF1F'
+))
+
+_LINE_BREAKS = frozenset(CodePoint.of(cp) for cp in (
+    '\x0A', # LINE FEED
+    '\x0B', # LINE TABULATION
+    '\x0C', # FORM FEED
+    '\x0D', # CARRIAGE RETURN
+    '\x85', # NEXT LINE
+    '\u2028', # LINE SEPARATOR (Zl)
+    '\u2029', # PARAGRAPH SEPARATOR (Zp)
+))
+
+
+# --------------------------------------------------------------------------------------
+# UCD Versions
+
+
+KNOWN_VERSIONS = (
+    (4, 1),
+    (5, 0),
+    (5, 1),
+    (5, 2),
+    (6, 0),
+    (6, 1),
+    (6, 2),
+    (6, 3),
+    (7, 0),
+    (8, 0),
+    (9, 0),
+    (10, 0),
+    (11, 0),
+    (12, 0),
+    (12, 1),
+    (13, 0),
+    (14, 0),
+    (15, 0),
+    (15, 1),
+)
+
+
+def check_version(version: str) -> str:
+    """
+    Validate the given UCD version. UCD version numbers comprise a major, minor,
+    and patch component. As of version 15.0.0, the latter is always zero. This
+    function checks that the given version number adheres to that format. Though
+    it also accepts version numbers with fewer components and automatically pads
+    them with zero components. For version numbers smaller or equal to the
+    latest known actual UCD version (15.1.0), this function also checks whether
+    a version has actually been released, e.g., accepting 6.0, 6.1, 6.2, and
+    6.3, but rejecting 6.4. To ensure that this module won't stop working for
+    future releases, it always accepts well-formed larger version numbers.
+    """
+
+    # Convert to tuple[int]
+    try:
+        vrs = tuple(int(v) for v in version.split('.'))
+    except ValueError:
+        raise ValueError(f'malformed components in UCD version "{version}"')
+
+    # Normalize to three components
+    if (count := len(vrs)) < 3:
+        vrs += (0,) * (3 - count)
+    elif count > 3:
+        raise ValueError(f'too many components in UCD version "{version}"')
+
+    # If within range of known supported versions, validate version.
+    v2, earliest, latest = vrs[:2], KNOWN_VERSIONS[0], KNOWN_VERSIONS[-1]
+    if v2 < earliest:
+        raise ValueError(f'UCD version "{version}" before first supported 4.1.0')
+    if v2 < latest and vrs[-1] != 0:
+        raise ValueError(f'invalid patch component in UCD version "{version}"')
+    if v2 <= latest and v2 not in KNOWN_VERSIONS:
+        raise ValueError(f'non-existent UCD version "{version}"')
+
+    return '.'.join(str(v) for v in vrs)
+
+
 # --------------------------------------------------------------------------------------
 # Local Mirroring of UCD Files
 
 
-def _get_ucd_url(
-    file: str,
-    *,
-    version: None | str = None
-) -> str:
+def _get_ucd_url(file: str, version: None | str = None) -> str:
     """
     Get the URL for the given UCD file and version. If the version is `None`,
-    this function extracts the concrete number from the latest version's
-    `ReadMe.txt`.
+    this function uses the latest version thanks to the UCD's "latest" alias.
     """
     prefix = 'UCD/latest' if version is None else version
     match file:
@@ -146,40 +241,53 @@ def _get_ucd_url(
     return f'https://www.unicode.org/Public/{prefix}/{path}'
 
 
-def _build_ucd_request(file: str, *, version: None | str = None) -> Request:
-    return Request(_get_ucd_url(file, version= version), None, {
-        'User-Agent': f'demicode {__version__}'
-    })
+def _build_ucd_request(url: str) -> Request:
+    return Request(url, None, {'User-Agent': f'demicode {__version__}'})
 
 
+_ONE_WEEK = 7 * 24 * 60 * 60
 _VERSION_PATTERN = re.compile('Version (?P<version>\d+[.]\d+[.]\d+)')
 
-def retrieve_latest_ucd_version() -> str:
-    with urlopen(_build_ucd_request('ReadMe.txt')) as response:
+def retrieve_latest_ucd_version(root: Path) -> str:
+    """
+    Determine the latest UCD version. To avoid network accesses for every
+    invocation of demicode, this method uses the `latest-version.txt` file in
+    the local mirror directory as a cache and only checks the Unicode
+    Consortium's servers once a week.
+    """
+    stamp_path = root / 'latest-version.txt'
+    if stamp_path.is_file() and stamp_path.stat().st_mtime + _ONE_WEEK > time.time():
+        try:
+            return check_version(stamp_path.read_text('utf8'))
+        except ValueError:
+            pass
+
+    url = _get_ucd_url('ReadMe.txt')
+    with urlopen(_build_ucd_request(url)) as response:
         text = response.read().decode('utf8')
     rematch = _VERSION_PATTERN.search(text)
     if rematch is None:
-        raise ValueError("UCD's ReadMe.txt elides version number")
-    return rematch.group('version')
+        raise ValueError("""UCD's "ReadMe.txt" elides version number""")
+    version = rematch.group('version')
+
+    root.mkdir(parents=True, exist_ok=True)
+    stamp_path.write_text(version, encoding='utf8')
+    return version
 
 
-def mirror_unicode_data(
-    root: Path,
-    file: str,
-    version: None | str,
-) -> Path:
+def mirror_unicode_data(root: Path, filename: str, version: str) -> Path:
     """Locally mirror a file from the Unicode Character Database."""
-
-    effective_version = retrieve_latest_ucd_version() if version is None else version
-    version_root = root / effective_version
-    version_root.mkdir(parents=True, exist_ok=True)
-
-    path = version_root / file
+    version_root = root / version
+    path = version_root / filename
     if not path.exists():
-        request = _build_ucd_request(file, version=version)
-        with urlopen(request) as response, open(path, mode='wb') as local_file:
-            shutil.copyfileobj(response, local_file)
+        version_root.mkdir(parents=True, exist_ok=True)
 
+        url = _get_ucd_url(filename, version=version)
+        with (
+            urlopen(_build_ucd_request(url)) as response,
+            open(path, mode='wb') as file
+        ):
+            shutil.copyfileobj(response, file)
     return path
 
 
@@ -188,7 +296,7 @@ def mirror_unicode_data(
 
 
 def _retrieve_general_info(
-    path: Path, version: None | str = None
+    path: Path, version: str
 ) -> tuple[list[tuple[CodePointRange, str, str]], dict[CodePoint, tuple[str, str]]]:
     path = mirror_unicode_data(path, 'UnicodeData.txt', version)
     _, data = ingest(path, lambda cp, p: (cp.first, p[0], p[1]))
@@ -227,24 +335,20 @@ def _retrieve_general_info(
     return info_ranges, info_entries
 
 
-def _retrieve_blocks(
-    path: Path, version: None | str = None
-) -> list[tuple[CodePointRange, str]]:
+def _retrieve_blocks(path: Path, version: str) -> list[tuple[CodePointRange, str]]:
     path = mirror_unicode_data(path, 'Blocks.txt', version)
     _, data = ingest(path, lambda cp, p: (cp.to_range(), p[0]))
     return data
 
 
-def _retrieve_ages(
-    path: Path, version: None | str = None
-) -> list[tuple[CodePointRange, str]]:
+def _retrieve_ages(path: Path, version: str) -> list[tuple[CodePointRange, str]]:
     path = mirror_unicode_data(path, 'DerivedAge.txt', version)
     _, data = ingest(path, lambda cp, p: (cp.to_range(), p[0]))
     return sorted(data, key=lambda d: d[0])
 
 
 def _retrieve_widths(
-    path: Path, version: None | str = None
+    path: Path, version: str
 ) -> tuple[str, list[tuple[CodePointRange, str]]]:
     path = mirror_unicode_data(path, 'EastAsianWidth.txt', version)
     defaults, data = ingest(path, lambda cp, p: (cp.to_range(), p[0]))
@@ -256,7 +360,7 @@ def _retrieve_widths(
     return defaults[0][1], data
 
 
-def _retrieve_variations(path: Path, version: None | str = None) -> list[CodePoint]:
+def _retrieve_emoji_variations(path: Path, version: str) -> list[CodePoint]:
     # emoji-variation-sequences.txt became available with Unicode 13.0.0 only
     if version is not None and tuple(int(v) for v in version.split('.')) < (13,):
         return []
@@ -266,9 +370,7 @@ def _retrieve_variations(path: Path, version: None | str = None) -> list[CodePoi
     return list(dict.fromkeys(data)) # Remove all duplicates
 
 
-def _retrieve_misc_props(
-    path: Path, version: None | str = None
-) -> dict[str, set[CodePoint]]:
+def _retrieve_misc_props(path: Path, version: str) -> dict[str, set[CodePoint]]:
     path = mirror_unicode_data(path, 'PropList.txt', version)
     _, data = ingest(path, lambda cp, p: (cp.to_range(), p[0]))
 
@@ -335,60 +437,17 @@ class UnicodeCharacterDatabase:
     versions. Just like the Unicode website has distinct directories for each
     version, the local mirror uses version-specific directories.
 
-    Currently, the UCD instance used by this package is a global singleton that
-    is eagerly created. At the same time, the singleton does not load the
-    necessary data until needed, making it possible to update path and version
-    through the `use_path` and `use_version` methods.
+    This module defines an eagerly created global instance, `UCD`. As long as
+    code doesn't perform any look-ups, `UCD` can still be configured with the
+    `use_path()` and `use_version()` methods. The configuration is locked in
+    with `prepare()`, which downloads necessary UCD files. While client code may
+    explicitly invoke the method, that is not required.
+    `UnicodeCharacterDatabase` automatically invokes the method as needed.
     """
 
-    VERSIONS = (
-        (4, 1),
-        (5, 0),
-        (5, 1),
-        (5, 2),
-        (6, 0),
-        (6, 1),
-        (6, 2),
-        (6, 3),
-        (7, 0),
-        (8, 0),
-        (9, 0),
-        (10, 0),
-        (11, 0),
-        (12, 0),
-        (12, 1),
-        (13, 0),
-        (14, 0),
-        (15, 0),
-    )
-
-    @classmethod
-    def check_version(cls, version: None | str) -> None | str:
-        if version is None:
-            return None
-
-        # Convert to tuple[int]
-        try:
-            vrs = tuple(int(v) for v in version.split('.'))
-        except ValueError:
-            raise ValueError(f'malformed UCD version "{version}"')
-
-        # Normalize to three components
-        if (count := len(vrs)) < 3:
-            vrs += (0,) * (3 - count)
-        elif count > 3:
-            raise ValueError(f'malformed UCD version "{version}"')
-
-        # If within range of known supported versions, validate version.
-        first, next_major = cls.VERSIONS[0], cls.VERSIONS[-1][0]
-        if vrs[:2] < first:
-            raise ValueError(f'UCD version {version} before first supported 4.1')
-        if vrs[0] < next_major and (vrs[-1] != 0 or vrs[:2] not in cls.VERSIONS):
-            raise ValueError(f'nonexistent UCD version "{version}"')
-
-        return '.'.join(str(v) for v in vrs)
-
     def __init__(self, path: Path, version: None | str = None) -> None:
+        if version is not None:
+            version = check_version(version)
         self._path = path
         self._version = version
         self._is_prepared: bool = False
@@ -402,6 +461,10 @@ class UnicodeCharacterDatabase:
         return self._version
 
     def use_path(self, path: Path) -> None:
+        """
+        Use the given path for locally mirroring UCD files. It is an error to
+        invoke this method after this instance has been prepared.
+        """
         if self._is_prepared:
             raise ValueError('trying to update UCD path after UCD has been ingested')
         if not path.exists():
@@ -411,71 +474,98 @@ class UnicodeCharacterDatabase:
         self._path = path
 
     def use_version(self, version: str) -> None:
+        """
+        Use the given UCD version. It is an error to invoke this method after
+        this instance has been prepared.
+        """
         if self._is_prepared:
             raise ValueError('trying to update UCD version after UCD has been ingested')
-        self._version = self.check_version(version)
+        self._version = check_version(version)
 
-
-    def prepare(self) -> None:
+    def prepare(self) -> Self:
+        """
+        Prepare the UCD for active use. This method locks in the current
+        configuration and locally mirrors any required UCD files. Repeated
+        invocations have no effect.
+        """
         if self._is_prepared:
-            return
-        path, version = self.path, self.version
+            return self
+        path, version = self._path, self._version
+        if version is None:
+            self._version = version = retrieve_latest_ucd_version(self._path)
 
         self._info_ranges, self._info_entries = _retrieve_general_info(path, version)
         self._block_ranges = _retrieve_blocks(path, version)
         self._age_ranges = _retrieve_ages(path, version)
         self._width_default, self._width_ranges = _retrieve_widths(path, version)
-        self._variations = frozenset(_retrieve_variations(path, version))
+        self._emoji_variations = frozenset(_retrieve_emoji_variations(path, version))
         misc_props = _retrieve_misc_props(path, version)
         self._whitespace = frozenset(misc_props['White_Space'])
-        self._dash = frozenset(misc_props['Dash'])
-        self._noncharacter = frozenset(misc_props['Noncharacter_Code_Point'])
-        self._selector = frozenset(misc_props['Variation_Selector'])
+        self._dashes = frozenset(misc_props['Dash'])
+        self._noncharacters = frozenset(misc_props['Noncharacter_Code_Point'])
+        self._selectors = frozenset(misc_props['Variation_Selector'])
         self._is_prepared = True
 
-    @property
-    def curated_selection(self) -> tuple[CodePoint,...]:
-        """
-        Some code points to show off the current abysmal fixed-width state.
-        Obviously, this is not a Unicode standard property.
-        """
-        return _CURATED_SELECTION
+        return self
+
+    # ----------------------------------------------------------------------------------
+    # Sequences, ready for display
 
     @property
-    def with_arrow(self) -> tuple[CodePoint,...]:
+    def arrows(self) -> tuple[CodePoint | str,...]:
         """Matching short and long arrows."""
         return _ARROWS
 
     @property
-    def with_dash(self) -> Set[CodePoint]:
+    def mad_dash(self) -> tuple[CodePoint | str,...]:
+        return _MAD_DASH
+
+    @property
+    def lingchi(self) -> tuple[CodePoint | str,...]:
+        return _LINGCHI
+
+    @property
+    def version_oracle(self) -> tuple[CodePoint | str,...]:
+        return _VERSION_ORACLE
+
+    # ----------------------------------------------------------------------------------
+    # Sets, ready for membership testing.
+
+    @property
+    def fullwidth_punctuation(self) -> Set[CodePoint]:
+        """Fullwidth punctuation."""
+        return _FULLWIDTH_PUNCTUATION
+
+    @property
+    def dashes(self) -> Set[CodePoint]:
         """All code points with Unicode's Dash property."""
         self.prepare()
-        return self._dash
+        return self._dashes
 
     @property
     def with_keycap(self) -> Set[CodePoint]:
-        """All code points that can be modified with U+20E3 as keycaps."""
-        return _KEYCAPS
+        """All code points that can be combined with U+20E3 as keycaps."""
+        return _COMBINE_WITH_ENCLOSING_KEYCAPS
 
     @property
-    def with_noncharacter(self) -> Set[CodePoint]:
+    def noncharacters(self) -> Set[CodePoint]:
         """All code points with Unicode's Noncharacter_Code_Point property."""
         self.prepare()
-        return self._noncharacter
+        return self._noncharacters
 
     @property
-    def with_selector(self) -> Set[CodePoint]:
+    def selectors(self) -> Set[CodePoint]:
         """
         All code points with Unicode's Variation_Selector property. This
-        property is very much different from `with_variation`. This property
-        returns code points that trigger variations, whereas the other property
-        returns code points that participate in variations.
+        property is very much different from `with_emoji_variation`. This
+        property returns code points that trigger variations, whereas the other
+        property returns code points that participate in variations.
         """
         self.prepare()
-        return self._selector
+        return self._selectors
 
     @property
-    def with_variation(self) -> Set[CodePoint]:
+    def with_emoji_variation(self) -> Set[CodePoint]:
         """
         All code points that participate with text and emoji variations, i.e.,
         can be displayed as more conventional black and white glyphs as well as
@@ -483,13 +573,15 @@ class UnicodeCharacterDatabase:
         `with_selector`, which produces the code points triggering variations.
         """
         self.prepare()
-        return self._variations
+        return self._emoji_variations
 
     @property
-    def with_whitespace(self) -> Set[CodePoint]:
+    def whitespace(self) -> Set[CodePoint]:
         """All code points with Unicode's White_Space property."""
         self.prepare()
         return self._whitespace
+
+    # ----------------------------------------------------------------------------------
 
     def _resolve_info(self, codepoint: CodePoint, offset: int) -> None | str:
         self.prepare()

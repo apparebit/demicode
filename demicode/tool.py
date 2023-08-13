@@ -1,3 +1,7 @@
+"""
+Demicode's command line tool.
+"""
+
 import argparse
 from collections.abc import Iterable, Sequence
 import itertools

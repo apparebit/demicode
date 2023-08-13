@@ -33,6 +33,19 @@ _MISSING = '# @missing:'
 def parse_records(
     lines: Iterable[str]
 ) -> Iterator[tuple[Tag, CodePoints, Properties]]:
+    """
+    Parse the lines of a UCD file into structured records. This function returns
+    a stream of triples:
+
+      * The tag distinguishes between defaults, `"default"`, and regular
+        records, `None`.
+      * The code points are the first of the semicolon-separated fields, with
+        single code points represented as `CodePoint`.
+      * The properties are the remaining fields as a tuple.
+
+    Individual values of properties are stripped of whitespace but otherwise not
+    processed. In other words, empty fields are empty strings.
+    """
     for line in lines:
         if line in ('', '\n'):
             continue
@@ -50,6 +63,12 @@ def collect(
     property_records: Iterable[tuple[Tag, CodePoints, Properties]],
     converter: Callable[[CodePoints, Properties], T],
 ) -> tuple[list[T], list[T]]:
+    """
+    Convert the stream of parsed triples into a list of defaults and regular
+    records. To avoid repeated iteration over triples, this function takes a
+    converter callback that should convert pair of code points and properties
+    into the desired representation.
+    """
     defaults: list[T] = []
     records: list[T] = []
 

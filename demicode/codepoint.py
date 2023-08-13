@@ -1,3 +1,19 @@
+"""
+Unicode code points.
+
+This module defines demicode's representation for code points, ranges of code
+points, and sequences of code points. It tries to remain lightweight and simple
+while still providing useful object-oriented features. Hence this module defines
+abstractions for code points, ranges, and sequences alike but does not introduce
+a common base or separate mixins for shared functionality. Instead, all three
+classes simply implement methods with the same name and signature. Not all of
+them actually make sense across all three classes. Notably, that is the case for
+`CodePointRange.to_sequence()` and `CodePointSequence.to_range()`, since ranges
+and sequences simply cannot be converted into each other in the general case.
+They nonetheless exist because the shared interface simplifies type annotations
+and implementation of the UCD parser.
+"""
+
 from collections.abc import Iterator
 from enum import Enum
 from types import NotImplementedType

@@ -1,3 +1,7 @@
+"""
+Python enumerations for Unicode properties.
+"""
+
 from enum import StrEnum
 
 

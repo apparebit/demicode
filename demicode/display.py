@@ -1,17 +1,21 @@
 """
-Display code points in the terminal.
+Display character blots in the terminal.
 
-This module displays code points for evaluating a terminal's handling of
-fixed-width characters. In particular, this module makes a best guess as to
-whether the character is narrow or wide, i.e., requires one or two columns of
-the fixed-width display. When displaying a character, this module adds one or
-two blank characters in a different color to always form a group of three
-columns. By using spaces as well U+2588 FULL BLOCK, it nicely illustrates the
-impact of misclassified characters.
+This module contains the functionality for formatting demicode's character blots
+on screen. Its high-level functions are:
 
-To further improve the display, this module can either display one character per
-line with helpful information from the Unicode Character Database or in a
-tighter grid. It also pages the display.
+  * `add_presentation()` turns a stream of Unicode code points into one of
+    presentation and code point pairs; for supported code points it adds
+    variation selectors and combining characters.
+  * `format_lines()` and `format_grid_lines()` turn the stream of presentation,
+    code point pairs into a stream of formatted lines.
+  * `page_lines()` displays a stream of lines, one screen at a time, and handles
+    the user interaction.
+
+The line-level functions are `format_legend()`, `format_heading()`, and
+`format_info()`. The legend goes on top of a screen and headings are embedded in
+the body. `format_info()` handles one presentation, code point pair per
+invocation, generating a background and a foreground character blot.
 """
 
 from collections.abc import Iterator, Iterable

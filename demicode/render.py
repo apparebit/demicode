@@ -1,3 +1,18 @@
+"""
+Support for rendering demicode's output with different styles.
+
+This module defines a line-oriented, semantic renderer, the corresponding output
+themes, and the low-level code for using ANSI escape codes. There is no
+intermediate interface that hides ANSI escape codes behind user-friendly names
+since styles are not exposed outside the renderer.
+
+This module also tracks the size of the available terminal character grid. Since
+demicode does not implement terminal user interface widgets and just emits a
+page's worth of lines at a time, it only makes sense to update the grid size
+just before emitting a page. In other words, size updates require polling with
+the `Renderer.refresh()` method.
+"""
+
 from dataclasses import dataclass
 from enum import StrEnum
 import os

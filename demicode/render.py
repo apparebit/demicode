@@ -97,11 +97,13 @@ class Padding(StrEnum):
 
 
 class Renderer:
-    """A line-oriented console renderer using ANSI escape codes."""
 
-    def __init__(self, mode: Mode, brightness: int) -> None:
-        self._theme = getattr(Styles, mode.value)[min(2, max(0, brightness))]
+    def __init__(self, mode: Mode, intensity: int) -> None:
         self.refresh()
+
+    @property
+    def has_style(self) -> bool:
+        return False
 
     def refresh(self) -> None:
         """
@@ -121,6 +123,45 @@ class Renderer:
     @property
     def width(self) -> int:
         return self._width
+
+    def column(self, column: int) -> str:
+        return ''
+
+    def legend(self, text: str) -> str:
+        return text
+
+    def heading(self, text: str) -> str:
+        return text
+
+    def blot(self, text: str, padding: Padding, width: int) -> str:
+        if padding is Padding.BACKGROUND:
+            return ''
+        else:
+            return text + (padding.value * width)
+
+    def hint(self, text:str) -> str:
+        return text
+
+    def strong(self, text: str) -> str:
+        return text
+
+    def very_strong(self, text: str) -> str:
+        return text
+
+    def error(self, text: str) -> str:
+        return text
+
+
+class StyledRenderer(Renderer):
+    """A line-oriented console renderer using ANSI escape codes."""
+
+    def __init__(self, mode: Mode, intensity: int) -> None:
+        self._theme = getattr(Styles, mode.value)[min(2, max(0, intensity))]
+        self.refresh()
+
+    @property
+    def has_style(self) -> bool:
+        return True
 
     def column(self, column: int) -> str:
         return CHA(column)

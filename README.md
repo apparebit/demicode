@@ -265,6 +265,13 @@ representation still lacks several key properties. But nonetheless, demicode may
 just grow into a more general library for accessing the UCD.
 
 
+## Versions
+
+  - **v0.2** (2023/08/13) First documented release; significantly more robust
+    and usable than 0.1.
+  - **v0.1** (2023/08/06) First release, downlow
+
+
 ## Etc
 
 The **project name is a play on the name Unicode**: Fixed-width rendering of

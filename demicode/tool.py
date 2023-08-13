@@ -18,7 +18,7 @@ from .display import (
     format_lines,
     page_lines,
 )
-from .render import Mode, Renderer
+from .render import Mode, Renderer, StyledRenderer
 from demicode import __version__
 
 
@@ -115,20 +115,32 @@ without intermediate spaces"""
 
     out_group = parser.add_argument_group('control output')
     out_group.add_argument(
-        '--as-grid',
+        '--in-grid', '-g',
         action='store_true',
         help='display as grid without further UCD information'
     )
     out_group.add_argument(
-        '--in-dark-mode',
+        '--in-dark-mode', '-d',
+        default=None,
         action='store_true',
         help='use colors suitable for dark mode'
     )
     out_group.add_argument(
-        '--bright', '-b',
+        '--in-light-mode', '-l',
+        action='store_false',
+        dest='in_dark_mode',
+        help='use colors suitable for light mode',
+    )
+    out_group.add_argument(
+        '--in-more-color', '-c',
         default=0,
         action='count',
         help='use brighter colors in output;\nmay be repeated once'
+    )
+    out_group.add_argument(
+        '--in-plain-text', '-p',
+        action='store_true',
+        help='display plain text without ANSI escape codes'
     )
 
     # ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~
@@ -156,9 +168,10 @@ def run(arguments: Sequence[str]) -> int:
     parser = configure_parser()
     options = parser.parse_args(arguments[1:])
 
-    renderer = Renderer(
+    new_renderer = Renderer if options.in_plain_text else StyledRenderer
+    renderer = new_renderer(
         Mode.DARK if options.in_dark_mode else Mode.LIGHT,
-        options.bright
+        options.in_more_color
     )
 
     # ---------------------------------------------- Set UCD path and/or version
@@ -225,7 +238,7 @@ def run(arguments: Sequence[str]) -> int:
         return 1
 
     # ----------------------------------------------------- Display code points
-    if options.as_grid:
+    if options.in_grid:
         page_lines(
             renderer,
             None,

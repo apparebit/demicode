@@ -88,6 +88,9 @@ def _max_name_length(width: int) -> int:
 
 def format_legend(renderer: Renderer) -> str:
     """Format the legend for lines formatted with `format_info`."""
+    if not renderer.has_style:
+        return LEGEND[4:]
+
     flexible_spaces = _max_name_length(renderer.width) - MIN_NAME_LENGTH
     return renderer.legend(LEGEND + (' ' * flexible_spaces))
 
@@ -101,6 +104,8 @@ def format_heading(renderer: Renderer, heading: str) -> str:
         heading = heading[1:]
 
     left = LEGEND_WIDTH - 5
+    if not renderer.has_style:
+        left -= 4
     right = renderer.width - LEGEND_WIDTH + MIN_NAME_LENGTH - len(heading) - 1
     return renderer.heading(f'{"─" * left} {heading} {"─" * right}')
 
@@ -169,8 +174,10 @@ def format_info(
     # Render against background and against foreground
     yield renderer.column(start_column + 1)
     yield renderer.blot(display, Padding.BACKGROUND, 3 - wcwidth)
+    yield ' '
     yield renderer.column(start_column + 5)
     yield renderer.blot(display, Padding.FOREGROUND, 3 - wcwidth)
+    yield ' '
 
     # More information about the codepoint
     if include_char_info:

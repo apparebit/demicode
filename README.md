@@ -24,7 +24,7 @@ many other terminals get the width of the zero width space `​​` U+200B right
 Surprisingly, it really should be zero columns wide.
 
 ![Demicode's output in the default one-grapheme-per-line format and light
-mode](docs/terminal.app.png)
+mode](https://github.com/apparebit/demicode/blob/boss/docs/terminal.app.png)
 
 To tease out the difference between expected and actual width, Demicode uses a
 **clever choice of padding characters**, relying on space ` ` U+0020 with a
@@ -146,7 +146,7 @@ from you.
 
 ![A collage of Demicode's output in the default one-grapheme-per-line format
 showing both light and dark mode as well as increased and doubly increased
-brightness](docs/terminal.app-mode-vs-brightness.png)
+brightness](https://github.com/apparebit/demicode/blob/boss/docs/terminal.app-mode-vs-brightness.png)
 
 
 ## It Ain't Pretty
@@ -177,11 +177,13 @@ WezTerm, using the latest version of each terminal as of this writing in August
 2023. The operating system still is macOS. The results for Hyper, iTerm, Kitty,
 and Terminal.app look like this:
 
-![Collage of output from the previous echo command](docs/em-integral1.png)
+![Collage of output from the previous echo
+command](https://github.com/apparebit/demicode/blob/boss/docs/em-integral1.png)
 
 The results for Visual Studio Cold's terminal, Warp, and WezTerm look like this:
 
-![Collage of output from the previous echo command](docs/em-integral2.png)
+![Collage of output from the previous echo
+command](https://github.com/apparebit/demicode/blob/boss/docs/em-integral2.png)
 
 Let's review the observed behavior:
 

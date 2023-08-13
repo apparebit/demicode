@@ -106,11 +106,15 @@ same effect.
 ## Theme Park
 
 While I personally prefer light mode and am somewhat befuddled by the current
-fashion of dark modes and Brandons, I also have deep respect for other people's
-strongly-felt eccentricities. Using **`--in-dark-mode` adjusts demicode's color
-theme**. Since detection of light vs dark mode [seems
-possible](https://stackoverflow.com/questions/65294987/detect-os-dark-mode-in-python),
-I may add automatic mode selection in the future.
+vogue of dark modes and Brandons, I also have deep respect for other people's
+strongly-felt eccentricities. Hence, demicode uses the techniques described in
+answers [to this StackOverflow
+question](https://stackoverflow.com/questions/65294987/detect-os-dark-mode-in-python)
+and used in the [darkdetect
+package](https://github.com/albertosottile/darkdetect/tree/master) to try to
+detect whether light or dark mode is in effect and use the same mode. In case
+detection is flaky, **`--in-dark-mode` forcibly enables demicode's dark color
+theme** and **`--in-light-mode` forces  the light color theme**.
 
 Demicode provides a second knob for **enlivening its visual presentation
 `--in-more-color`**. By default, both background and foreground blots use

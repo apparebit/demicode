@@ -10,6 +10,7 @@ import re
 from textwrap import dedent
 
 from .codepoint import CodePoint
+from .darkmode import is_darkmode
 from .ucd import UCD
 from .display import (
     add_presentation,
@@ -167,6 +168,9 @@ def run(arguments: Sequence[str]) -> int:
     # -------------------------- Parse the options and prepare console renderer
     parser = configure_parser()
     options = parser.parse_args(arguments[1:])
+
+    if options.in_dark_mode is None:
+        options.in_dark_mode = is_darkmode()
 
     new_renderer = Renderer if options.in_plain_text else StyledRenderer
     renderer = new_renderer(

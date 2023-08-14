@@ -269,13 +269,10 @@ just grow into a more general library for accessing the UCD.
 
 ## Versions
 
-  - **v0.2.3** (2023/08/13) New and improved screenshot links.
-  - **v0.2.2** (2023/08/13) Edits for language and clarity.
-  - **v0.2.1** (2023/08/13) Attempt at fixing links to screenshots embedded in
-    README.
-  - **v0.2.0** (2023/08/13) First documented release; significantly more robust
-    and usable than 0.1.
-  - **v0.1.0** (2023/08/06) First release, downlow
+  - **v0.2.0–0.2.3** (2023/08/13) First advertised release, with more robust UCD
+    mirroring, more elaborate output, and support for dark mode. Alas,
+    screenshot links and README still needed some TLC.
+  - **v0.1.0** (2023/08/06) First, downlow release
 
 
 ## Etc

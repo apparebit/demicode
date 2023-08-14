@@ -293,7 +293,7 @@ def page_lines(
 ) -> None:
     """Display one page of lines at a time."""
 
-    hint = renderer.hint(' <return>: next page; q<return>/ctrl-c: quit') + ' '
+    hint = renderer.hint(' ‹return›: next page; q‹return›/‹ctrl-c›: quit') + ' '
     legend_height = 0 if legend is None else len(legend.splitlines())
 
     while True:

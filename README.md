@@ -84,23 +84,23 @@ same effect.
 > Almost all assigned Unicode code points also correspond to human-readable
 > characters, such as the number sign `#` U+0023. However, some code points are
 > meaningful only in combination with other code points. For example, adding
-> variation selector 16 U+FE0F directly after the number sign, changes its
+> variation selector 16 U+FE0F directly after the number sign changes its
 > presentation to `#️` emoji presentation. (Your browser probably won't render
-> the latter number sign differently.) Similarly, the combining enclosing keycap
-> U+20E3 is not meaningful on its own, as its name "*combining* enclosing
-> keycap" so clearly announces. But when we append that code point to the
-> previous two, we get a keycap number sign `#️⃣` U+0023 U+FE0F U+20E3. (Your
-> browser better render the latest number sign differently.)
+> the latter number sign differently from the former one.) Similarly, the
+> combining enclosing keycap U+20E3 is not meaningful on its own, as the name
+> "*combining* enclosing keycap" so clearly announces. But when we append that
+> code point to the previous two, we get a keycap number sign `#️⃣` U+0023
+> U+FE0F U+20E3. (Your browser better render the latest number sign
+> differently from the former two.)
 >
 > In Unicode, a *grapheme* is a maximally long sequence of code points that
-> nonetheless is an atomic unit of text. The "maximally long" ensures that
-> when the three code points of the keycap number sign appear in text, the
-> program processing the text doesn't ignore the second and third code point
-> and display The visual representation of a grapheme
-> is a distinct and called a *glyph*. Glyphs may vary substantially, think
-> different fonts,  . After all, it tends to be more varied
-> between different fonts even though that doesn't change its meaning. without
-> changing its meaning— and also called a *glyph*.
+> nonetheless is an atomic unit of text. The "maximally long" ensures that when
+> the three code points of the keycap number sign appear in text, the program
+> processing that text doesn't ignore the second and third code point. The
+> visual representation of a grapheme is a distinct concern and called a
+> *glyph*. Glyphs may vary substantially, think different fonts, some of which
+> may be serif and some sans-serif. But the differences in appearances do not
+> change the underlying meaning.
 
 
 ## Theme Park
@@ -110,9 +110,9 @@ vogue of dark modes and Brandons, I also have deep respect for other people's
 strongly-felt eccentricities. Hence, demicode uses the techniques described in
 answers [to this StackOverflow
 question](https://stackoverflow.com/questions/65294987/detect-os-dark-mode-in-python)
-and used in the [darkdetect
-package](https://github.com/albertosottile/darkdetect/tree/master) to try to
-detect whether light or dark mode is in effect and use the same mode. In case
+and by the [darkdetect
+package](https://github.com/albertosottile/darkdetect/tree/master) to detect the
+current mode and then defaults to that same mode. If you find that mode
 detection is flaky, **`--in-dark-mode` forcibly enables demicode's dark color
 theme** and **`--in-light-mode` forces  the light color theme**.
 
@@ -120,8 +120,8 @@ Demicode provides a second knob for **enlivening its visual presentation
 `--in-more-color`**. By default, both background and foreground blots use
 inoffensive shades of grey. If you prefer a little pizzazz with your Unicode
 character blots, add one `--in-more-color` or two `--in-more-color
---in-more-color` for some nice yellow and orange in light mode and royal purples
-in dark mode.
+--in-more-color` for some nice yellow and orange in light mode and beautiful
+purples in dark mode.
 
 Demicode has a **slightly effusive naming convention for command line options**:
 
@@ -269,6 +269,9 @@ just grow into a more general library for accessing the UCD.
 
 ## Versions
 
+  - **v0.2.2** (2023/08/13) Edits for language and clarity.
+  - **v0.2.1** (2023/08/13) Attempt at fixing links to screenshots embedded in
+    README.
   - **v0.2** (2023/08/13) First documented release; significantly more robust
     and usable than 0.1.
   - **v0.1** (2023/08/06) First release, downlow

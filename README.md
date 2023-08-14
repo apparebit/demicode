@@ -24,7 +24,7 @@ many other terminals get the width of the zero width space `​​` U+200B right
 Surprisingly, it really should be zero columns wide.
 
 ![Demicode's output in the default one-grapheme-per-line format and light
-mode](https://github.com/apparebit/demicode/blob/boss/docs/terminal.app.png)
+mode](https://raw.githubusercontent.com/apparebit/demicode/boss/docs/terminal.app.png)
 
 To tease out the difference between expected and actual width, Demicode uses a
 **clever choice of padding characters**, relying on space ` ` U+0020 with a
@@ -146,7 +146,7 @@ from you.
 
 ![A collage of Demicode's output in the default one-grapheme-per-line format
 showing both light and dark mode as well as increased and doubly increased
-brightness](https://github.com/apparebit/demicode/blob/boss/docs/terminal.app-mode-vs-brightness.png)
+brightness](https://raw.githubusercontent.com/apparebit/demicode/boss/docs/terminal.app-mode-vs-brightness.png)
 
 
 ## It Ain't Pretty
@@ -178,12 +178,12 @@ WezTerm, using the latest version of each terminal as of this writing in August
 and Terminal.app look like this:
 
 ![Collage of output from the previous echo
-command](https://github.com/apparebit/demicode/blob/boss/docs/em-integral1.png)
+command](https://raw.githubusercontent.com/apparebit/demicode/boss/docs/em-integral1.png)
 
 The results for Visual Studio Cold's terminal, Warp, and WezTerm look like this:
 
 ![Collage of output from the previous echo
-command](https://github.com/apparebit/demicode/blob/boss/docs/em-integral2.png)
+command](https://raw.githubusercontent.com/apparebit/demicode/boss/docs/em-integral2.png)
 
 Let's review the observed behavior:
 
@@ -269,12 +269,13 @@ just grow into a more general library for accessing the UCD.
 
 ## Versions
 
+  - **v0.2.3** (2023/08/13) New and improved screenshot links.
   - **v0.2.2** (2023/08/13) Edits for language and clarity.
   - **v0.2.1** (2023/08/13) Attempt at fixing links to screenshots embedded in
     README.
-  - **v0.2** (2023/08/13) First documented release; significantly more robust
+  - **v0.2.0** (2023/08/13) First documented release; significantly more robust
     and usable than 0.1.
-  - **v0.1** (2023/08/06) First release, downlow
+  - **v0.1.0** (2023/08/06) First release, downlow
 
 
 ## Etc

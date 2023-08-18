@@ -23,7 +23,26 @@ EXPECTED_DATA = (
         block='Miscellaneous Symbols',
         flags=frozenset([BinaryProperty.Emoji, BinaryProperty.Emoji_Presentation,
                          BinaryProperty.Extended_Pictographic])
-    )
+    ),
+    CharacterData(
+        codepoint=CodePoint.of(0x2763),
+        category=Category.Other_Symbol,
+        east_asian_width=EastAsianWidth.Neutral,
+        age='1.1',
+        name='HEAVY HEART EXCLAMATION MARK ORNAMENT',
+        block='Dingbats',
+        flags=frozenset([BinaryProperty.Emoji, BinaryProperty.Extended_Pictographic])
+    ),
+    CharacterData(  # An unassigned code point that is an extended pictograph
+        codepoint=CodePoint.of(0x1F2FF),
+        category=Category.Unassigned,
+        east_asian_width=EastAsianWidth.Neutral,
+        age=None,
+        name=None,
+        block='Enclosed Ideographic Supplement',
+        flags=frozenset([BinaryProperty.Extended_Pictographic])
+    ),
+
 )
 
 EXPECTED_COUNTS = {

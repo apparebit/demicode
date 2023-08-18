@@ -1,10 +1,12 @@
 from bisect import bisect_right as stdlib_bisect_right
+from collections import defaultdict
 from collections.abc import Sequence, Set
+import logging
 from pathlib import Path
 import re
 import shutil
 import time
-from typing import Any, Self, TypeVar, TypeVarTuple
+from typing import Any, NamedTuple, Self, TypeVar, TypeVarTuple
 from urllib.request import Request, urlopen
 
 from .codepoint import (
@@ -14,8 +16,12 @@ from .codepoint import (
 )
 
 from .parser import ingest
-from .property import Category, EastAsianWidth
+from .property import Category, EastAsianWidth, BinaryProperty, CharacterData
 from demicode import __version__
+
+
+logger = logging.getLogger(__name__)
+
 
 # --------------------------------------------------------------------------------------
 # Curated Code Points
@@ -160,7 +166,7 @@ _LINE_BREAKS = frozenset(CodePoint.of(cp) for cp in (
 # UCD Versions
 
 
-KNOWN_VERSIONS = (
+KNOWN_VERSIONS = tuple(v + (0,) for v in (
     (4, 1),
     (5, 0),
     (5, 1),
@@ -180,65 +186,82 @@ KNOWN_VERSIONS = (
     (14, 0),
     (15, 0),
     (15, 1),
-)
+))
 
 
-def check_version(version: str) -> str:
+class Version(NamedTuple):
     """
-    Validate the given UCD version. UCD version numbers comprise a major, minor,
-    and patch component. As of version 15.0.0, the latter is always zero. This
-    function checks that the given version number adheres to that format. Though
-    it also accepts version numbers with fewer components and automatically pads
-    them with zero components. For version numbers smaller or equal to the
-    latest known actual UCD version (15.1.0), this function also checks whether
-    a version has actually been released, e.g., accepting 6.0, 6.1, 6.2, and
-    6.3, but rejecting 6.4. To ensure that this module won't stop working for
-    future releases, it always accepts well-formed larger version numbers.
+    A UCD Version. The Unicode Character Database includes version strings with
+    two and three components. Hence this class models three components.
     """
 
-    # Convert to tuple[int]
-    try:
-        vrs = tuple(int(v) for v in version.split('.'))
-    except ValueError:
-        raise ValueError(f'malformed components in UCD version "{version}"')
+    major: int
+    minor: int
+    patch: int
 
-    # Normalize to three components
-    if (count := len(vrs)) < 3:
-        vrs += (0,) * (3 - count)
-    elif count > 3:
-        raise ValueError(f'too many components in UCD version "{version}"')
+    @classmethod
+    def of(cls, text: str) -> 'Version':
+        """
+        Parse the string as a UCD version number. This method pads versions with
+        too few components by adding 0 components. For versions that fall into
+        the range of known and supported UCD versions, 4.1 - 15.1, it also
+        validates that the version actually exists. It rejects earlier versions
+        and it allows later versions to ensure that code won't stop working in
+        the future.
+        """
+        # Parse components
+        try:
+            components = tuple(int(c) for c in text.split('.'))
+        except:
+            raise ValueError(f'malformed components in version "{text}"')
 
-    # If within range of known supported versions, validate version.
-    v2, earliest, latest = vrs[:2], KNOWN_VERSIONS[0], KNOWN_VERSIONS[-1]
-    if v2 < earliest:
-        raise ValueError(f'UCD version "{version}" before first supported 4.1.0')
-    if v2 < latest and vrs[-1] != 0:
-        raise ValueError(f'invalid patch component in UCD version "{version}"')
-    if v2 <= latest and v2 not in KNOWN_VERSIONS:
-        raise ValueError(f'non-existent UCD version "{version}"')
+        # Normalize to three components
+        count = len(components)
+        if count < 3:
+            components += (0,) * (3 - count)
+        elif count > 3:
+            raise ValueError(f'too many components in version "{text}"')
 
-    return '.'.join(str(v) for v in vrs)
+        # Validate existing versions while allowing future versions
+        if components < KNOWN_VERSIONS[0]:
+            raise ValueError(f'unsupported version "{text}"')
+        if components < KNOWN_VERSIONS[-1] and components[-1] != 0:
+            raise ValueError(f'invalid patch number in version "{text}"')
+        if components < KNOWN_VERSIONS[-1] and components not in KNOWN_VERSIONS:
+            raise ValueError(f'non-existent version "{text}"')
+
+        return cls(*components)
+
+    @property
+    def short(self) -> str:
+        return f'{self.major}.{self.minor}'
+
+    def __str__(self) -> str:
+        return '.'.join(str(c) for c in self)
 
 
 # --------------------------------------------------------------------------------------
 # Local Mirroring of UCD Files
 
+_NORMATIVE_EMOJI = ('emoji-data.txt', 'emoji-variation-sequences.txt')
+_AUXILIARY_EMOJI = ('emoji-sequences.txt', 'emoji-test.txt', 'emoji-zwj-sequences.txt')
 
-def _get_ucd_url(file: str, version: None | str = None) -> str:
+def _get_ucd_url(file: str, version: None | Version = None) -> str:
     """
     Get the URL for the given UCD file and version. If the version is `None`,
     this function uses the latest version thanks to the UCD's "latest" alias.
     """
-    prefix = 'UCD/latest' if version is None else version
-    match file:
-        case 'ReadMe.txt':
-            path = f'/{file}'
-        case 'emoji-data.txt' | 'emoji-variation-sequences.txt':
-            path = f'ucd/emoji/{file}'
-        case _:
-            path = f'ucd/{file}'
+    if (
+        (file in _NORMATIVE_EMOJI and version is not None and version < (13, 0, 0))
+        or file in _AUXILIARY_EMOJI
+    ):
+        path = f'emoji/{"latest" if version is None else version.short}/{file}'
 
-    return f'https://www.unicode.org/Public/{prefix}/{path}'
+    else:
+        prefix = "UCD/latest/" if version is None else f'{str(version)}/ucd/'
+        path = prefix + (f'emoji/{file}' if file in _NORMATIVE_EMOJI else file)
+
+    return f'https://www.unicode.org/Public/{path}'
 
 
 def _build_ucd_request(url: str) -> Request:
@@ -246,9 +269,11 @@ def _build_ucd_request(url: str) -> Request:
 
 
 _ONE_WEEK = 7 * 24 * 60 * 60
-_VERSION_PATTERN = re.compile('Version (?P<version>\d+[.]\d+[.]\d+)')
+_VERSION_PATTERN = (
+    re.compile('Version (?P<version>\d+[.]\d+[.]\d+) of the Unicode Standard')
+)
 
-def retrieve_latest_ucd_version(root: Path) -> str:
+def retrieve_latest_ucd_version(root: Path) -> Version:
     """
     Determine the latest UCD version. To avoid network accesses for every
     invocation of demicode, this method uses the `latest-version.txt` file in
@@ -258,31 +283,33 @@ def retrieve_latest_ucd_version(root: Path) -> str:
     stamp_path = root / 'latest-version.txt'
     if stamp_path.is_file() and stamp_path.stat().st_mtime + _ONE_WEEK > time.time():
         try:
-            return check_version(stamp_path.read_text('utf8'))
+            return Version.of(stamp_path.read_text('utf8'))
         except ValueError:
             pass
 
     url = _get_ucd_url('ReadMe.txt')
+    logger.info('Retrieving latest UCD version from "%s"', url)
     with urlopen(_build_ucd_request(url)) as response:
         text = response.read().decode('utf8')
     rematch = _VERSION_PATTERN.search(text)
     if rematch is None:
         raise ValueError("""UCD's "ReadMe.txt" elides version number""")
-    version = rematch.group('version')
+    version = Version.of(rematch.group('version'))
 
     root.mkdir(parents=True, exist_ok=True)
-    stamp_path.write_text(version, encoding='utf8')
+    stamp_path.write_text(str(version), encoding='utf8')
     return version
 
 
-def mirror_unicode_data(root: Path, filename: str, version: str) -> Path:
+def mirror_unicode_data(root: Path, filename: str, version: Version) -> Path:
     """Locally mirror a file from the Unicode Character Database."""
-    version_root = root / version
+    version_root = root / str(version)
     path = version_root / filename
     if not path.exists():
         version_root.mkdir(parents=True, exist_ok=True)
 
         url = _get_ucd_url(filename, version=version)
+        logger.info('Mirroring UCD file "%s" to "%s"', url, path)
         with (
             urlopen(_build_ucd_request(url)) as response,
             open(path, mode='wb') as file
@@ -296,7 +323,7 @@ def mirror_unicode_data(root: Path, filename: str, version: str) -> Path:
 
 
 def _retrieve_general_info(
-    path: Path, version: str
+    path: Path, version: Version
 ) -> tuple[list[tuple[CodePointRange, str, str]], dict[CodePoint, tuple[str, str]]]:
     path = mirror_unicode_data(path, 'UnicodeData.txt', version)
     _, data = ingest(path, lambda cp, p: (cp.first, p[0], p[1]))
@@ -335,20 +362,20 @@ def _retrieve_general_info(
     return info_ranges, info_entries
 
 
-def _retrieve_blocks(path: Path, version: str) -> list[tuple[CodePointRange, str]]:
+def _retrieve_blocks(path: Path, version: Version) -> list[tuple[CodePointRange, str]]:
     path = mirror_unicode_data(path, 'Blocks.txt', version)
     _, data = ingest(path, lambda cp, p: (cp.to_range(), p[0]))
     return data
 
 
-def _retrieve_ages(path: Path, version: str) -> list[tuple[CodePointRange, str]]:
+def _retrieve_ages(path: Path, version: Version) -> list[tuple[CodePointRange, str]]:
     path = mirror_unicode_data(path, 'DerivedAge.txt', version)
     _, data = ingest(path, lambda cp, p: (cp.to_range(), p[0]))
     return sorted(data, key=lambda d: d[0])
 
 
 def _retrieve_widths(
-    path: Path, version: str
+    path: Path, version: Version
 ) -> tuple[str, list[tuple[CodePointRange, str]]]:
     path = mirror_unicode_data(path, 'EastAsianWidth.txt', version)
     defaults, data = ingest(path, lambda cp, p: (cp.to_range(), p[0]))
@@ -360,17 +387,26 @@ def _retrieve_widths(
     return defaults[0][1], data
 
 
-def _retrieve_emoji_variations(path: Path, version: str) -> list[CodePoint]:
-    # emoji-variation-sequences.txt became available with Unicode 13.0.0 only
-    if version is not None and tuple(int(v) for v in version.split('.')) < (13,):
-        return []
+def _retrieve_emoji_data(
+    path: Path, version: Version
+) -> dict[str, list[CodePointRange]]:
+    path = mirror_unicode_data(path, 'emoji-data.txt', version)
+    _, raw_data = ingest(path, lambda cp, p: (cp.to_range(), p[0]))
 
+    data = defaultdict(list)
+    for range, label in raw_data:
+        data[label].append(range)
+
+    return data
+
+
+def _retrieve_emoji_variations(path: Path, version: Version) -> list[CodePoint]:
     path = mirror_unicode_data(path, 'emoji-variation-sequences.txt', version)
     _, data = ingest(path, lambda cp, _: cp.first)
     return list(dict.fromkeys(data)) # Remove all duplicates
 
 
-def _retrieve_misc_props(path: Path, version: str) -> dict[str, set[CodePoint]]:
+def _retrieve_misc_props(path: Path, version: Version) -> dict[str, set[CodePoint]]:
     path = mirror_unicode_data(path, 'PropList.txt', version)
     _, data = ingest(path, lambda cp, p: (cp.to_range(), p[0]))
 
@@ -437,19 +473,17 @@ class UnicodeCharacterDatabase:
     versions. Just like the Unicode website has distinct directories for each
     version, the local mirror uses version-specific directories.
 
-    This module defines an eagerly created global instance, `UCD`. As long as
-    code doesn't perform any look-ups, `UCD` can still be configured with the
-    `use_path()` and `use_version()` methods. The configuration is locked in
-    with `prepare()`, which downloads necessary UCD files. While client code may
-    explicitly invoke the method, that is not required.
-    `UnicodeCharacterDatabase` automatically invokes the method as needed.
+    This module defines an eagerly created global instance, `UCD`. That instance
+    can be configured with the `use_path()` and `use_version()` methods before
+    the first look-up. The configuration is locked in with `prepare()`, which
+    downloads necessary UCD files. While client code may explicitly invoke the
+    method, that is not required. `UnicodeCharacterDatabase` automatically
+    invokes the method as needed, i.e., on look-ups.
     """
 
     def __init__(self, path: Path, version: None | str = None) -> None:
-        if version is not None:
-            version = check_version(version)
         self._path = path
-        self._version = version
+        self._version = None if version is None else Version.of(version)
         self._is_prepared: bool = False
 
     @property
@@ -457,7 +491,7 @@ class UnicodeCharacterDatabase:
         return self._path
 
     @property
-    def version(self) -> None | str:
+    def version(self) -> None | Version:
         return self._version
 
     def use_path(self, path: Path) -> None:
@@ -480,7 +514,7 @@ class UnicodeCharacterDatabase:
         """
         if self._is_prepared:
             raise ValueError('trying to update UCD version after UCD has been ingested')
-        self._version = check_version(version)
+        self._version = Version.of(version)
 
     def prepare(self) -> Self:
         """
@@ -493,20 +527,114 @@ class UnicodeCharacterDatabase:
         path, version = self._path, self._version
         if version is None:
             self._version = version = retrieve_latest_ucd_version(self._path)
+        logger.info('Using UCD version %s', version)
 
         self._info_ranges, self._info_entries = _retrieve_general_info(path, version)
         self._block_ranges = _retrieve_blocks(path, version)
         self._age_ranges = _retrieve_ages(path, version)
         self._width_default, self._width_ranges = _retrieve_widths(path, version)
+        self._emoji_data = _retrieve_emoji_data(path, version)
         self._emoji_variations = frozenset(_retrieve_emoji_variations(path, version))
         misc_props = _retrieve_misc_props(path, version)
-        self._whitespace = frozenset(misc_props['White_Space'])
-        self._dashes = frozenset(misc_props['Dash'])
-        self._noncharacters = frozenset(misc_props['Noncharacter_Code_Point'])
-        self._selectors = frozenset(misc_props['Variation_Selector'])
+        self._whitespace = frozenset(misc_props[BinaryProperty.White_Space.name])
+        self._dashes = frozenset(misc_props[BinaryProperty.Dash.name])
+        self._noncharacters = frozenset(
+            misc_props[BinaryProperty.Noncharacter_Code_Point.name])
+        self._variation_selectors = frozenset(
+            misc_props[BinaryProperty.Variation_Selector.name])
         self._is_prepared = True
 
         return self
+
+    # ----------------------------------------------------------------------------------
+    # Property Lookup
+
+    def lookup(self, codepoint: CodePoint) -> CharacterData:
+        return CharacterData(
+            codepoint=codepoint,
+            category=self.category(codepoint),
+            east_asian_width=self.east_asian_width(codepoint),
+            age=self.age(codepoint),
+            name=self.name(codepoint),
+            block=self.block(codepoint),
+            flags=frozenset(
+                p for p in BinaryProperty if self.test_property(codepoint, p)
+            ),
+        )
+
+    def _resolve_info(self, codepoint: CodePoint, offset: int) -> None | str:
+        self.prepare()
+        try:
+            return self._info_entries[codepoint][offset]
+        except KeyError:
+            for range, *props in self._info_ranges:
+                if codepoint in range:
+                    return props[offset]
+        return None
+
+    def name(self, codepoint: CodePoint) -> None | str:
+        """Look up the code point's name."""
+        return self._resolve_info(codepoint, 0)
+
+    def category(self, codepoint: CodePoint) -> Category:
+        """Look up the code point's category"""
+        category = self._resolve_info(codepoint, 1)
+        return Category.Unassigned if category is None else Category(category)
+
+    def _resolve(
+        self,
+        codepoint: CodePoint,
+        ranges: Sequence[tuple[CodePointRange, *_Ts]], # type: ignore[valid-type]
+        default: _U,
+    ) -> _T | _U:
+        self.prepare()
+        record = ranges[_bisect_ranges(ranges, codepoint)]
+        return record[1] if codepoint in record[0] else default
+
+    def block(self, codepoint: CodePoint) -> None | str:
+        """Look up the code point's block."""
+        return self._resolve(codepoint, self._block_ranges, None)
+
+    def age(self, codepoint: CodePoint) -> None | str:
+        """Look up the code point's age, i.e., version when it was assigned."""
+        return self._resolve(codepoint, self._age_ranges, None)
+
+    def east_asian_width(self, codepoint: CodePoint) -> EastAsianWidth:
+        """Look up the code point's East Asian width."""
+        w = self._resolve(codepoint, self._width_ranges, self._width_default)
+        return EastAsianWidth(w)
+
+    def test_property(self, codepoint: CodePoint, property: BinaryProperty) -> bool:
+        self.prepare()
+        match property:
+            case BinaryProperty.Dash:
+                return codepoint in self._dashes
+            case BinaryProperty.Noncharacter_Code_Point:
+                return codepoint in self._noncharacters
+            case BinaryProperty.Variation_Selector:
+                return codepoint in self._variation_selectors
+            case BinaryProperty.White_Space:
+                return codepoint in self._whitespace
+            case _:
+                ranges = self._emoji_data[property.name]
+                idx = stdlib_bisect_right(ranges, codepoint, key=lambda r: r.stop)
+                if idx > 0 and ranges[idx - 1].stop == codepoint:
+                    idx -= 1
+                return 0 <= idx < len(ranges) and codepoint in ranges[idx]
+
+    def count_property(self, property: BinaryProperty) -> int:
+        self.prepare()
+        match property:
+            case BinaryProperty.Dash:
+                return len(self._dashes)
+            case BinaryProperty.Noncharacter_Code_Point:
+                return len(self._noncharacters)
+            case BinaryProperty.Variation_Selector:
+                return len(self._variation_selectors)
+            case BinaryProperty.White_Space:
+                return len(self._whitespace)
+            case _:
+                return sum(len(r) for r in self._emoji_data[property.name])
 
     # ----------------------------------------------------------------------------------
     # Sequences, ready for display
@@ -554,7 +682,7 @@ class UnicodeCharacterDatabase:
         return self._noncharacters
 
     @property
-    def selectors(self) -> Set[CodePoint]:
+    def variation_selectors(self) -> Set[CodePoint]:
         """
         All code points with Unicode's Variation_Selector property. This
         property is very much different from `with_emoji_variation`. This
@@ -562,7 +690,7 @@ class UnicodeCharacterDatabase:
         property returns code points that participate in variations.
         """
         self.prepare()
-        return self._selectors
+        return self._variation_selectors
 
     @property
     def with_emoji_variation(self) -> Set[CodePoint]:
@@ -580,79 +708,6 @@ class UnicodeCharacterDatabase:
         """All code points with Unicode's White_Space property."""
         self.prepare()
         return self._whitespace
-
-    # ----------------------------------------------------------------------------------
-
-    def _resolve_info(self, codepoint: CodePoint, offset: int) -> None | str:
-        self.prepare()
-        try:
-            return self._info_entries[codepoint][offset]
-        except KeyError:
-            for range, *props in self._info_ranges:
-                if codepoint in range:
-                    return props[offset]
-        return None
-
-    def name(self, codepoint: CodePoint) -> None | str:
-        """Look up the code point's name."""
-        return self._resolve_info(codepoint, 0)
-
-    def category(self, codepoint: CodePoint) -> None | Category:
-        """Look up the code point's category"""
-        category = self._resolve_info(codepoint, 1)
-        return None if category is None else Category(category)
-
-    def _resolve(
-        self,
-        codepoint: CodePoint,
-        ranges: Sequence[tuple[CodePointRange, *_Ts]], # type: ignore[valid-type]
-        default: _U,
-    ) -> _T | _U:
-        self.prepare()
-        record = ranges[_bisect_ranges(ranges, codepoint)]
-        return record[1] if codepoint in record[0] else default
-
-    def block(self, codepoint: CodePoint) -> None | str:
-        """Look up the code point's block."""
-        return self._resolve(codepoint, self._block_ranges, None)
-
-    def age(self, codepoint: CodePoint) -> None | str:
-        """Look up the code point's age, i.e., version when it was assigned."""
-        return self._resolve(codepoint, self._age_ranges, None)
-
-    def east_asian_width(self, codepoint: CodePoint) -> EastAsianWidth:
-        """Look up the code point's East Asian width."""
-        w = self._resolve(codepoint, self._width_ranges, self._width_default)
-        return EastAsianWidth(w)
-
-    # ----------------------------------------------------------------------------------
-    # Non-standard fixed width per https://www.cl.cam.ac.uk/~mgk25/ucs/wcwidth.c
-    # and https://github.com/jquast/wcwidth
-
-    def is_zero_width(self, codepoint: CodePoint) -> bool:
-        """Determine whether the code point has zero width."""
-        return (
-            self.category(codepoint) in (
-                Category.Enclosing_Mark,
-                Category.Nonspacing_Mark,
-                Category.Format
-            ) and codepoint != 0x00AD
-            or 0x1160 <= codepoint <= 0x11FF
-            or codepoint == 0x200B
-        )
-
-    def fixed_width(self, codepoint: CodePoint) -> int:
-        """Determine the fixed-width of the code point."""
-        # https://www.cl.cam.ac.uk/~mgk25/ucs/wcwidth.c
-        # https://github.com/jquast/wcwidth
-        if codepoint == 0 or self.is_zero_width(codepoint):
-            return 0
-        if codepoint < 32 or 0x7F <= codepoint < 0xA0:
-            return -1
-        if self.east_asian_width(codepoint).is_wide:
-            return 2
-
-        return 1
 
     # ----------------------------------------------------------------------------------
     # Non-standard utilities

@@ -48,12 +48,21 @@ August 2023.
 
 By default, demicode displays **one grapheme per line**. Each line starts with
 the background and foreground blot for a primary Unicode code point and then
-continues with hopefully informative metadata. In particular, it shows the
-number of the code point, the code point's general category, the value of the
-code point's East_Asian_Width property, whether the code point is being shown
-with one of the 16 variation selectors, the Unicode version that first assigned
-the code point, and finally the code point's name and Unicode block in
-parentheses.
+continues with hopefully informative metadata:
+
+  * The code point;
+  * The number of the subsequent variation selector (if any);
+  * The general category of the code point;
+  * Its East Asian width;
+  * Binary properties by the short aliases;
+  * The age, i.e., the Unicode version that first assigned the code point;
+  * The name followed by the parenthesized block.
+
+While not all binary properties are supported, properties relating to
+pictographs and emoji are included. They are `Emoji`, `Emoji_Component`,
+`Emoji_Modifier`, `Emoji_Modifier_Base`, `Emoji_Presentation`, and
+`Extended_Pictographic`. The short aliases are `Emoji`, `EComp`, `EMod`,
+`EBase`, `EPres`, and `ExtPict`.
 
 Demicode also supports the **more compact `--in-grid` format**, which omits all
 metadata and lines up as many blots per line as window width and good taste
@@ -269,6 +278,8 @@ just grow into a more general library for accessing the UCD.
 
 ## Versions
 
+  - **v0.3.0** (2033/08/??) Expose binary emoji properties, log server accesses,
+    add tests, and improve property count statistics.
   - **v0.2.0–0.2.3** (2023/08/13) First advertised release, with more robust UCD
     mirroring, more elaborate output, and support for dark mode. Alas,
     screenshot links and README still needed some TLC.

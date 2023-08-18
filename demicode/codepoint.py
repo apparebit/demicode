@@ -109,6 +109,9 @@ class CodePointRange(NamedTuple):
         else:
             return NotImplemented
 
+    def __len__(self) -> int:
+        return self.stop - self.start + 1
+
     @property
     def first(self) -> CodePoint:
         return self.start

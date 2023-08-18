@@ -195,7 +195,7 @@ def format_info(
         yield presentation.variation_selector
         yield format_properties(
             unidata,
-            name_prefix='KEYCAP ' if presentation is Presentation.KEYCAP else None,
+            name_prefix='KEYCAP' if presentation is Presentation.KEYCAP else None,
             max_width=renderer.width - BASE_WIDTH - 1
         )
 

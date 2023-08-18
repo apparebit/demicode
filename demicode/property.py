@@ -202,12 +202,15 @@ def format_properties(
     width = data.east_asian_width
     flags = ' '.join(f.value for f in data.flags)
     age = data.age or ''
-    name = data.name or ''
+    name_block = data.name or ''
     if name_prefix:
-        name = name_prefix + name
-    block = '' if data.block is None else f' ({data.block})'
+        padding = '' if name_block == '' else ' '
+        name_block = name_prefix + padding + name_block
+    if data.block:
+        padding = '' if name_block == '' else ' '
+        name_block = name_block + padding + f'({data.block})'
     props = (
-        f'{data.category.value} {width:<2} {flags:<{flag_width}} {age:>4} {name}{block}'
+        f'{data.category.value} {width:<2} {flags:<{flag_width}} {age:>4} {name_block}'
     )
     if max_width is not None and len(props) > max_width:
         props = props[:max_width - 1] + '…'

@@ -80,8 +80,8 @@ class Styles:
     )
 
     DARK = (
-        Theme.of(bg(240), fg('245;3'), bg(238), fg(244), fg(245), '1', fg('88;1')),
-        Theme.of(bg(240), fg('245;3'), bg(53),  fg(244), fg(245), '1', fg('88;1')),
+        Theme.of(bg(240), fg('245;3'), bg(238), fg(243), fg(245), '1', fg('88;1')),
+        Theme.of(bg(240), fg('245;3'), bg(53),  fg(243), fg(245), '1', fg('88;1')),
         Theme.of(bg(240), fg('245;3'), bg(53),  fg(93),  fg(245), bg('218;1'), fg('88;1')),
     )
 
@@ -114,7 +114,7 @@ class Renderer:
         solution, to be utilized by the pager.
         """
         width, self._height = os.get_terminal_size()
-        self._width = min(120, width)
+        self._width = min(140, width)
 
     @property
     def height(self) -> int:

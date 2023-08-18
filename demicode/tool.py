@@ -5,13 +5,13 @@ Demicode's command line tool.
 import argparse
 from collections.abc import Iterable, Sequence
 import itertools
+import logging
 from pathlib import Path
 import re
 from textwrap import dedent
 
 from .codepoint import CodePoint
 from .darkmode import is_darkmode
-from .ucd import UCD
 from .display import (
     add_presentation,
     format_grid_lines,
@@ -19,7 +19,9 @@ from .display import (
     format_lines,
     page_lines,
 )
+from .property import BinaryProperty
 from .render import Mode, Renderer, StyledRenderer
+from .ucd import UCD
 from demicode import __version__
 
 
@@ -143,6 +145,11 @@ without intermediate spaces"""
         action='store_true',
         help='display plain text without ANSI escape codes'
     )
+    out_group.add_argument(
+        '--in-verbose', '-v',
+        action='store_true',
+        help='use verbose mode to enable instructive logging',
+    )
 
     # ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~
 
@@ -169,6 +176,11 @@ def run(arguments: Sequence[str]) -> int:
     parser = configure_parser()
     options = parser.parse_args(arguments[1:])
 
+    logging.basicConfig(
+        format='[%(levelname)s] %(name)s: %(message)s',
+        level=logging.INFO if options.in_verbose else logging.WARNING,
+    )
+
     if options.in_dark_mode is None:
         options.in_dark_mode = is_darkmode()
 
@@ -194,15 +206,12 @@ def run(arguments: Sequence[str]) -> int:
         return 0
 
     if options.stats:
+        UCD.prepare()  # So UCD access logs don't separate heading from counts
         print()
         print(renderer.strong('Code Points with Given Property'))
         print()
-        print(f'    dash            : {len(UCD.dashes):4,d}')
-        print(f'    keycap          : {len(UCD.with_keycap):4,d}')
-        print(f'    noncharacter    : {len(UCD.noncharacters):4,d}')
-        print(f'    selector        : {len(UCD.selectors):4,d}')
-        print(f'    emoji variation : {len(UCD.with_emoji_variation):4,d}')
-        print(f'    white space     : {len(UCD.whitespace):4,d}')
+        for property in BinaryProperty:
+            print(f'    {property.name:<25} : {UCD.count_property(property):5,d}')
         print()
         return 0
 

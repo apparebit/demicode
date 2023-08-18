@@ -196,12 +196,15 @@ def format_properties(
     data: CharacterData,
     *,
     flag_width: int = 25,
-    max_width: None | int = None
+    name_prefix: None | str = None,
+    max_width: None | int = None,
 ) -> str:
     width = data.east_asian_width
     flags = ' '.join(f.value for f in data.flags)
     age = data.age or ''
     name = data.name or ''
+    if name_prefix:
+        name = name_prefix + name
     block = '' if data.block is None else f' ({data.block})'
     props = (
         f'{data.category.value} {width:<2} {flags:<{flag_width}} {age:>4} {name}{block}'

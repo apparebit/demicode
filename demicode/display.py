@@ -72,6 +72,27 @@ class Presentation(Enum):
             case Presentation.KEYCAP:
                 return '16 '
 
+    def apply(self, codepoint: CodePoint) -> str:
+        """Apply this presentation to the code point, yielding a string."""
+        match self:
+            case Presentation.PLAIN:
+                return chr(codepoint)
+            case Presentation.CORNER:
+                assert codepoint in UCD.fullwidth_punctuation
+                return f'{chr(codepoint)}\uFE00'
+            case Presentation.CENTER:
+                assert codepoint in UCD.fullwidth_punctuation
+                return f'{chr(codepoint)}\uFE01'
+            case Presentation.TEXT:
+                assert codepoint in UCD.with_emoji_variation
+                return f'{chr(codepoint)}\uFE0E'
+            case Presentation.EMOJI:
+                assert codepoint in UCD.with_emoji_variation
+                return f'{chr(codepoint)}\uFE0F'
+            case Presentation.KEYCAP:
+                assert codepoint in UCD.with_keycap
+                return f'{chr(codepoint)}\uFE0F\u20E3'
+
 
 # --------------------------------------------------------------------------------------
 
@@ -147,8 +168,7 @@ def format_info(
     generally works for the one code point per line format, but I do not
     recommend cranking up the brightness for the grid format.
     """
-    # What to show?
-    name_prefix = None
+    # Determine what to actually show
     unidata = UCD.lookup(codepoint)
     wcwidth = unidata.wcwidth()
 
@@ -157,26 +177,10 @@ def format_info(
         display = '\uFFFD' # REPLACEMENT CHARACTER
     elif UCD.is_line_break(codepoint):
         display = '\u23CE' # RETURN SYMBOL
-    elif presentation is Presentation.CORNER:
-        assert codepoint in UCD.fullwidth_punctuation
-        display = f'{chr(codepoint)}\uFE00'
-    elif presentation is Presentation.CENTER:
-        assert codepoint in UCD.fullwidth_punctuation
-        display = f'{chr(codepoint)}\uFE01'
-    elif presentation is Presentation.TEXT:
-        assert codepoint in UCD.with_emoji_variation
-        display = f'{chr(codepoint)}\uFE0E'
-    elif presentation is Presentation.EMOJI:
-        assert codepoint in UCD.with_emoji_variation
-        display = f'{chr(codepoint)}\uFE0F'
-    elif presentation is Presentation.KEYCAP:
-        assert codepoint in UCD.with_keycap
-        display = f'{chr(codepoint)}\uFE0F\u20E3'
-        name_prefix = 'KEYCAP '
     else:
-        display = chr(codepoint)
+        display = presentation.apply(codepoint)
 
-    # Render against background and against foreground
+    # Render character blots
     yield renderer.column(start_column + 1)
     yield renderer.blot(display, Padding.BACKGROUND, 3 - wcwidth)
     yield ' '
@@ -184,12 +188,16 @@ def format_info(
     yield renderer.blot(display, Padding.FOREGROUND, 3 - wcwidth)
     yield ' '
 
-    # More information about the codepoint
+    # Add Unicode property information
     if include_char_info:
         yield renderer.column(start_column + 9)
         yield f'{str(codepoint):<8s} '
         yield presentation.variation_selector
-        yield format_properties(unidata, max_width=renderer.width - BASE_WIDTH - 1)
+        yield format_properties(
+            unidata,
+            name_prefix='KEYCAP ' if presentation is Presentation.KEYCAP else None,
+            max_width=renderer.width - BASE_WIDTH - 1
+        )
 
 
 # --------------------------------------------------------------------------------------

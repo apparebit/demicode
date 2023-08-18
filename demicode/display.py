@@ -25,6 +25,7 @@ from typing import cast, Literal, overload
 
 from .render import Padding, Renderer
 from .codepoint import CodePoint
+from .property import format_properties
 from .ucd import UCD
 
 
@@ -74,16 +75,20 @@ class Presentation(Enum):
 
 # --------------------------------------------------------------------------------------
 
+LEGEND_BASE = ' 123 123 Code Pt  VS'
+LEGEND_PROPS = 'Ct Wd Properties                 Age'
+LEGEND_NAME = 'Name'
+LEGEND = f'{LEGEND_BASE} {LEGEND_PROPS} {LEGEND_NAME}'
 
-LEGEND = ' 123 123 Code Pt  Ct Wd VS  Age Name'
-LEGEND_WIDTH = len(LEGEND)
-MIN_NAME_LENGTH = 4
-
+BASE_WIDTH = len(LEGEND_BASE)
+LEGEND_MIN_WIDTH = len(LEGEND)
+FIXED_WIDTH = len(LEGEND_BASE) + 1 + len(LEGEND_PROPS) + 1
+NAME_MIN_WIDTH = len(LEGEND_NAME)
 
 def _max_name_length(width: int) -> int:
-    if width <= LEGEND_WIDTH:
-        return MIN_NAME_LENGTH
-    return width - LEGEND_WIDTH + MIN_NAME_LENGTH
+    if width <= LEGEND_MIN_WIDTH:
+        return NAME_MIN_WIDTH
+    return width - FIXED_WIDTH
 
 
 def format_legend(renderer: Renderer) -> str:
@@ -91,7 +96,7 @@ def format_legend(renderer: Renderer) -> str:
     if not renderer.has_style:
         return LEGEND[4:]
 
-    flexible_spaces = _max_name_length(renderer.width) - MIN_NAME_LENGTH
+    flexible_spaces = _max_name_length(renderer.width) - NAME_MIN_WIDTH
     return renderer.legend(LEGEND + (' ' * flexible_spaces))
 
 
@@ -103,10 +108,10 @@ def format_heading(renderer: Renderer, heading: str) -> str:
     if heading[0] == '\u0001':
         heading = heading[1:]
 
-    left = LEGEND_WIDTH - 5
+    left = FIXED_WIDTH - 1
     if not renderer.has_style:
         left -= 4
-    right = renderer.width - LEGEND_WIDTH + MIN_NAME_LENGTH - len(heading) - 1
+    right = renderer.width - FIXED_WIDTH - len(heading) - 1
     return renderer.heading(f'{"─" * left} {heading} {"─" * right}')
 
 
@@ -144,10 +149,10 @@ def format_info(
     """
     # What to show?
     name_prefix = None
-    category = UCD.category(codepoint)
-    wcwidth = UCD.fixed_width(codepoint)
+    unidata = UCD.lookup(codepoint)
+    wcwidth = unidata.wcwidth()
 
-    if category is None or category.is_invalid or wcwidth == -1:
+    if unidata.category.is_invalid or wcwidth == -1:
         wcwidth = 1
         display = '\uFFFD' # REPLACEMENT CHARACTER
     elif UCD.is_line_break(codepoint):
@@ -183,25 +188,8 @@ def format_info(
     if include_char_info:
         yield renderer.column(start_column + 9)
         yield f'{str(codepoint):<8s} '
-        yield '-- ' if category is None else f'{category.value} '
-        east_asian_width = UCD.east_asian_width(codepoint)
-        yield '-- ' if east_asian_width is None else f'{east_asian_width.value:<2s} '
         yield presentation.variation_selector
-        age = UCD.age(codepoint)
-        yield ' --- ' if age is None else f'{age:>4s} '
-
-        name = UCD.name(codepoint)
-        if name is None:
-            name = str(codepoint)
-        block = UCD.block(codepoint)
-        if block is not None:
-            name = f'{name} ({block})'
-        if name_prefix is not None:
-            name = name_prefix + name
-        max_length = _max_name_length(renderer.width)
-        if len(name) > max_length:
-            name = name[:max_length - 1] + '…'
-        yield f'{name}'
+        yield format_properties(unidata, max_width=renderer.width - BASE_WIDTH - 1)
 
 
 # --------------------------------------------------------------------------------------
@@ -293,7 +281,7 @@ def page_lines(
 ) -> None:
     """Display one page of lines at a time."""
 
-    hint = renderer.hint(' ‹return›: next page; q‹return›/‹ctrl-c›: quit') + ' '
+    hint = renderer.hint(' ‹return›: next page; q‹return›/‹ctrl-c›: quit') + '  '
     legend_height = 0 if legend is None else len(legend.splitlines())
 
     while True:

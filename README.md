@@ -135,7 +135,9 @@ purples in dark mode.
 Demicode has a **slightly effusive naming convention for command line options**:
 
   * `--with-something` selects a pre-configured group of code points. Though you
-    can always provide characters or code points in U+ notation as well.
+    can always provide characters or code points in U+ notation as well. If the
+    option is named `--with-ucd-something`, then the code points reflect a shared
+    Unicode property and no human curation was involved.
   * `--in-something` changes the presentation of demicode's character blots.
   * `--ucd-something` controls demicode's use of the Unicode Character Database
     (UCD).

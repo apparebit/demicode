@@ -21,6 +21,7 @@ from .display import (
 )
 from .property import BinaryProperty
 from .render import Mode, Renderer, StyledRenderer
+from .selection import *
 from .ucd import UCD
 from demicode import __version__
 
@@ -66,24 +67,24 @@ def configure_parser() -> argparse.ArgumentParser:
 
     cp_group = parser.add_argument_group('select code points')
     cp_group.add_argument(
-        '--with-arrows',
-        action='store_true',
-        help='include codepoints for matching regular and long arrows',
-    )
-    cp_group.add_argument(
-        '--with-dashes',
+        '--with-ucd-dashes',
         action='store_true',
         help='include codepoints with Unicode\'s Dash property',
     )
     cp_group.add_argument(
-        '--with-emoji-variation',
+        '--with-ucd-emoji-variation',
         action='store_true',
         help='include all codepoints that have text and\nemoji variations'
     )
     cp_group.add_argument(
-        '--with-keycaps',
+        '--with-ucd-keycaps',
         action='store_true',
         help='include codepoints that combine with U+20E3\ninto enclosing keycaps'
+    )
+    cp_group.add_argument(
+        '--with-arrows',
+        action='store_true',
+        help='include codepoints for matching regular and long arrows',
     )
     cp_group.add_argument(
         '--with-lingchi',
@@ -217,24 +218,28 @@ def run(arguments: Sequence[str]) -> int:
 
     # ---------------------------------------- Determine code points to display
     codepoints: list[Iterable[CodePoint|str]] = []
-    if options.with_arrows:
-        codepoints.append(UCD.arrows)
-    if options.with_dashes:
+    # Standard selections
+    if options.with_ucd_dashes:
         codepoints.append(sorted(UCD.dashes))
-    if options.with_emoji_variation:
+    if options.with_ucd_emoji_variation:
         codepoints.append(sorted(UCD.with_emoji_variation))
-    if options.with_keycaps:
+    if options.with_ucd_keycaps:
         codepoints.append(sorted(UCD.with_keycap))
+
+    # Non-standard selections
+    if options.with_arrows:
+        codepoints.append(ARROWS)
     if options.with_lingchi:
-        codepoints.append(UCD.lingchi)
+        codepoints.append(LINGCHI)
     if options.with_mad_dash:
-        codepoints.append(UCD.mad_dash)
+        codepoints.append(MAD_DASH)
     if options.with_version_oracle:
-        codepoints.append(UCD.version_oracle)
+        codepoints.append(VERSION_ORACLE)
     if options.with_curation:
-        codepoints.append(UCD.mad_dash)
-        codepoints.append(UCD.lingchi)
-        codepoints.append(UCD.version_oracle)
+        codepoints.append(MAD_DASH)
+        codepoints.append(LINGCHI)
+        codepoints.append(VERSION_ORACLE)
+
     if options.codepoints:
         # Both hexadecimal numbers and characters are recognized.
         for argument in options.codepoints:

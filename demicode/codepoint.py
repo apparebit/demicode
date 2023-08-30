@@ -52,8 +52,10 @@ class CodePoint(int):
         raise ValueError(
             f'string of {codepoints} is not a valid code point representation')
 
-    @property
-    def first(self) -> 'CodePoint':
+    def is_singleton(self) -> bool:
+        return True
+
+    def to_singleton(self) -> 'CodePoint':
         return self
 
     def to_range(self) -> 'CodePointRange':
@@ -62,11 +64,14 @@ class CodePoint(int):
     def to_sequence(self) -> 'CodePointSequence':
         return CodePointSequence((self,))
 
+    def codepoints(self) -> 'Iterator[CodePoint]':
+        yield self
+
     def __repr__(self) -> str:
-        return str(self)
+        return f'U+{self:04X}'
 
     def __str__(self) -> str:
-        return f'U+{self:04X}'
+        return chr(self)
 
 
 # --------------------------------------------------------------------------------------
@@ -112,19 +117,21 @@ class CodePointRange(NamedTuple):
     def __len__(self) -> int:
         return self.stop - self.start + 1
 
-    @property
-    def first(self) -> CodePoint:
-        return self.start
+    def is_singleton(self) -> bool:
+        return self.start == self.stop
 
-    @property
-    def last(self) -> CodePoint:
-        return self.stop
+    def to_singleton(self) -> 'CodePoint':
+        if self.is_singleton():
+            return self.start
+        raise TypeError(f"Unable to convert range {self!r} to code point")
 
     def to_range(self) -> 'CodePointRange':
         return self
 
     def to_sequence(self) -> 'CodePointSequence':
-        raise TypeError(f'Unable to convert range {self} to sequence')
+        if self.is_singleton():
+            return CodePointSequence([self.start])
+        raise TypeError(f'Unable to convert range {self!r} to sequence')
 
     def codepoints(self) -> Iterator[CodePoint]:
         cursor = self.start
@@ -134,7 +141,7 @@ class CodePointRange(NamedTuple):
             yield cursor
 
     def __repr__(self) -> str:
-        return f'CodePointRange({self.start}, {self.stop})'
+        return f'{self.start!r}..{self.stop!r}'
 
     def __str__(self) -> str:
         return f'{self.start}..{self.stop}'
@@ -147,28 +154,40 @@ class CodePointSequence(tuple[CodePoint,...]):
 
     def __init__(self, *args, **kwargs) -> None:
         if len(self) == 0:
-            raise ValueError('A code point sequence must not be empty')
+            raise ValueError('a code point sequence must not be empty')
 
     @classmethod
     def of(cls, *codepoints: str | SupportsInt | SupportsIndex) -> 'CodePointSequence':
         return cls(CodePoint.of(cp) for cp in codepoints)
 
-    @property
-    def first(self) -> CodePoint:
-        return self[0]
+    @classmethod
+    def from_string(cls, text: str) -> 'CodePointSequence':
+        return cls(CodePoint.of(ord(c)) for c in text)
 
-    @property
-    def last(self) -> CodePoint:
-        return self[-1]
+    def is_singleton(self) -> bool:
+        return len(self) == 1
+
+    def to_singleton(self) -> 'CodePoint':
+        if self.is_singleton():
+            return self[0]
+        raise TypeError(f"Unable to convert sequence {self!r} to code point")
 
     def to_range(self) -> 'CodePointRange':
-        raise TypeError(f'Unable to convert sequence {self} to range')
+        if self.is_singleton():
+            return CodePointRange(self[0], self[0])
+        raise TypeError(f'Unable to convert sequence {self!r} to range')
 
     def to_sequence(self) -> 'CodePointSequence':
         return self
 
+    def codepoints(self) -> Iterator[CodePoint]:
+        return self.__iter__()
+
+    def __repr__(self) -> str:
+        return ' '.join(repr(cp) for cp in self)
+
     def __str__(self) -> str:
-        return ' '.join(str(cp) for cp in self)
+        return ''.join(chr(cp) for cp in self)
 
 
 # --------------------------------------------------------------------------------------

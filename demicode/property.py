@@ -1,9 +1,12 @@
 """
-A code point's Unicode properties.
+The Unicode properties of code points and sequences of code points.
 """
-
+from collections.abc import Iterator
 from dataclasses import dataclass
 from enum import StrEnum
+import re
+from typing import Callable
+
 from .codepoint import CodePoint
 
 
@@ -14,17 +17,24 @@ class Category(StrEnum):
     aliases.
     """
 
+    # L for Letter
     Uppercase_Letter = 'Lu'
     Lowercase_Letter = 'Ll'
     Titlecase_Letter = 'Lt'
     Modifier_Letter = 'Lm'
     Other_Letter = 'Lo'
+
+    # M for Mark
     Nonspacing_Mark = 'Mn'
     Spacing_Mark = 'Mc'
     Enclosing_Mark = 'Me'
+
+    # N for Number
     Decimal_Number = 'Nd'
     Letter_Number = 'Nl'
     Other_Number = 'No'
+
+    # P for Punctuation
     Connector_Punctuation = 'Pc'
     Dash_Punctuation = 'Pd'
     Open_Punctuation = 'Ps'
@@ -32,13 +42,19 @@ class Category(StrEnum):
     Initial_Punctuation = 'Pi'
     Final_Punctuation = 'Pf'
     Other_Punctuation = 'Po'
+
+    # S for Symbol
     Math_Symbol = 'Sm'
     Currency_Symbol = 'Sc'
     Modifier_Symbol = 'Sk'
     Other_Symbol = 'So'
+
+    # Z for Zeparator
     Space_Separator = 'Zs'
     Line_Separator = 'Zl'
     Paragraph_Separator = 'Zp'
+
+    # C for Control
     Control = 'Cc'
     Format = 'Cf'
     Surrogate = 'Cs'
@@ -73,25 +89,6 @@ class Category(StrEnum):
     def is_other(self) -> bool:
         return self.value[0] == 'C'
 
-    # ----------------------------------------------------------------------------------
-    # Non-standard properties
-
-    @property
-    def is_invalid(self) -> bool:
-        return self in (
-            Category.Surrogate,
-            Category.Private_Use,
-            Category.Unassigned
-        )
-
-    @property
-    def is_zero_width(self) -> bool:
-        return self in (
-            Category.Enclosing_Mark,
-            Category.Nonspacing_Mark,
-            Category.Format
-        )
-
 
 class EastAsianWidth(StrEnum):
     Ambiguous = 'A'
@@ -104,6 +101,7 @@ class EastAsianWidth(StrEnum):
     @property
     def is_ambiguous(self) -> bool:
         return self is EastAsianWidth.Ambiguous
+
     @property
     def is_narrow(self) -> bool:
         return self in (EastAsianWidth.Halfwidth, EastAsianWidth.Narrow)
@@ -115,6 +113,9 @@ class EastAsianWidth(StrEnum):
     @property
     def is_wide(self) -> bool:
         return self in (EastAsianWidth.Fullwidth, EastAsianWidth.Wide)
+
+
+# --------------------------------------------------------------------------------------
 
 
 class BinaryProperty(StrEnum):
@@ -152,6 +153,96 @@ _EMOJI_PROPERTIES = frozenset([
 # --------------------------------------------------------------------------------------
 
 
+class GraphemeClusterBreak(StrEnum):
+    Prepend = 'P'
+    CR = 'r'
+    LF = 'n'
+    Control = 'C'
+    Extend = 'E'
+    Regional_Indicator = 'R'
+    SpacingMark = 'S'
+    L = 'l'
+    V = 'v'
+    T = 't'
+    LV = 'V'
+    LVT = 'T'
+    ZWJ = 'Z'
+    Other = 'O'
+    Extended_Pictographic = 'X'
+
+
+GRAPHEME_CLUSTER_PATTERN = re.compile(
+    r"""
+        rn
+        | C
+        | (?:
+            P*                        # precore
+            (?:
+                (?:                   # hangul-syllable
+                    l*
+                    (?: v+ | Vv* | T )
+                    t*
+                )
+                |   l+
+                |   t+
+                |   RR                # ri-sequence
+                |   X (?: E* Z X )*   # xpicto-sequence
+                |   [^CrnlvtVTRX]     # all but Control, CR, LF, already covered symbols
+            )
+            [EZS]*                    # postcore
+        )
+    """
+)
+
+
+class GraphemeBreaks(Iterator[int]):
+    """
+    An iterator over grapheme breaks. For each iteration with `next()`, an
+    instance of this class returns the index of the next grapheme. That may be
+    the index one past the last code point of the string. Thereafter, the
+    instance signals `StopIteration`. For simplicity and performance, the
+    implementation translates the string into another, equivalent string using
+    only stylized grapheme cluster break properties and then uses a Python
+    regular expression to identify grapheme breaks.
+    """
+
+    def __init__(
+        self,
+        text: str,
+        lookup: Callable[[CodePoint], GraphemeClusterBreak]
+    ) -> None:
+        self._text = text
+        self._length = len(text)
+        self._lookup = lookup
+        self._cluster_data = ''.join(lookup(CodePoint.of(c)).value for c in text)
+        self._index = 0
+
+    def __next__(self) -> int:
+        if self._index >= self._length:
+            raise StopIteration
+
+        grapheme = GRAPHEME_CLUSTER_PATTERN.match(self._cluster_data, self._index)
+        assert grapheme is not None
+        self._index = grapheme.end()
+        return self._index
+
+
+# --------------------------------------------------------------------------------------
+
+
+class EmojiSequence(StrEnum):
+    """The different kinds of emoji sequences."""
+    Basic_Emoji = 'Basic_Emoji'
+    Emoji_Keycap_Sequence = 'Emoji_Keycap_Sequence'
+    RGI_Emoji_Flag_Sequence = 'RGI_Emoji_Flag_Sequence'
+    RGI_Emoji_Tag_Sequence = 'RGI_Emoji_Tag_Sequence'
+    RGI_Emoji_Modifier_Sequence = 'RGI_Emoji_Modifier_Sequence'
+    RGI_Emoji_ZWJ_Sequence = 'RGI_Emoji_ZWJ_Sequence'
+
+
+# --------------------------------------------------------------------------------------
+
+
 @dataclass(frozen=True, slots=True, kw_only=True)
 class CharacterData:
     """A Unicode code point and its properties."""
@@ -167,51 +258,30 @@ class CharacterData:
     @property
     def is_zero_width(self) -> bool:
         return (
-            self.category in (
+            self.codepoint == 0
+            or self.category in (
                 Category.Enclosing_Mark,
                 Category.Nonspacing_Mark,
                 Category.Format
             ) and self.codepoint != 0x00AD
             or 0x1160 <= self.codepoint <= 0x11FF
-            or self.codepoint == 0x200B
         )
+
+    @property
+    def is_invalid(self) -> bool:
+        # Surrogate code points should not appear inside strings. Private_Use
+        # may appear but aren't very meaningful in general. Still, a robust
+        # width property might want to consider assigning different widths to
+        # different private use ranges.
+        return self.category in (Category.Surrogate, Category.Private_Use)
 
     def wcwidth(self) -> int:
         # https://www.cl.cam.ac.uk/~mgk25/ucs/wcwidth.c
         # https://github.com/jquast/wcwidth
-        if self.codepoint == 0 or self.is_zero_width:
+        if self.is_zero_width:
             return 0
-        if self.codepoint < 32 or 0x7F <= self.codepoint < 0xA0:
+        if self.is_invalid or self.codepoint < 32 or 0x7F <= self.codepoint < 0xA0:
             return -1
         if self.east_asian_width.is_wide:
             return 2
-
         return 1
-
-    def __str__(self) -> str:
-        return f'{self.codepoint!s:<8} {format_properties(self)}'
-
-
-def format_properties(
-    data: CharacterData,
-    *,
-    flag_width: int = 25,
-    name_prefix: None | str = None,
-    max_width: None | int = None,
-) -> str:
-    width = data.east_asian_width
-    flags = ' '.join(f.value for f in data.flags)
-    age = data.age or ''
-    name_block = data.name or ''
-    if name_prefix:
-        padding = '' if name_block == '' else ' '
-        name_block = name_prefix + padding + name_block
-    if data.block:
-        padding = '' if name_block == '' else ' '
-        name_block = name_block + padding + f'({data.block})'
-    props = (
-        f'{data.category.value} {width:<2} {flags:<{flag_width}} {age:>4} {name_block}'
-    )
-    if max_width is not None and len(props) > max_width:
-        props = props[:max_width - 1] + '…'
-    return props

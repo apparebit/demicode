@@ -139,11 +139,6 @@ class Version(NamedTuple):
 
         return cls(*components)
 
-    @property
-    def short(self) -> str:
-        return f'{self.major}.{self.minor}'
-
-    @property
     def is_ucd(self) -> bool:
         """
         Test whether the version is a valid UCD version. This method only
@@ -158,11 +153,10 @@ class Version(NamedTuple):
 
     def ucd(self) -> 'Version':
         """Validate this version as a UCD version."""
-        if self.is_ucd:
+        if self.is_ucd():
             return self
         raise ValueError(f'version {self} is not a valid UCD version')
 
-    @property
     def is_emoji(self) -> bool:
         """
         Test whether the version is a valid emoji version. This method rejects
@@ -178,7 +172,6 @@ class Version(NamedTuple):
             return False
         return True
 
-    @property
     def is_v0(self) -> bool:
         """Test whether the major version component is zero."""
         return self.major == 0
@@ -200,6 +193,12 @@ class Version(NamedTuple):
         if self.major == 13:
             return Version(13, 0, 0)
         return self
+
+    def in_short_format(self) -> str:
+        return f'{self.major}.{self.minor}'
+
+    def in_emoji_format(self) -> str:
+        return f'E{self.major}.{self.minor}'
 
     def __str__(self) -> str:
         return '.'.join(str(c) for c in self)
@@ -242,10 +241,10 @@ def _get_ucd_url(file: str, version: None | Version = None) -> str:
             path = f'emoji/latest/{file}'
         else:
             emoji_version = version.to_emoji()
-            if emoji_version.is_v0:
+            if emoji_version.is_v0():
                 raise VersionError(f'UCD {version} has no emoji data')
 
-            path = f'emoji/{emoji_version.short}/{file}'
+            path = f'emoji/{emoji_version.in_short_format()}/{file}'
 
     return f'https://www.unicode.org/Public/{path}'
 
@@ -309,53 +308,80 @@ def mirror_unicode_data(root: Path, filename: str, version: Version) -> Path:
 
 # What irony: The CLDR is distributed as XML. Thankfully, they also make JSON
 # available, through JavaScript's primary package registry, NPM.
-_CLDR_URL = 'https://registry.npmjs.org/cldr-annotations-modern'
+_CLDR_URL1 = 'https://registry.npmjs.org/cldr-annotations-modern'
+_CLDR_URL2 = 'https://registry.npmjs.org/cldr-annotations-derived-modern'
 _CLDR_ACCEPT = 'application/vnd.npm.install-v1+json; q=1.0, application/json; q=0.8'
 
 
-def mirror_latest_cldr_annotations(root: Path) -> Path:
-    annotations_path = root / 'annotations.json'
-    stamp_path = root / 'latest-cldr-version.txt'
+def _load_cldr_metadata(url: str) -> dict[str, Any]:
+    logger.info('loading metadata for CLDR annotations from "%s"', url)
+    with urlopen(_build_request(url, Accept=_CLDR_ACCEPT)) as response:
+        return json.load(response)
 
-    # If the stamp file exists, we are done.
-    local_version = None
-    if stamp_path.is_file() and stamp_path.stat().st_mtime + _ONE_WEEK > time.time():
-        try:
-            local_version = Version.of(stamp_path.read_text('utf8'))
-            return annotations_path
-        except:
-            pass
 
-    logger.info('checking version of CLDR annotations at "%s"', _CLDR_URL)
-    with urlopen(_build_request(_CLDR_URL, Accept=_CLDR_ACCEPT)) as response:
-        metadata = json.load(response)
-
-    latest_version = Version.of(metadata['dist-tags']['latest'])
-    if local_version == latest_version:
-        stamp_path.write_text(str(latest_version), encoding='utf8')
-        return annotations_path
-
-    url = metadata['versions'][str(latest_version)]['dist']['tarball']
+def _load_cldr_annotations(
+    root: Path, metadata: dict[str, Any], version: Version, member: str, path: Path
+) -> None:
+    url = metadata['versions'][str(version)]['dist']['tarball']
     tarball = root / 'annotations.tgz'
     logger.info('downloading CLDR annotations from "%s" to "%s"', url, tarball)
-    with (urlopen(_build_request(url)) as response, open(tarball, mode='wb') as file):
+    with (
+        urlopen(_build_request(url)) as response,
+        open(tarball, mode='wb') as file
+    ):
         shutil.copyfileobj(response, file)
 
-    member_name = 'package/annotations/en/annotations.json'
-    logger.info('extracting "%s" to "%s"', member_name, annotations_path)
+    logger.info('extracting "%s" to "%s"', member, path)
     with tar.open(tarball) as archive:
-        member = archive.getmember(member_name)
-        if not member.isfile():
-            raise ValueError(f'entry for "{member_name}" in CLDR archive is not a file')
+        member_info = archive.getmember(member)
+        if not member_info.isfile():
+            raise ValueError(
+                f'entry for "{member}" in CLDR archive "{url}" is not a file')
         with (
-            cast(IO[bytes], archive.extractfile(member)) as source,
-            open(annotations_path, mode='wb') as target
+            cast(IO[bytes], archive.extractfile(member_info)) as source,
+            open(path, mode='wb') as target
         ):
             shutil.copyfileobj(source, target)
 
     tarball.unlink()
+
+
+def mirror_latest_cldr_annotations(root: Path) -> tuple[Path, Path]:
+    annotations1 = root / 'annotations1.json'
+    annotations2 = root / 'annotations2.json'
+    stamp_path = root / 'latest-cldr-version.txt'
+
+    local_version = None
+    if annotations1.exists() and annotations2.exists():
+        if (
+            stamp_path.is_file()
+            and stamp_path.stat().st_mtime + _ONE_WEEK > time.time()
+        ):
+            try:
+                local_version = Version.of(stamp_path.read_text('utf8'))
+                return annotations1, annotations2
+            except:
+                pass
+
+    metadata = _load_cldr_metadata(_CLDR_URL1)
+    latest_version = Version.of(metadata['dist-tags']['latest'])
+    if (
+        annotations1.exists()
+        and annotations2.exists()
+        and local_version == latest_version
+    ):
+        stamp_path.write_text(str(latest_version), encoding='utf8')
+        return annotations1, annotations1
+
+    member = 'package/annotations/en/annotations.json'
+    _load_cldr_annotations(root, metadata, latest_version, member, annotations1)
+
+    metadata = _load_cldr_metadata(_CLDR_URL2)
+    member = 'package/annotationsDerived/en/annotations.json'
+    _load_cldr_annotations(root, metadata, latest_version, member, annotations2)
+
     stamp_path.write_text(str(latest_version), encoding='utf8')
-    return annotations_path
+    return annotations1, annotations2
 
 
 # --------------------------------------------------------------------------------------
@@ -472,48 +498,68 @@ def _retrieve_emoji_variations(path: Path, version: Version) -> list[CodePoint]:
     return list(dict.fromkeys(data)) # Remove all duplicates while preserving order
 
 
+_EMOJI_VERSION = re.compile(r'E(\d+\.\d+)')
+
 def _retrieve_emoji_sequences(
     root: Path, version: Version
-) -> list[tuple[CodePointSequence, EmojiSequence, None | str]]:
+) -> list[tuple[CodePoint | CodePointSequence, EmojiSequence, None | str, Version]]:
     try:
         path = mirror_unicode_data(root, 'emoji-sequences.txt', version)
     except VersionError:
         logger.warning('skipping emoji sequences for UCD %s', version)
         return []
 
-    _, data1 = ingest(path, lambda cp, p: (cp, EmojiSequence(p[0]), p[1]))
+    _, data1 = ingest(
+        path,
+        lambda cp, p: (cp, EmojiSequence(p[0]), p[1], p[2]),
+        with_comment=True,
+    )
 
     path = mirror_unicode_data(root, 'emoji-zwj-sequences.txt', version)
-    _, data2 = ingest(path, lambda cp, p: (cp, EmojiSequence(p[0]), p[1]))
+    _, data2 = ingest(
+        path,
+        lambda cp, p: (cp, EmojiSequence(p[0]), p[1], p[2]),
+        with_comment=True,
+    )
 
-    result: list[tuple[CodePointSequence, EmojiSequence, None | str]] = []
-    for codepoints, sequence_property, name in itertools.chain(data1, data2):
-        if isinstance(codepoints, CodePoint):
-            result.append((codepoints.to_sequence(), sequence_property, name))
-        elif isinstance(codepoints, CodePointSequence):
-            result.append((codepoints, sequence_property, name))
+    result: list[tuple[CodePoint | CodePointSequence, EmojiSequence, None | str]] = []
+    for codepoints, prop, name, emoji_version in itertools.chain(data1, data2):
+        match = _EMOJI_VERSION.match(emoji_version)
+        if match is None:
+            raise ValueError(f'Emoji sequence {codepoints!r} lacks comment with age')
+        age = Version.of(match.group(1))
+
+        if isinstance(codepoints, (CodePoint, CodePointSequence)):
+            result.append((codepoints, prop, name, age))
         else:
             # For basic emoji, emoji-sequences.txt contains ranges of code
             # points and of names. That means some sequence names are missing.
             range = cast(CodePointRange, codepoints)
             first_name, _, last_name = name.partition('..')
-            for codepoint in range:
+            for codepoint in range.codepoints():
                 if codepoint == range.start:
                     given_name: None | str = first_name
                 elif codepoint == range.stop:
                     given_name = last_name
                 else:
                     given_name = None
-                result.append((codepoint.to_sequence(), sequence_property, given_name))
+                result.append((codepoint, prop, given_name, age))
     return result
 
 
-def _retrieve_cldr_annotations(path: Path) -> dict[str, str]:
-    path = mirror_latest_cldr_annotations(path)
-    with open(path, mode='r') as file:
-        data = json.load(file)
-
-    return { k: v['tts'][0] for k,v in data['annotations']['annotations'].items() }
+def _retrieve_cldr_annotations(root: Path) -> dict[str, str]:
+    path1, path2 = mirror_latest_cldr_annotations(root)
+    with open(path1, mode='r') as file:
+        raw = json.load(file)
+    data1 = {
+        k: v['tts'][0] for k,v in raw['annotations']['annotations'].items()
+    }
+    with open(path2, mode='r') as file:
+        raw = json.load(file)
+    data2 = {
+        k: v['tts'][0] for k,v in raw['annotationsDerived']['annotations'].items()
+    }
+    return data1 | data2
 
 
 def _retrieve_misc_props(path: Path, version: Version) -> dict[str, set[CodePoint]]:
@@ -572,6 +618,10 @@ _T = TypeVar('_T')
 _Ts = TypeVarTuple('_Ts')
 _U = TypeVar('_U')
 
+
+_TOTAL_ELEMENTS = re.compile('# Total elements: (\d+)')
+
+
 class UnicodeCharacterDatabase:
     """
     A convenient interface to interrogating the Unicode Character Database.
@@ -626,7 +676,7 @@ class UnicodeCharacterDatabase:
             raise ValueError('trying to update UCD version after UCD has been ingested')
         self._version = Version.of(version).ucd()
 
-    def prepare(self, validate: bool = False) -> Self:
+    def prepare(self, *, validate: bool = False) -> Self:
         """
         Prepare the UCD for active use. This method locks in the current
         configuration and locally mirrors any required UCD files. Repeated
@@ -653,15 +703,17 @@ class UnicodeCharacterDatabase:
         # UCD names but CLDR names. Hence to correctly fill 'em in, we need to
         # retrieve CLDR annotations. If you look at the mirroring code, you'll
         # find that we source the JSON data from NPM of all places! 😜
+        invalid = False
         annotations = _retrieve_cldr_annotations(path)
-        emoji_sequences = _retrieve_emoji_sequences(path, version)
-        emoji_sequence_names: dict[CodePointSequence, str] = {}
-        for codepoints, _, name in emoji_sequences:
+        emoji_sequences: dict[CodePoint | CodePointSequence, str] = {}
+        for codepoints, _, name, age in _retrieve_emoji_sequences(path, version):
             if name is None:
                 name = annotations.get(str(codepoints))
-                assert name is not None, f'{codepoints!r} must have a CLDR name'
-            emoji_sequence_names[codepoints] = name
-        self._emoji_sequence_names = emoji_sequence_names
+                if name is None:
+                    logger.error('emoji sequence %r has no CLDR name', codepoints)
+                    invalid = True
+            emoji_sequences[codepoints] = (name, age)
+        self._emoji_sequences = emoji_sequences
 
         misc_props = _retrieve_misc_props(path, version)
         self._whitespace = frozenset(misc_props[BinaryProperty.White_Space.name])
@@ -673,9 +725,10 @@ class UnicodeCharacterDatabase:
         self._is_prepared = True
 
         if not validate:
+            if invalid:
+                raise AssertionError('UCD is missing data; see log messages')
             return self
 
-        invalid = False
         breaks = self._grapheme_breaks
         for range in self._emoji_data[BinaryProperty.Extended_Pictographic]:
             for codepoint in range.codepoints():
@@ -683,10 +736,22 @@ class UnicodeCharacterDatabase:
                 if codepoint in entry[0]:
                     logger.error(
                         'extended pictograph %s %r has grapheme cluster break '
-                        'class %s, not Other',
+                        '%s, not Other',
                         codepoint, codepoint, entry[1].name
                     )
                     invalid = False
+
+        text = (path / str(version) / 'emoji-sequences.txt').read_text('utf8')
+        entries = sum(int(c) for c in _TOTAL_ELEMENTS.findall(text))
+        text = (path / str(version) / 'emoji-zwj-sequences.txt').read_text('utf8')
+        entries += sum(int(c) for c in _TOTAL_ELEMENTS.findall(text))
+        if len(self._emoji_sequences) != entries:
+            logger.error(
+                'UCD has %d emoji sequences even though there should be %d',
+                len(self._emoji_sequences),
+                entries,
+            )
+            invalid = True
 
         if invalid:
             raise AssertionError('UCD validation failed; see log messages')
@@ -799,8 +864,12 @@ class UnicodeCharacterDatabase:
             case _:
                 return sum(len(r) for r in self._emoji_data[property.name])
 
-    def emoji_sequence_name(self, codepoints: CodePointSequence) -> None | str:
-        return self._emoji_sequence_names.get(codepoints)
+    def emoji_sequence_data(
+        self, codepoints: CodePoint | CodePointSequence
+    ) -> tuple[None, None] | tuple[str, Version]:
+        if codepoints.is_singleton():
+            codepoints = codepoints.to_singleton()
+        return self._emoji_sequences.get(codepoints, (None, None))
 
     # ----------------------------------------------------------------------------------
     # Binary Unicode properties, implemented as sets for now
@@ -862,7 +931,7 @@ class UnicodeCharacterDatabase:
         return codepoint in _LINE_BREAKS
 
     def wcwidth(self, codepoints: CodePointSequence) -> int:
-        if codepoints in self._emoji_sequence_names:
+        if codepoints in self._emoji_sequences:
             return 2
 
         total_width = 0

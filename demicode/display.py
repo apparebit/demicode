@@ -21,12 +21,14 @@ invocation, generating a background and a foreground character blot.
 from collections.abc import Iterator, Iterable
 from enum import auto, Enum
 import itertools
-from typing import cast, Literal, overload
+from typing import cast, Literal, overload, TypeAlias
 
 from .render import Padding, Renderer
-from .codepoint import CodePoint
-from .property import format_properties
+from .codepoint import CodePoint, CodePointSequence
 from .ucd import UCD
+
+
+CodePoints: TypeAlias = CodePoint | CodePointSequence
 
 
 class Presentation(Enum):
@@ -56,21 +58,26 @@ class Presentation(Enum):
     EMOJI = auto()
     KEYCAP = auto()
 
-    @property
-    def variation_selector(self) -> str:
-        match self:
-            case Presentation.PLAIN:
-                return '   '
-            case Presentation.CORNER:
-                return ' 1 '
-            case Presentation.CENTER:
-                return ' 2 '
-            case Presentation.TEXT:
-                return '15 '
-            case Presentation.EMOJI:
-                return '16 '
-            case Presentation.KEYCAP:
-                return '16 '
+    @classmethod
+    def unapply(cls, codepoints: CodePointSequence) -> 'Presentation':
+        if len(codepoints) == 2:
+            second = codepoints[1]
+            if second == 0xFE00:
+                return Presentation.CORNER
+            elif second == 0xFE01:
+                return Presentation.CENTER
+            elif second == 0xFE0E:
+                return Presentation.TEXT
+            elif second == 0xFE0F:
+                return Presentation.EMOJI
+        elif (
+            len(codepoints) == 3
+            and codepoints[1] == 0xFE0F
+            and codepoints[2] == 0x20E3
+        ):
+            return Presentation.KEYCAP
+
+        return Presentation.PLAIN
 
     def apply(self, codepoint: CodePoint) -> str:
         """Apply this presentation to the code point, yielding a string."""
@@ -93,20 +100,37 @@ class Presentation(Enum):
                 assert codepoint in UCD.with_keycap
                 return f'{chr(codepoint)}\uFE0F\u20E3'
 
+    @property
+    def variation_selector(self) -> str:
+        match self:
+            case Presentation.PLAIN:
+                return '   '
+            case Presentation.CORNER:
+                return ' 1 '
+            case Presentation.CENTER:
+                return ' 2 '
+            case Presentation.TEXT:
+                return '15 '
+            case Presentation.EMOJI:
+                return '16 '
+            case Presentation.KEYCAP:
+                return '16 '
+
 
 # --------------------------------------------------------------------------------------
 
-LEGEND_BASE = ' 123 123 Code Pt  VS'
-LEGEND_PROPS = 'Ct Wd Properties                 Age'
+LEGEND_BLOT = ' 123   123  '
+LEGEND_PROPS = 'Code Pt  VS Ct Wd Other Properties           Age'
 LEGEND_NAME = 'Name'
-LEGEND = f'{LEGEND_BASE} {LEGEND_PROPS} {LEGEND_NAME}'
+LEGEND = f'{LEGEND_BLOT} {LEGEND_PROPS} {LEGEND_NAME}'
 
-BASE_WIDTH = len(LEGEND_BASE)
+BLOT_WIDTH = len(LEGEND_BLOT)
+PROPS_WIDTH = len(LEGEND_PROPS)
 LEGEND_MIN_WIDTH = len(LEGEND)
-FIXED_WIDTH = len(LEGEND_BASE) + 1 + len(LEGEND_PROPS) + 1
+FIXED_WIDTH = BLOT_WIDTH + 1 + PROPS_WIDTH + 1
 NAME_MIN_WIDTH = len(LEGEND_NAME)
 
-def _max_name_length(width: int) -> int:
+def _name_width(width: int) -> int:
     if width <= LEGEND_MIN_WIDTH:
         return NAME_MIN_WIDTH
     return width - FIXED_WIDTH
@@ -115,10 +139,8 @@ def _max_name_length(width: int) -> int:
 def format_legend(renderer: Renderer) -> str:
     """Format the legend for lines formatted with `format_info`."""
     if not renderer.has_style:
-        return LEGEND[4:]
-
-    flexible_spaces = _max_name_length(renderer.width) - NAME_MIN_WIDTH
-    return renderer.legend(LEGEND + (' ' * flexible_spaces))
+        return LEGEND[6:]
+    return renderer.legend(LEGEND.ljust(renderer.width))
 
 
 def format_heading(renderer: Renderer, heading: str) -> str:
@@ -126,30 +148,33 @@ def format_heading(renderer: Renderer, heading: str) -> str:
     Format the given heading. The initial \\u0001 (Start of Heading) is
     discarded.
     """
-    if heading[0] == '\u0001':
-        heading = heading[1:]
+    if heading[0] != '\u0001':
+        raise ValueError(
+            f'string "{heading}" is not a valid heading, which starts with U+0001')
+
+    heading = heading[1:]
 
     left = FIXED_WIDTH - 1
     if not renderer.has_style:
-        left -= 4
+        left -= 6
     right = renderer.width - FIXED_WIDTH - len(heading) - 1
     return renderer.heading(f'{"─" * left} {heading} {"─" * right}')
 
 
 def format_info(
     renderer: Renderer,
-    codepoint: CodePoint,
+    codepoints: CodePoints,
     *,
     start_column: int = 1,
-    include_char_info: bool = True,
+    include_info: bool = True,
     presentation: Presentation = Presentation.PLAIN,
 ) -> Iterator[str]:
     """
-    Format the fixed-width information for the given code point.
+    Format the fixed-width information for the given code points.
 
-    If `include_char_info` is `True`, this function emits one line per code
-    point. After showing the codepoint against a lightly colored background and
-    a darkly colored foreground, this function also displays:
+    If `include_info` is `True`, this function emits one line per code point.
+    After showing the codepoint against a lightly colored background and a
+    darkly colored foreground, this function also displays:
 
       * the hexadecimal value of the code point,
       * the general category,
@@ -158,9 +183,9 @@ def format_info(
       * the Unicode version that introduced the code point,
       * and the name followed by the block in parentheses.
 
-    If `include_char_info` is `False`, this function only displays the
-    character, assuming it is a visible and not, for example, a surrogate or
-    unassigned code point.
+    If `include_info` is `False`, this function only displays the character,
+    assuming it is a visible and not, for example, a surrogate or unassigned
+    code point.
 
     The brightness controls how colorful the output is. At the default of 0,
     both background and foreground are colored in greys. At 1, the background
@@ -169,35 +194,69 @@ def format_info(
     recommend cranking up the brightness for the grid format.
     """
     # Determine what to actually show
-    unidata = UCD.lookup(codepoint)
-    wcwidth = unidata.wcwidth()
+    unidata = None
 
-    if unidata.category.is_invalid or wcwidth == -1:
+    if not codepoints.is_singleton():
+        assert isinstance(codepoints, CodePointSequence)
+        presentation = Presentation.unapply(codepoints)
+        if presentation is Presentation.PLAIN:
+            wcwidth = UCD.wcwidth(codepoints)
+            display = str(codepoints)
+        else:
+            codepoints = codepoints[0]
+
+    if codepoints.is_singleton():
+        codepoint = codepoints.to_singleton()
+        if UCD.is_line_break(codepoint):
+            codepoint = CodePoint.of(0x23CE) # RETURN SYMBOL
+        unidata = UCD.lookup(codepoint)
+        wcwidth = unidata.wcwidth()
+        display = presentation.apply(codepoint)
+
+    if wcwidth == -1:
         wcwidth = 1
         display = '\uFFFD' # REPLACEMENT CHARACTER
-    elif UCD.is_line_break(codepoint):
-        display = '\u23CE' # RETURN SYMBOL
-    else:
-        display = presentation.apply(codepoint)
 
     # Render character blots
     yield renderer.column(start_column + 1)
     yield renderer.blot(display, Padding.BACKGROUND, 3 - wcwidth)
     yield ' '
-    yield renderer.column(start_column + 5)
+    yield renderer.column(start_column + 7)
     yield renderer.blot(display, Padding.FOREGROUND, 3 - wcwidth)
     yield ' '
 
-    # Add Unicode property information
-    if include_char_info:
-        yield renderer.column(start_column + 9)
-        yield f'{str(codepoint):<8s} '
-        yield presentation.variation_selector
-        yield format_properties(
-            unidata,
-            name_prefix='KEYCAP' if presentation is Presentation.KEYCAP else None,
-            max_width=renderer.width - BASE_WIDTH - 1
-        )
+    if not include_info:
+        return
+
+    # Add Unicode meta/data
+    yield renderer.column(start_column + 13)
+    if unidata is None:
+        assert isinstance(codepoints, CodePointSequence)
+        yield renderer.fit(repr(codepoints), width=PROPS_WIDTH, fill=True)
+        name = UCD.emoji_sequence_name(codepoints)
+        if not name:
+            return
+        yield ' '
+        yield renderer.fit(name, width=_name_width(renderer.width))
+        return
+
+    yield f'{codepoint!r:<8s} '
+    yield presentation.variation_selector
+    yield unidata.category.value
+    yield f' {unidata.east_asian_width:<2} '
+    flags = ' '.join(f.value for f in unidata.flags)
+    yield renderer.fit(flags, width=25, fill=True)
+    yield f' {unidata.age or "":>4} '
+
+    name = unidata.name or ''
+    if presentation is Presentation.KEYCAP:
+        name = f'KEYCAP {name}'
+    block = unidata.block or ''
+    if name and block:
+        name = name + ' '
+    if block:
+        name = f'{name}({block})'
+    yield renderer.fit(name, width=renderer.width-FIXED_WIDTH)
 
 
 # --------------------------------------------------------------------------------------
@@ -205,19 +264,19 @@ def format_info(
 
 @overload
 def add_presentation(
-    data: Iterable[CodePoint|str], *, headings: Literal[False]
-) -> Iterator[tuple[Presentation, CodePoint]]: ...
+    data: Iterable[CodePoints|str], *, headings: Literal[False]
+) -> Iterator[tuple[Presentation, CodePoints]]: ...
 
 @overload
 def add_presentation(
-    data: Iterable[CodePoint|str], *, headings: bool = ...
-) -> Iterator[tuple[Presentation, CodePoint]|tuple[str, None]]: ...
+    data: Iterable[CodePoints|str], *, headings: bool = ...
+) -> Iterator[tuple[Presentation, CodePoints]|tuple[str, None]]: ...
 
 def add_presentation(
-    data: Iterable[CodePoint|str],
+    data: Iterable[CodePoints|str],
     *,
     headings: bool = True,  # Allow embedded headings
-) -> Iterator[tuple[Presentation, CodePoint]|tuple[str, None]]:
+) -> Iterator[tuple[Presentation, CodePoints]|tuple[str, None]]:
     """
     Enrich code points with their presentation. This function takes a stream of
     code points interspersed with headings and enriches each code point with its
@@ -228,9 +287,22 @@ def add_presentation(
     """
     for datum in data:
         if isinstance(datum, str):
-            if headings:
-                yield datum, None
+            if not datum:
+                continue
+            if datum[0] == '\u0001':
+                if headings:
+                    yield datum, None
+                continue
+            if len(datum) > 1:
+                yield Presentation.PLAIN, CodePointSequence.from_string(datum)
+                continue
+            datum = CodePoint.of(datum)
+
+        if not datum.is_singleton():
+            yield Presentation.PLAIN, datum
             continue
+
+        datum = datum.to_singleton()
         if datum in UCD.fullwidth_punctuation:
             yield Presentation.CORNER, datum
             yield Presentation.CENTER, datum
@@ -245,23 +317,23 @@ def add_presentation(
 
 def format_lines(
     renderer: Renderer,
-    data: Iterable[tuple[Presentation, CodePoint]|tuple[str, None]],
+    stream: Iterable[tuple[Presentation, CodePoints]|tuple[str, None]],
 ) -> Iterator[str]:
     """Emit the extended, per-line representation for all code points."""
-    for presentation, codepoint in data:
+    for presentation, codepoints in stream:
         if isinstance(presentation, str):
             yield format_heading(renderer, presentation)
         else:
             yield ''.join(format_info(
                 renderer,
-                cast(CodePoint, codepoint),
+                cast(CodePoint, codepoints),
                 presentation=presentation,
             ))
 
 
 def format_grid_lines(
     renderer: Renderer,
-    codepoints: Iterable[tuple[Presentation, CodePoint]],
+    stream: Iterable[tuple[Presentation, CodePoint | CodePointSequence]],
 ) -> Iterator[str]:
     """Emit the compact, grid-like representation for all code points."""
     column_count = (renderer.width - 1) // 11
@@ -269,13 +341,13 @@ def format_grid_lines(
         line = ''.join(itertools.chain.from_iterable(
             format_info(
                 renderer,
-                codepoint,
+                codepoints,
                 presentation=presentation,
                 start_column=count * 11 + 2,
-                include_char_info=False,
+                include_info=False,
             )
-            for count, (presentation, codepoint)
-            in enumerate(itertools.islice(codepoints, column_count))
+            for count, (presentation, codepoints)
+            in enumerate(itertools.islice(stream, column_count))
         ))
         if line == '':
             return

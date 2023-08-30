@@ -1,6 +1,6 @@
 """Code points selected by human judgement."""
 
-from .codepoint import CodePoint
+from .codepoint import CodePoint, CodePointSequence
 
 __all__ = (
     'ARROWS',
@@ -9,8 +9,12 @@ __all__ = (
     'VERSION_ORACLE',
 )
 
-def _prep(text: str) -> str | CodePoint:
-    return text if text[0] == '\u0001' else CodePoint.of(text)
+def _prep(text: str) -> str | CodePoint | CodePointSequence:
+    if text[0] == '\u0001':
+        return text
+    if len(text) == 1:
+        return CodePoint.of(text)
+    return CodePointSequence.from_string(text)
 
 ARROWS = tuple(_prep(text) for text in (
     '\u0001An Arrow’s Flight',
@@ -73,6 +77,11 @@ LINGCHI = tuple(_prep(text) for text in (
     '\u2757',      # HEAVY EXCLAMATION MARK SYMBOL
     '\u2763',      # HEART HEART EXCLAMATION MARK ORNAMENT
     '#',           # NUMBER SIGN (Emoji 2.0, not part of Unicode update)
+    '\U0001F9D1\u200D\U0001F4BB',         # technologist
+    '\U0001F9D1\u200D\U0001F9B0',         # person: red hair
+    '\U0001F3F3\uFE0F\u200D\U0001F308',   # rainbow flag
+    '\U0001F1E9\U0001F1EA',               # flag: Germany
+    '\U0001F442\U0001F3FE',               # ear: medium-dark skin tone
 ))
 
 MAD_DASH = tuple(_prep(text) for text in (

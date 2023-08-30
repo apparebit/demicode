@@ -11,9 +11,17 @@ CodePoints: TypeAlias = CodePoint | CodePointRange | CodePointSequence
 Properties: TypeAlias = tuple[str, ...]
 
 
-def _parse_record(line: str) -> tuple[CodePoints, Properties]:
-    line, _, _ = line.partition('#')
+def _parse_record(
+    line: str, *, with_comment: bool = False
+) -> tuple[CodePoints, Properties]:
+    """
+    Parse a line from a UCD file. If `include_comment` is `True`, this function
+    includes the value of the comment as last property.
+    """
+    line, _, comment = line.partition('#')
     codepoints, *properties = [f.strip() for f in line.strip().split(';')]
+    if with_comment:
+        properties.append(comment.strip())
     first_codepoint, *more_codepoints = codepoints.split()
 
     if len(more_codepoints) == 0:
@@ -31,7 +39,7 @@ _EOF = '# EOF'
 _MISSING = '# @missing:'
 
 def parse_records(
-    lines: Iterable[str]
+    lines: Iterable[str], *, with_comment: bool = False
 ) -> Iterator[tuple[Tag, CodePoints, Properties]]:
     """
     Parse the lines of a UCD file into structured records. This function returns
@@ -52,11 +60,12 @@ def parse_records(
         elif line.startswith(_EOF):
             return
         elif line.startswith(_MISSING):
-            yield  'default', *_parse_record(line[len(_MISSING):].strip())
+            r = _parse_record(line[len(_MISSING):].strip(), with_comment=with_comment)
+            yield  'default', *r
         elif line[0] == '#':
             continue
         else:
-            yield None, *_parse_record(line)
+            yield None, *_parse_record(line, with_comment=with_comment)
 
 
 def collect(
@@ -84,6 +93,8 @@ def collect(
 def ingest(
     path: Path,
     converter: Callable[[CodePoints, Properties], T],
+    *,
+    with_comment: bool = False,
 ) -> tuple[list[T], list[T]]:
     with open(path, mode='r', encoding='utf8') as handle:
-        return collect(parse_records(handle), converter)
+        return collect(parse_records(handle, with_comment=with_comment), converter)

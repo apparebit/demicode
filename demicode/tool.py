@@ -62,6 +62,11 @@ def configure_parser() -> argparse.ArgumentParser:
         '--ucd-version',
         help='set UCD version from 4.1 onwards',
     )
+    ucd_group.add_argument(
+        '--ucd-validation',
+        action='store_true',
+        help='perform extra validation on UCD',
+    )
 
     # ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~
 
@@ -95,6 +100,11 @@ def configure_parser() -> argparse.ArgumentParser:
         '--with-mad-dash',
         action='store_true',
         help ='include indistinguishable dashes'
+    )
+    cp_group.add_argument(
+        '--with-taste-of-emoji',
+        action='store_true',
+        help ='include representative sample of emoji'
     )
     cp_group.add_argument(
         '--with-version-oracle',
@@ -206,8 +216,10 @@ def run(arguments: Sequence[str]) -> int:
         print(renderer.very_strong(f' demicode {__version__} '))
         return 0
 
+    # So UCD access logs don't separate heading from counts
+    UCD.prepare(validate=options.ucd_validation)
+
     if options.stats:
-        UCD.prepare()  # So UCD access logs don't separate heading from counts
         print()
         print(renderer.strong('Code Points with Given Property'))
         print()
@@ -233,10 +245,13 @@ def run(arguments: Sequence[str]) -> int:
         codepoints.append(LINGCHI)
     if options.with_mad_dash:
         codepoints.append(MAD_DASH)
+    if options.with_taste_of_emoji:
+        codepoints.append(TASTE_OF_EMOJI)
     if options.with_version_oracle:
         codepoints.append(VERSION_ORACLE)
     if options.with_curation:
         codepoints.append(MAD_DASH)
+        codepoints.append(TASTE_OF_EMOJI)
         codepoints.append(LINGCHI)
         codepoints.append(VERSION_ORACLE)
 

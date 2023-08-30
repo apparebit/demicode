@@ -98,6 +98,8 @@ class Padding(StrEnum):
 
 class Renderer:
 
+    MAX_WIDTH = 140
+
     def __init__(self, mode: Mode, intensity: int) -> None:
         self.refresh()
 
@@ -107,14 +109,12 @@ class Renderer:
 
     def refresh(self) -> None:
         """
-        Refresh the renderer's width and height reading of the terminal. Given
-        that demicode's output is not buffered and hence cannot be reflown after
-        the fact, it makes little sense to immediately respond to terminal size
-        changes. Instead, this method provides a more controlled, polling-based
-        solution, to be utilized by the pager.
+        Refresh the renderer's width and height reading of the terminal. This
+        method enables polling for size changes when it makes sense to react to
+        them, i.e., just before building the next page to display.
         """
         width, self._height = os.get_terminal_size()
-        self._width = min(140, width)
+        self._width = min(width, self.MAX_WIDTH)
 
     @property
     def height(self) -> int:
@@ -123,6 +123,13 @@ class Renderer:
     @property
     def width(self) -> int:
         return self._width
+
+    def fit(self, text: str, *, width: None | int = None, fill: bool = False) -> str:
+        if width is None:
+            width = self.width
+        if len(text) <= width:
+            return text.ljust(width) if fill else text
+        return text[:width - 1] + '…'
 
     def column(self, column: int) -> str:
         return ''

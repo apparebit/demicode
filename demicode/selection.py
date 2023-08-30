@@ -6,6 +6,7 @@ __all__ = (
     'ARROWS',
     'LINGCHI',
     'MAD_DASH',
+    'TASTE_OF_EMOJI',
     'VERSION_ORACLE',
 )
 
@@ -77,11 +78,6 @@ LINGCHI = tuple(_prep(text) for text in (
     '\u2757',      # HEAVY EXCLAMATION MARK SYMBOL
     '\u2763',      # HEART HEART EXCLAMATION MARK ORNAMENT
     '#',           # NUMBER SIGN (Emoji 2.0, not part of Unicode update)
-    '\U0001F9D1\u200D\U0001F4BB',         # technologist
-    '\U0001F9D1\u200D\U0001F9B0',         # person: red hair
-    '\U0001F3F3\uFE0F\u200D\U0001F308',   # rainbow flag
-    '\U0001F1E9\U0001F1EA',               # flag: Germany
-    '\U0001F442\U0001F3FE',               # ear: medium-dark skin tone
 ))
 
 MAD_DASH = tuple(_prep(text) for text in (
@@ -93,6 +89,27 @@ MAD_DASH = tuple(_prep(text) for text in (
     '\uFF0D',      # FULLWIDTH HYPHEN-MINUS
     '\u2E3A',      # TWO EM DASH
     '\u2E3B',      # THREE EM DASH
+))
+
+TASTE_OF_EMOJI = tuple(_prep(text) for text in (
+    # Unicode versions 1.1, 3.2, 4.0, 4.1, 5.1, 5.2, 6.0, 7.0
+
+    # 0.6 v 1.1
+    # 0.7 v 1.1
+    # 0.6 v 4.0
+    # 0.6 v 6.0
+    # 0.7 v 6.0
+    # 0.7 v 7.0
+
+    '\u2692',      # HAMMER AND PICK
+    '\u26a1',      # HIGH VOLTAGE
+    '\U0001F3DD',  # DESERT ISLAND, 7.
+    '\U0001F596',  # VULCAN SALUTE, 7.0
+    '\U0001F9D1\u200D\U0001F4BB',         # technologist
+    '\U0001F9D1\u200D\U0001F9B0',         # person: red hair
+    '\U0001F3F3\uFE0F\u200D\U0001F308',   # rainbow flag
+    '\U0001F1E9\U0001F1EA',               # flag: Germany
+    '\U0001F442\U0001F3FE',               # ear: medium-dark skin tone
 ))
 
 VERSION_ORACLE = tuple(_prep(text) for text in (

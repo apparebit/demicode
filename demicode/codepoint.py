@@ -199,3 +199,5 @@ class Limit(CodePoint, Enum):
 
 class RangeLimit(CodePointRange, Enum):
     ALL = CodePointRange(Limit.MIN, Limit.MAX)
+
+CodePointRange.__iter__ = None

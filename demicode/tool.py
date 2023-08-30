@@ -10,7 +10,7 @@ from pathlib import Path
 import re
 from textwrap import dedent
 
-from .codepoint import CodePoint
+from .codepoint import CodePoint, CodePointSequence
 from .darkmode import is_darkmode
 from .display import (
     add_presentation,
@@ -217,7 +217,7 @@ def run(arguments: Sequence[str]) -> int:
         return 0
 
     # ---------------------------------------- Determine code points to display
-    codepoints: list[Iterable[CodePoint|str]] = []
+    codepoints: list[Iterable[CodePoint|CodePointSequence|str]] = []
     # Standard selections
     if options.with_ucd_dashes:
         codepoints.append(sorted(UCD.dashes))

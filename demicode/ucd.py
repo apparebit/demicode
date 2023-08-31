@@ -1,6 +1,6 @@
 from bisect import bisect_right as stdlib_bisect_right
 from collections import defaultdict
-from collections.abc import Sequence, Set
+from collections.abc import Iterator, Sequence, Set
 import itertools
 import json
 import logging
@@ -17,6 +17,7 @@ from typing import (
     NamedTuple,
     overload,
     Self,
+    TypeAlias,
     TypeVar,
     TypeVarTuple,
 )
@@ -31,12 +32,13 @@ from .codepoint import (
 
 from .parser import ingest
 from .property import (
-    Category,
-    EastAsianWidth,
     BinaryProperty,
+    Category,
     CharacterData,
-    GraphemeClusterBreak,
+    EastAsianWidth,
     EmojiSequence,
+    GRAPHEME_CLUSTER_PATTERN,
+    GraphemeClusterProperty,
 )
 from demicode import __version__
 
@@ -430,18 +432,21 @@ def _retrieve_general_info(
     return info_ranges, info_entries
 
 
-def _retrieve_grapheme_breaks(
+def _retrieve_grapheme_cluster_properties(
     path: Path, version: Version
-) -> tuple[GraphemeClusterBreak, list[tuple[CodePointRange, GraphemeClusterBreak]]]:
+) -> tuple[
+    GraphemeClusterProperty,
+    list[tuple[CodePointRange, GraphemeClusterProperty]]
+]:
     file = 'GraphemeBreakProperty.txt'
     path = mirror_unicode_data(path, file, version)
     defaults, data = ingest(
-        path, lambda cp, p: (cp.to_range(), GraphemeClusterBreak[p[0]]))
+        path, lambda cp, p: (cp.to_range(), GraphemeClusterProperty[p[0]]))
     if len(defaults) != 1:
         raise ValueError(f'"{file}" with {len(defaults)} instead of one')
     if defaults[0][0] != RangeLimit.ALL:
         raise ValueError(f'"{file}" with default that covers only {defaults[0][0]}')
-    return GraphemeClusterBreak(defaults[0][1]), sorted(data, key=lambda d: d[0])
+    return defaults[0][1], sorted(data, key=lambda d: d[0])
 
 
 def _retrieve_blocks(path: Path, version: Version) -> list[tuple[CodePointRange, str]]:
@@ -500,9 +505,12 @@ def _retrieve_emoji_variations(path: Path, version: Version) -> list[CodePoint]:
 
 _EMOJI_VERSION = re.compile(r'E(\d+\.\d+)')
 
+_EmojiSequenceEntry: TypeAlias = tuple[
+    CodePoint | CodePointSequence, EmojiSequence, None | str, Version]
+
 def _retrieve_emoji_sequences(
     root: Path, version: Version
-) -> list[tuple[CodePoint | CodePointSequence, EmojiSequence, None | str, Version]]:
+) -> list[_EmojiSequenceEntry]:
     try:
         path = mirror_unicode_data(root, 'emoji-sequences.txt', version)
     except VersionError:
@@ -522,7 +530,7 @@ def _retrieve_emoji_sequences(
         with_comment=True,
     )
 
-    result: list[tuple[CodePoint | CodePointSequence, EmojiSequence, None | str]] = []
+    result: list[_EmojiSequenceEntry] = []
     for codepoints, prop, name, emoji_version in itertools.chain(data1, data2):
         match = _EMOJI_VERSION.match(emoji_version)
         if match is None:
@@ -618,8 +626,7 @@ _T = TypeVar('_T')
 _Ts = TypeVarTuple('_Ts')
 _U = TypeVar('_U')
 
-
-_TOTAL_ELEMENTS = re.compile('# Total elements: (\d+)')
+_TOTAL_ELEMENTS_PATTERN = re.compile('# Total elements: (\d+)')
 
 
 class UnicodeCharacterDatabase:
@@ -693,8 +700,8 @@ class UnicodeCharacterDatabase:
         self._block_ranges = _retrieve_blocks(path, version)
         self._age_ranges = _retrieve_ages(path, version)
         self._width_default, self._width_ranges = _retrieve_widths(path, version)
-        self._grapheme_default, self._grapheme_breaks = (
-            _retrieve_grapheme_breaks(path, version))
+        self._grapheme_default, self._grapheme_props = (
+            _retrieve_grapheme_cluster_properties(path, version))
         self._emoji_data = _retrieve_emoji_data(path, version)
         self._emoji_variations = frozenset(_retrieve_emoji_variations(path, version))
 
@@ -705,14 +712,15 @@ class UnicodeCharacterDatabase:
         # find that we source the JSON data from NPM of all places! 😜
         invalid = False
         annotations = _retrieve_cldr_annotations(path)
-        emoji_sequences: dict[CodePoint | CodePointSequence, str] = {}
+        emoji_sequences: dict[CodePoint | CodePointSequence, tuple[str, Version]] = {}
         for codepoints, _, name, age in _retrieve_emoji_sequences(path, version):
             if name is None:
                 name = annotations.get(str(codepoints))
                 if name is None:
                     logger.error('emoji sequence %r has no CLDR name', codepoints)
                     invalid = True
-            emoji_sequences[codepoints] = (name, age)
+            # The cast is safe because raising of exception is only delayed.
+            emoji_sequences[codepoints] = (cast(str, name), age)
         self._emoji_sequences = emoji_sequences
 
         misc_props = _retrieve_misc_props(path, version)
@@ -729,10 +737,10 @@ class UnicodeCharacterDatabase:
                 raise AssertionError('UCD is missing data; see log messages')
             return self
 
-        breaks = self._grapheme_breaks
+        grapheme_props = self._grapheme_props
         for range in self._emoji_data[BinaryProperty.Extended_Pictographic]:
             for codepoint in range.codepoints():
-                entry = breaks[_bisect_ranges(breaks, codepoint)]
+                entry = grapheme_props[_bisect_ranges(grapheme_props, codepoint)]
                 if codepoint in entry[0]:
                     logger.error(
                         'extended pictograph %s %r has grapheme cluster break '
@@ -742,9 +750,9 @@ class UnicodeCharacterDatabase:
                     invalid = False
 
         text = (path / str(version) / 'emoji-sequences.txt').read_text('utf8')
-        entries = sum(int(c) for c in _TOTAL_ELEMENTS.findall(text))
+        entries = sum(int(c) for c in _TOTAL_ELEMENTS_PATTERN.findall(text))
         text = (path / str(version) / 'emoji-zwj-sequences.txt').read_text('utf8')
-        entries += sum(int(c) for c in _TOTAL_ELEMENTS.findall(text))
+        entries += sum(int(c) for c in _TOTAL_ELEMENTS_PATTERN.findall(text))
         if len(self._emoji_sequences) != entries:
             logger.error(
                 'UCD has %d emoji sequences even though there should be %d',
@@ -826,11 +834,50 @@ class UnicodeCharacterDatabase:
         """Look up the code point's East Asian width."""
         return self._resolve(codepoint, self._width_ranges, self._width_default)
 
-    def grapheme_cluster_break(self, codepoint: CodePoint) -> GraphemeClusterBreak:
+    def grapheme_cluster_property(
+        self, codepoint: CodePoint
+    ) -> GraphemeClusterProperty:
         """Look up the code point's grapheme cluster break class."""
         if self.test_property(codepoint, BinaryProperty.Extended_Pictographic):
-            return GraphemeClusterBreak.Extended_Pictographic
-        return self._resolve(codepoint, self._grapheme_breaks, self._grapheme_default)
+            return GraphemeClusterProperty.Extended_Pictographic
+        return self._resolve(codepoint, self._grapheme_props, self._grapheme_default)
+
+    def grapheme_cluster_breaks(self, text: str | CodePointSequence) -> Iterator[int]:
+        """
+        Iterate over the grapheme cluster breaks for the given string or
+        sequence of code points. The implementation has some startup cost
+        because it first converts the entire string into a sequence of grapheme
+        cluster property values. Thereafter, it uses a regular expression for
+        iterating over the grapheme cluster breaks.
+        """
+        if isinstance(text, str):
+            text = CodePointSequence.from_string(text)
+
+        grapheme_cluster_props = ''.join(
+            self.grapheme_cluster_property(cp).value for cp in text
+        )
+        length = len(text)
+
+        index = 0
+        yield index
+
+        while index < length:
+            grapheme = GRAPHEME_CLUSTER_PATTERN.match(grapheme_cluster_props, index)
+            if grapheme is None:
+                raise AssertionError(
+                    f'could not find next grapheme at position {index} of '
+                    f'"{text!s}" with properties "{grapheme_cluster_props}"'
+                )
+
+            index = grapheme.end()
+            yield index
+
+    def is_grapheme_cluster(self, text: str | CodePointSequence) -> bool:
+        """
+        Determine whether the string or sequence of code points forms a single
+        Unicode grapheme cluster.
+        """
+        return [*self.grapheme_cluster_breaks(text)] == [0, len(text)]
 
     def test_property(self, codepoint: CodePoint, property: BinaryProperty) -> bool:
         self.prepare()
@@ -865,8 +912,10 @@ class UnicodeCharacterDatabase:
                 return sum(len(r) for r in self._emoji_data[property.name])
 
     def emoji_sequence_data(
-        self, codepoints: CodePoint | CodePointSequence
+        self, codepoints: CodePoint | CodePointSequence | str
     ) -> tuple[None, None] | tuple[str, Version]:
+        if isinstance(codepoints, str):
+            codepoints = CodePointSequence.from_string(codepoints)
         if codepoints.is_singleton():
             codepoints = codepoints.to_singleton()
         return self._emoji_sequences.get(codepoints, (None, None))

@@ -153,7 +153,7 @@ _EMOJI_PROPERTIES = frozenset([
 # --------------------------------------------------------------------------------------
 
 
-class GraphemeClusterBreak(StrEnum):
+class GraphemeClusterProperty(StrEnum):
     Prepend = 'P'
     CR = 'r'
     LF = 'n'
@@ -191,40 +191,9 @@ GRAPHEME_CLUSTER_PATTERN = re.compile(
             )
             [EZS]*                    # postcore
         )
-    """
+    """,
+    re.VERBOSE,
 )
-
-
-class GraphemeBreaks(Iterator[int]):
-    """
-    An iterator over grapheme breaks. For each iteration with `next()`, an
-    instance of this class returns the index of the next grapheme. That may be
-    the index one past the last code point of the string. Thereafter, the
-    instance signals `StopIteration`. For simplicity and performance, the
-    implementation translates the string into another, equivalent string using
-    only stylized grapheme cluster break properties and then uses a Python
-    regular expression to identify grapheme breaks.
-    """
-
-    def __init__(
-        self,
-        text: str,
-        lookup: Callable[[CodePoint], GraphemeClusterBreak]
-    ) -> None:
-        self._text = text
-        self._length = len(text)
-        self._lookup = lookup
-        self._cluster_data = ''.join(lookup(CodePoint.of(c)).value for c in text)
-        self._index = 0
-
-    def __next__(self) -> int:
-        if self._index >= self._length:
-            raise StopIteration
-
-        grapheme = GRAPHEME_CLUSTER_PATTERN.match(self._cluster_data, self._index)
-        assert grapheme is not None
-        self._index = grapheme.end()
-        return self._index
 
 
 # --------------------------------------------------------------------------------------

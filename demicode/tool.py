@@ -26,7 +26,15 @@ from .ucd import UCD
 from demicode import __version__
 
 
-HEX_CODEPOINT = re.compile(r'(U[+])?[0-9A-Fa-f]{4,6}')
+HEX_CODEPOINTS = re.compile(
+    r"""
+        (?: U[+] )?  [0-9A-Fa-f]{4,6}
+        (?:
+            \s+  (?: U[+] )?  [0-9A-Fa-f]{4,6}
+        )*
+    """,
+    re.VERBOSE
+)
 
 
 def width_limited_formatter(prog: str) -> argparse.HelpFormatter:
@@ -42,9 +50,17 @@ def configure_parser() -> argparse.ArgumentParser:
             page. If you enter "q" or "quit" before the <return>, demicode
             terminates immediately. It does the same if you press <control-c>.
 
-            Demicode requires a terminal emulator that supports Ansi escape
-            codes including 256 colors. Demicode is © 2023 Robert Grimm,
-            licensed as open source under Apache 2.0.
+            If available, Demicode's grapheme-per-line mode shows the name of a
+            code point or emoji sequence. NAMES IN ALL-CAPS denote code points,
+            are from the UCD, and are immutable. names in lower-case (mostly)
+            denote emoji sequences, originate from the CLDR, and may change over
+            time. Age shows the Unicode version that first assigned a code point
+            or when prefixed with E the Unicode Emoji version that first defined
+            a sequence.
+
+            Demicode requires Python 3.11 or later and a terminal that supports
+            Ansi escape codes including 256 colors. Demicode is © 2023 Robert
+            Grimm, licensed as open source under Apache 2.0.
 
                       <https://github.com/apparebit/demicode>
         """),
@@ -117,12 +133,13 @@ def configure_parser() -> argparse.ArgumentParser:
         help='include curated selection of codepoints'
     )
     cp_group.add_argument(
-        'codepoints',
+        'graphemes',
         nargs='*',
-        help="""include codepoints provided as space-
-separated hex numbers (4-6 digits, optionally
-prefixed with "U+") or as literal characters
-without intermediate spaces"""
+        help=dedent("""\
+            include graphemes provided as space-
+            separated hex numbers of 4-6 digits, optionall
+            prefixed with "U+" or as literal character strings
+        """)
     )
 
     # ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~
@@ -201,15 +218,19 @@ def run(arguments: Sequence[str]) -> int:
         options.in_more_color
     )
 
-    # ---------------------------------------------- Set UCD path and/or version
     try:
-        if options.ucd_path:
-            UCD.use_path(Path(options.ucd_path))
-        if options.ucd_version:
-            UCD.use_version(options.ucd_version)
-    except ValueError as x:
+        return process(options, renderer)
+    except Exception as x:
         print(renderer.error(f'Error: {str(x)}'))
         return 1
+
+
+def process(options: argparse.Namespace, renderer: Renderer) -> int:
+    # ---------------------------------------------- Set UCD path and/or version
+    if options.ucd_path:
+        UCD.use_path(Path(options.ucd_path))
+    if options.ucd_version:
+        UCD.use_version(options.ucd_version)
 
     # ------------------------------------------------ Handle version and stats
     if options.version:
@@ -255,20 +276,24 @@ def run(arguments: Sequence[str]) -> int:
         codepoints.append(LINGCHI)
         codepoints.append(VERSION_ORACLE)
 
-    if options.codepoints:
-        # Both hexadecimal numbers and characters are recognized.
-        for argument in options.codepoints:
-            if HEX_CODEPOINT.match(argument):
-                codepoints.append([CodePoint.of(argument)])
-            else:
-                codepoints.append(CodePoint.of(ch) for ch in argument)
+    for argument in options.graphemes:
+        if HEX_CODEPOINTS.match(argument):
+            cluster = CodePointSequence.of(*argument.split())
+        else:
+            cluster = CodePointSequence.from_string(argument)
+
+        if not UCD.is_grapheme_cluster(cluster):
+            raise ValueError(f'{cluster!r} is more than one grapheme cluster!')
+        codepoints.append(
+            [cluster.to_singleton() if cluster.is_singleton() else cluster])
 
     # -------------------------------- If there's nothing to display, help user
     if len(codepoints) == 0:
-        print(renderer.error('Error: There are no codepoints to show.'))
-        print(renderer.error('Maybe try again with "1F49D" as argument——'))
-        print(renderer.error('or with "-h" to see all options.'))
-        return 1
+        raise ValueError(dedent("""\
+            There are no codepoints to show.
+            Maybe try again with "1F49D" as argument——
+            or with "-h" to see all options.
+        """))
 
     # ----------------------------------------------------- Display code points
     if options.in_grid:

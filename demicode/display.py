@@ -23,9 +23,10 @@ from enum import auto, Enum
 import itertools
 from typing import cast, Literal, overload, TypeAlias
 
-from .render import Padding, Renderer
 from .codepoint import CodePoint, CodePointSequence
-from .ucd import UCD
+from .property import BinaryProperty
+from .render import Padding, Renderer
+from .ucd import UCD, Version
 
 
 CodePoints: TypeAlias = CodePoint | CodePointSequence
@@ -101,6 +102,10 @@ class Presentation(Enum):
                 return f'{chr(codepoint)}\uFE0F\u20E3'
 
     @property
+    def is_emoji_variation(self) -> bool:
+        return self in (Presentation.EMOJI, Presentation.KEYCAP)
+
+    @property
     def variation_selector(self) -> str:
         match self:
             case Presentation.PLAIN:
@@ -120,12 +125,13 @@ class Presentation(Enum):
 # --------------------------------------------------------------------------------------
 
 LEGEND_BLOT = ' 123   123  '
-LEGEND_PROPS = 'Code Pt  VS Ct Wd Other Properties           Age'
+LEGEND_PROPS = 'Code Pt  VS Ct Wd Other Properties            Age'
 LEGEND_NAME = 'Name'
 LEGEND = f'{LEGEND_BLOT} {LEGEND_PROPS} {LEGEND_NAME}'
 
 BLOT_WIDTH = len(LEGEND_BLOT)
 PROPS_WIDTH = len(LEGEND_PROPS)
+AGE_WIDTH = 5
 LEGEND_MIN_WIDTH = len(LEGEND)
 FIXED_WIDTH = BLOT_WIDTH + 1 + PROPS_WIDTH + 1
 NAME_MIN_WIDTH = len(LEGEND_NAME)
@@ -210,7 +216,13 @@ def format_info(
         if UCD.is_line_break(codepoint):
             codepoint = CodePoint.of(0x23CE) # RETURN SYMBOL
         unidata = UCD.lookup(codepoint)
-        wcwidth = unidata.wcwidth()
+        if (
+            BinaryProperty.Emoji_Presentation in unidata.flags
+            and presentation is not Presentation.TEXT
+        ):
+            wcwidth = 2
+        else:
+            wcwidth = unidata.wcwidth()
         display = presentation.apply(codepoint)
 
     if wcwidth == -1:
@@ -223,7 +235,7 @@ def format_info(
     yield ' '
     yield renderer.column(start_column + 7)
     yield renderer.blot(display, Padding.FOREGROUND, 3 - wcwidth)
-    yield ' '
+    yield ' ' if renderer.has_style else '   '
 
     if not include_info:
         return
@@ -232,11 +244,11 @@ def format_info(
     yield renderer.column(start_column + 13)
     if unidata is None:
         assert isinstance(codepoints, CodePointSequence)
-        yield renderer.fit(repr(codepoints), width=PROPS_WIDTH, fill=True)
-        name = UCD.emoji_sequence_name(codepoints)
+        yield renderer.fit(repr(codepoints), width=PROPS_WIDTH - AGE_WIDTH, fill=True)
+        name, age = UCD.emoji_sequence_data(codepoints)
         if not name:
             return
-        yield ' '
+        yield f'{cast(Version, age).in_emoji_format():>{AGE_WIDTH}} '
         yield renderer.fit(name, width=_name_width(renderer.width))
         return
 
@@ -246,11 +258,18 @@ def format_info(
     yield f' {unidata.east_asian_width:<2} '
     flags = ' '.join(f.value for f in unidata.flags)
     yield renderer.fit(flags, width=25, fill=True)
-    yield f' {unidata.age or "":>4} '
 
-    name = unidata.name or ''
-    if presentation is Presentation.KEYCAP:
-        name = f'KEYCAP {name}'
+    name = age = None
+    if presentation is not Presentation.TEXT:
+        name, age = UCD.emoji_sequence_data(codepoint)
+        if name is None:
+            name, age = UCD.emoji_sequence_data(display)
+
+    age_display = '' if unidata.age is None else str(unidata.age)
+    age_display = age_display if age is None else age.in_emoji_format()
+    yield f' {age_display:>{AGE_WIDTH}} '
+
+    name = name or unidata.name or ''
     block = unidata.block or ''
     if name and block:
         name = name + ' '
@@ -307,6 +326,7 @@ def add_presentation(
             yield Presentation.CORNER, datum
             yield Presentation.CENTER, datum
         elif datum in UCD.with_emoji_variation:
+            yield Presentation.PLAIN, datum
             yield Presentation.TEXT, datum
             yield Presentation.EMOJI, datum
             if datum in UCD.with_keycap:

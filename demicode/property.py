@@ -153,7 +153,8 @@ _EMOJI_PROPERTIES = frozenset([
 # --------------------------------------------------------------------------------------
 
 
-class GraphemeClusterProperty(StrEnum):
+class GraphemeCluster(StrEnum):
+    """"The different groups of code points contributing to a grapheme cluster."""
     Prepend = 'P'
     CR = 'r'
     LF = 'n'
@@ -174,6 +175,8 @@ class GraphemeClusterProperty(StrEnum):
 GRAPHEME_CLUSTER_PATTERN = re.compile(
     r"""
         rn
+        | r (?! n )
+        | n
         | C
         | (?:
             P*                        # precore
@@ -186,8 +189,9 @@ GRAPHEME_CLUSTER_PATTERN = re.compile(
                 |   l+
                 |   t+
                 |   RR                # ri-sequence
+                |   R (?! R )
                 |   X (?: E* Z X )*   # xpicto-sequence
-                |   [^CrnlvtVTRX]     # all but Control, CR, LF, already covered symbols
+                |   [^CnrlvtVTRX]     # all but Control, CR, LF, already covered symbols
             )
             [EZS]*                    # postcore
         )

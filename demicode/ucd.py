@@ -38,7 +38,7 @@ from .property import (
     EastAsianWidth,
     EmojiSequence,
     GRAPHEME_CLUSTER_PATTERN,
-    GraphemeClusterProperty,
+    GraphemeCluster,
 )
 from demicode import __version__
 
@@ -209,7 +209,7 @@ class Version(NamedTuple):
 # --------------------------------------------------------------------------------------
 # Local Mirroring of UCD Files
 
-_AUXILIARY_DATA = ('GraphemeBreakProperty.txt',)
+_AUXILIARY_DATA = ('GraphemeBreakProperty.txt', 'GraphemeBreakTest.txt')
 _EMOJI_CORE_DATA = ('emoji-data.txt', 'emoji-variation-sequences.txt')
 _EMOJI_SEQUENCE_DATA = (
     'emoji-sequences.txt', 'emoji-test.txt', 'emoji-zwj-sequences.txt'
@@ -435,13 +435,13 @@ def _retrieve_general_info(
 def _retrieve_grapheme_cluster_properties(
     path: Path, version: Version
 ) -> tuple[
-    GraphemeClusterProperty,
-    list[tuple[CodePointRange, GraphemeClusterProperty]]
+    GraphemeCluster,
+    list[tuple[CodePointRange, GraphemeCluster]]
 ]:
     file = 'GraphemeBreakProperty.txt'
     path = mirror_unicode_data(path, file, version)
     defaults, data = ingest(
-        path, lambda cp, p: (cp.to_range(), GraphemeClusterProperty[p[0]]))
+        path, lambda cp, p: (cp.to_range(), GraphemeCluster[p[0]]))
     if len(defaults) != 1:
         raise ValueError(f'"{file}" with {len(defaults)} instead of one')
     if defaults[0][0] != RangeLimit.ALL:
@@ -706,10 +706,12 @@ class UnicodeCharacterDatabase:
         self._emoji_variations = frozenset(_retrieve_emoji_variations(path, version))
 
         # emoji-sequences.txt contains ranges of basic emoji and their names,
-        # which means that some names aren't listed, too. Worse, names aren't
-        # UCD names but CLDR names. Hence to correctly fill 'em in, we need to
-        # retrieve CLDR annotations. If you look at the mirroring code, you'll
-        # find that we source the JSON data from NPM of all places! 😜
+        # which means that some names aren't listed. To make matters worse,
+        # these aren't UCD code point names but CLDR emoji sequence names. While
+        # it is tempting to fall back onto UCD names, CLDR names are not fixed
+        # and thus may be more descriptive. The CLDR is distributed as XML,
+        # though an official JSON distribution exists as well—through NPM
+        # packages! 😜
         invalid = False
         annotations = _retrieve_cldr_annotations(path)
         emoji_sequences: dict[CodePoint | CodePointSequence, tuple[str, Version]] = {}
@@ -737,6 +739,8 @@ class UnicodeCharacterDatabase:
                 raise AssertionError('UCD is missing data; see log messages')
             return self
 
+        # Check that Extended_Pictographic code points have grapheme cluster
+        # property Other only.
         grapheme_props = self._grapheme_props
         for range in self._emoji_data[BinaryProperty.Extended_Pictographic]:
             for codepoint in range.codepoints():
@@ -749,6 +753,8 @@ class UnicodeCharacterDatabase:
                     )
                     invalid = False
 
+        # Check that the number of ingested emoji sequences is the same as the
+        # sum of total counts in UCD files.
         text = (path / str(version) / 'emoji-sequences.txt').read_text('utf8')
         entries = sum(int(c) for c in _TOTAL_ELEMENTS_PATTERN.findall(text))
         text = (path / str(version) / 'emoji-zwj-sequences.txt').read_text('utf8')
@@ -836,11 +842,18 @@ class UnicodeCharacterDatabase:
 
     def grapheme_cluster_property(
         self, codepoint: CodePoint
-    ) -> GraphemeClusterProperty:
+    ) -> GraphemeCluster:
         """Look up the code point's grapheme cluster break class."""
         if self.test_property(codepoint, BinaryProperty.Extended_Pictographic):
-            return GraphemeClusterProperty.Extended_Pictographic
+            return GraphemeCluster.Extended_Pictographic
         return self._resolve(codepoint, self._grapheme_props, self._grapheme_default)
+
+    def grapheme_cluster_properties(
+        self, text: str | CodePointSequence
+    ) -> str:
+        if isinstance(text, str):
+            text = CodePointSequence.from_string(text)
+        return ''.join(self.grapheme_cluster_property(cp).value for cp in text)
 
     def grapheme_cluster_breaks(self, text: str | CodePointSequence) -> Iterator[int]:
         """
@@ -850,12 +863,7 @@ class UnicodeCharacterDatabase:
         cluster property values. Thereafter, it uses a regular expression for
         iterating over the grapheme cluster breaks.
         """
-        if isinstance(text, str):
-            text = CodePointSequence.from_string(text)
-
-        grapheme_cluster_props = ''.join(
-            self.grapheme_cluster_property(cp).value for cp in text
-        )
+        grapheme_cluster_props = self.grapheme_cluster_properties(text)
         length = len(text)
 
         index = 0
@@ -866,7 +874,7 @@ class UnicodeCharacterDatabase:
             if grapheme is None:
                 raise AssertionError(
                     f'could not find next grapheme at position {index} of '
-                    f'"{text!s}" with properties "{grapheme_cluster_props}"'
+                    f'{text!r} with properties "{grapheme_cluster_props}"'
                 )
 
             index = grapheme.end()

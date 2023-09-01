@@ -183,84 +183,43 @@ def format_info(
     codepoints: CodePoints,
     *,
     start_column: int = 1,
-    account_for_emoji: bool = True,
     include_info: bool = True,
     presentation: Presentation = Presentation.PLAIN,
 ) -> Iterator[str]:
     """
-    Format the fixed-width information for the given code points.
+    Format the fixed-width information for the given code point or grapheme.
 
-    If `include_info` is `True`, this function emits one line per code point.
-    After showing the codepoint against a lightly colored background and a
-    darkly colored foreground, this function also displays:
-
-      * the hexadecimal value of the code point,
-      * the general category,
-      * the East Asian Width,
-      * whether it used text or emoji variation selectors,
-      * the Unicode version that introduced the code point,
-      * and the name followed by the block in parentheses.
-
-    If `include_info` is `False`, this function only displays the character,
-    assuming it is a visible and not, for example, a surrogate or unassigned
-    code point.
-
-    The brightness controls how colorful the output is. At the default of 0,
-    both background and foreground are colored in greys. At 1, the background
-    turns a bright yelllow and, at 2, the foreground turns a bright orange. That
-    generally works for the one code point per line format, but I do not
-    recommend cranking up the brightness for the grid format.
+    If `include_info` is `True`, this function emits a full line of content,
+    including relevant metadata after the character blots. Otherwise, it only
+    emits the character blot.
     """
-    name = age = unidata = None
-
-    # ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~
-    # Determine Width and Display
+    # Make any implicit presentation explicit.
     if not codepoints.is_singleton():
         assert isinstance(codepoints, CodePointSequence)
         presentation = Presentation.unapply(codepoints)
-        if presentation is Presentation.PLAIN:
-            wcwidth = UCD.wcwidth(codepoints)
-            display = str(codepoints)
-            name, age = UCD.emoji_sequence_data(codepoints)
-            if account_for_emoji and name:
-                wcwidth = 2
-        else:
+        if presentation is not Presentation.PLAIN:
             codepoints = codepoints[0]
-            # The next conditional does the work
 
+    # Determine display and width for blot.
     if codepoints.is_singleton():
-        codepoint = codepoints.to_singleton()
-        if UCD.is_line_break(codepoint):
-            codepoint = CodePoint.of(0x23CE) # RETURN SYMBOL
+        display = presentation.apply(codepoints.to_singleton())
+        width = UCD.width(display)
+    else:
+        display = str(codepoints)
+        width = UCD.width(codepoints)
 
-        unidata = UCD.lookup(codepoint)
-        if account_for_emoji and (
-            # A code point with emoji presentation as default
-            BinaryProperty.Emoji_Presentation in unidata.flags
-            and presentation is not Presentation.TEXT
-            or
-            # A code point with text presentation as default.
-            BinaryProperty.Emoji in unidata.flags
-            and presentation is Presentation.EMOJI
-        ):
-            wcwidth = 2
-        else:
-            wcwidth = unidata.wcwidth()
-        display = presentation.apply(codepoint)
-
-    # wcwidth is -1 for control, surrogate, and private use characters. Since
-    # they don't usually display either, fall back on replacement character.
-    if wcwidth == -1:
-        wcwidth = 1
-        display = '\uFFFD' # REPLACEMENT CHARACTER
+    # Fail gracefully for control, surrogate, and private use characters.
+    if width == -1:
+        width = 1
+        display = '\u2BD1' # UNCERTAINTY SIGN
 
     # ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~
     # Render Character Blots
     yield renderer.column(start_column + 1)
-    yield renderer.blot(display, Padding.BACKGROUND, 3 - wcwidth)
+    yield renderer.blot(display, Padding.BACKGROUND, 3 - width)
     yield ' '
     yield renderer.column(start_column + 7)
-    yield renderer.blot(display, Padding.FOREGROUND, 3 - wcwidth)
+    yield renderer.blot(display, Padding.FOREGROUND, 3 - width)
     yield ' ' if renderer.has_style else '   '
 
     if not include_info:
@@ -271,17 +230,20 @@ def format_info(
     yield renderer.column(start_column + 13)
 
     # Blotting a grapheme cluster: Display code points. For emoji, also age & name.
-    if unidata is None:
+    if not codepoints.is_singleton():
         assert isinstance(codepoints, CodePointSequence)
         yield renderer.fit(repr(codepoints), width=PROPS_WIDTH - AGE_WIDTH, fill=True)
-        # name and age have already been retrieved
-        if not name:
-            return
-        yield f'{cast(Version, age).in_emoji_format():>{AGE_WIDTH}} '
-        yield renderer.fit(name, width=_name_width(renderer.width))
+
+        name, age = UCD.emoji_sequence_data(codepoints)
+        if name:
+            yield f'{cast(Version, age).in_emoji_format():>{AGE_WIDTH}} '
+            yield renderer.fit(name, width=_name_width(renderer.width))
         return
 
     # Blotting a code point, maybe with variation selector. Display detailed metadata.
+    codepoint = codepoints.to_singleton()
+    unidata = UCD.lookup(codepoint)
+
     yield f'{codepoint!r:<8s} '
     yield presentation.variation_selector
     yield unidata.category.value
@@ -289,13 +251,12 @@ def format_info(
     flags = ' '.join(f.value for f in unidata.flags)
     yield renderer.fit(flags, width=25, fill=True)
 
+    name = age = None
     if presentation is not Presentation.TEXT:
-        name, age = UCD.emoji_sequence_data(codepoint)
-        if name is None:
-            name, age = UCD.emoji_sequence_data(display)
+        name, age = UCD.emoji_sequence_data(display)
 
     age_display = '' if unidata.age is None else str(unidata.age)
-    age_display = age_display if age is None else age.in_emoji_format()
+    age_display = age.in_emoji_format() if age else age_display
     yield f' {age_display:>{AGE_WIDTH}} '
 
     name = name or unidata.name or ''
@@ -326,12 +287,16 @@ def add_presentation(
     headings: bool = True,  # Allow embedded headings
 ) -> Iterator[tuple[Presentation, CodePoints]|tuple[str, None]]:
     """
-    Enrich code points with their presentation. This function takes a stream of
-    code points, graphemes, and headings and enriches the former two with their
-    presentation. For most code points and graphemes, that means just adding the
-    `PLAIN` presentation. However, for some, that means repeating the code point
-    with different presentation options. Headings are passed through the
-    function, unless `headings` is `False`, in which case they are dropped.
+    Enrich code points with their presentation.
+
+
+    This function takes a stream of
+    code points, grapheme clusters, and headings and enriches the former two
+    with their presentation. For most code points and grapheme clusters, that
+    means just adding the `PLAIN` presentation. However, for some, that means
+    repeating the code point with different presentation options. Headings are
+    passed through the function, unless `headings` is `False`, in which case
+    they are dropped.
     """
     for datum in data:
         if isinstance(datum, str):
@@ -341,13 +306,13 @@ def add_presentation(
                 if headings:
                     yield datum, None
                 continue
-            if len(datum) > 1:
-                yield Presentation.PLAIN, CodePointSequence.from_string(datum)
-                continue
-            datum = CodePoint.of(datum)
+            datum = CodePointSequence.from_string(datum)
 
         if not datum.is_singleton():
-            yield Presentation.PLAIN, datum
+            assert isinstance(datum, CodePointSequence)
+            presentation = Presentation.unapply(datum)
+            datum = datum if presentation is Presentation.PLAIN else datum[0]
+            yield presentation, datum
             continue
 
         datum = datum.to_singleton()

@@ -20,7 +20,7 @@ from .display import (
     format_lines,
     page_lines,
 )
-from .property import BinaryProperty
+from .model import BinaryProperty
 from .render import Mode, Renderer, StyledRenderer
 from .selection import *
 from .ucd import UCD

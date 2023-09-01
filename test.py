@@ -1,7 +1,7 @@
 import re
 
 from demicode.codepoint import CodePoint, CodePointSequence
-from demicode.property import BinaryProperty, Category, CharacterData, EastAsianWidth
+from demicode.model import BinaryProperty, Category, CharacterData, EastAsianWidth
 from demicode.ucd import UCD
 
 VERBOSE = True

@@ -424,6 +424,7 @@ class UnicodeCharacterDatabase:
                 raise AssertionError('UCD is missing data; see log messages')
             return self
 
+        # ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~
         # Check that Extended_Pictographic code points have grapheme cluster
         # property Other only.
         grapheme_props = self._grapheme_props
@@ -451,6 +452,28 @@ class UnicodeCharacterDatabase:
                 entries,
             )
             invalid = True
+
+        # Check that code points that have emoji presentation but are not just
+        # emoji components are also listed as valid emoji sequences. If they may
+        # be combined with variation selectors, check that the sequence code
+        # point, U+FE0F is not redundantly included amongst emoji sequences.
+        emoji_selector = CodePoint.of(0xFE0F)
+        for range in self._emoji_data['Emoji_Presentation']:
+            for cp in range.codepoints():
+                if not (0x1F1E6 <= cp <= 0x1F1FF) and cp not in self._emoji_sequences:
+                    logger.error(
+                        '%r %s has emoji presentation but is not amongst valid '
+                        'emoji sequences', cp, cp
+                    )
+                    invalid = True
+                if cp in self._emoji_variations:
+                    redundant = CodePointSequence.of(cp, emoji_selector)
+                    if redundant in self._emoji_sequences:
+                        logger.error(
+                            'the redundant but valid sequence %r U+FE0F %s is listed '
+                            'amongst emoji sequences', cp, cp
+                        )
+                        invalid = True
 
         if invalid:
             raise AssertionError('UCD validation failed; see log messages')
@@ -604,6 +627,9 @@ class UnicodeCharacterDatabase:
             case _:
                 return sum(len(r) for r in self._emoji_data[property.name])
 
+    # ----------------------------------------------------------------------------------
+    # Emoji sequences
+
     def _to_codepoints(
         self, codepoints: CodePoint | CodePointSequence | str
     ) -> CodePoint | CodePointSequence:
@@ -613,17 +639,39 @@ class UnicodeCharacterDatabase:
             codepoints = codepoints.to_singleton()
         return codepoints
 
+    def _to_emoji_info(
+        self, codepoints: CodePoint | CodePointSequence
+    ) -> None | tuple[str, Version]:
+        # codepoints.is_singleton() MUST IMPLY isinstance(codepoints, CodePoint)
+        result = self._emoji_sequences.get(codepoints)
+        if result is not None or codepoints.is_singleton():
+            return result
+        codepoints = codepoints.to_sequence()  # Keep mypy happy
+        if len(codepoints) != 2 or codepoints[1] != 0xFE0F:
+            return None
+        return self._emoji_sequences.get(codepoints[0])
+
     def is_emoji_sequence(
         self, codepoints: CodePoint | CodePointSequence | str
     ) -> bool:
-        """Determine whether the string or sequence of code points is an emoji."""
-        return self._to_codepoints(codepoints) in self._emoji_sequences
+        """
+        Determine whether the string or sequence of code points is an emoji.
+        Unlike Unicode Emoji's files, this method recognizes code points that
+        have emoji presentation and are followed by the emoji variation
+        selector.
+        """
+        return self._to_emoji_info(self._to_codepoints(codepoints)) is not None
 
     def emoji_sequence_data(
         self, codepoints: CodePoint | CodePointSequence | str
     ) -> tuple[None, None] | tuple[str, Version]:
-        """Get the CLDR name and Unicode Emoji age for the emoji sequence."""
-        return self._emoji_sequences.get(self._to_codepoints(codepoints), (None, None))
+        """
+        Get the CLDR name and Unicode Emoji age for the emoji sequence.
+        Unlike Unicode Emoji's files, this method recognizes code points that
+        have emoji presentation and are followed by the emoji variation
+        selector.
+        """
+        return self._to_emoji_info(self._to_codepoints(codepoints)) or (None, None)
 
     # ----------------------------------------------------------------------------------
     # Binary Unicode properties, implemented as sets for now
@@ -684,12 +732,16 @@ class UnicodeCharacterDatabase:
     def is_line_break(self, codepoint: CodePoint) -> bool:
         return codepoint in _LINE_BREAKS
 
-    def wcwidth(self, codepoints: CodePointSequence) -> int:
-        if codepoints in self._emoji_sequences:
+    def width(self, codepoints: str | CodePointSequence | CodePoint) -> int:
+        codepoints = self._to_codepoints(codepoints)
+
+        # First, check for emoji
+        if self._to_emoji_info(codepoints) is not None:
             return 2
 
+        # Second, add up East Asian Width.
         total_width = 0
-        for codepoint in codepoints:
+        for codepoint in codepoints.to_sequence():
             unidata = self.lookup(codepoint)
             width = unidata.wcwidth()
             if width == -1:

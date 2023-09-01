@@ -93,18 +93,12 @@ MAD_DASH = tuple(_prep(text) for text in (
 
 TASTE_OF_EMOJI = tuple(_prep(text) for text in (
     # Unicode versions 1.1, 3.2, 4.0, 4.1, 5.1, 5.2, 6.0, 7.0
-
-    # 0.6 v 1.1
-    # 0.7 v 1.1
-    # 0.6 v 4.0
-    # 0.6 v 6.0
-    # 0.7 v 6.0
-    # 0.7 v 7.0
-
-    '\u2692',      # HAMMER AND PICK
-    '\u26a1',      # HIGH VOLTAGE
-    '\U0001F3DD',  # DESERT ISLAND, 7.
-    '\U0001F596',  # VULCAN SALUTE, 7.0
+    # Emoji versions 0.6, 0.7, 1.0, 2.0, 11.0
+    '\u0001A Taste of Emoji',
+    '\u26a1',                             # HIGH VOLTAGE        E0.6  4.0
+    '\u2692',                             # HAMMER AND PICK     E1.0  4.1
+    '\U0001F3DD',                         # DESERT ISLAND       E0.7  7.0
+    '\U0001F596',                         # VULCAN SALUTE       E1.0  7.0
     '\U0001F9D1\u200D\U0001F4BB',         # technologist
     '\U0001F9D1\u200D\U0001F9B0',         # person: red hair
     '\U0001F3F3\uFE0F\u200D\U0001F308',   # rainbow flag

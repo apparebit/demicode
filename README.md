@@ -285,8 +285,9 @@ just grow into a more general library for accessing the UCD.
 
 ## Versions
 
-  - **v0.4.0** (2023/09/01) Fix bug in URL creation for UCD files and move
-    local cache to the OS-specific application cache directory.
+  - **v0.4.0** (2023/09/01) Fix bug in URL creation for UCD files and move local
+    cache to the OS-specific application cache directory. Restructure and
+    simplify code to compute `width()`, renamed from `wcwidth()` due to changes.
   - **v0.3.0** (2023/09/01) Add support for grapheme clusters in addition to
     individual code points; account for emoji when calculating width; expose
     binary emoji properties; log server accesses; add tests; and improve

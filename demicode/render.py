@@ -25,7 +25,7 @@ def SGR(code: str) -> str:
     return f'{CSI}{code}m'
 
 
-def CHA(column: int) -> str:
+def CHA(column: int | str) -> str:
     return f'{CSI}{column}G'
 
 

@@ -163,8 +163,15 @@ def format_heading(renderer: Renderer, heading: str) -> str:
     left = FIXED_WIDTH - 1
     if not renderer.has_style:
         left -= 6
+    heading = f'{"─" * left} {heading}'
+
     right = renderer.width - FIXED_WIDTH - len(heading) - 1
-    return renderer.heading(f'{"─" * left} {heading} {"─" * right}')
+    if right < 0:
+        heading = renderer.fit(heading, width=renderer.width)
+    else:
+        heading = f'{heading} {"-" * right}'
+
+    return heading
 
 
 def format_info(
@@ -219,6 +226,9 @@ def format_info(
         if (
             BinaryProperty.Emoji_Presentation in unidata.flags
             and presentation is not Presentation.TEXT
+            or
+            BinaryProperty.Emoji in unidata.flags
+            and presentation is Presentation.EMOJI
         ):
             wcwidth = 2
         else:

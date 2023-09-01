@@ -4,9 +4,11 @@ from collections.abc import Iterator, Sequence, Set
 import itertools
 import json
 import logging
+import os
 from pathlib import Path
 import re
 import shutil
+import sys
 import tarfile as tar
 import time
 from typing import (
@@ -76,40 +78,45 @@ _EMOJI_SEQUENCE_DATA = (
     'emoji-sequences.txt', 'emoji-test.txt', 'emoji-zwj-sequences.txt'
 )
 
+@overload
+def _get_ucd_url(file: Literal['ReadMe.txt'], version: Literal[None] = None) -> str:
+    ...
+@overload
+def _get_ucd_url(file: str, version: Version) -> str:
+    ...
 def _get_ucd_url(file: str, version: None | Version = None) -> str:
     """
-    Get the URL for the given UCD file and version. If the version is `None`,
-    this function uses the latest version thanks to the UCD's "latest" alias. If
-    file is one of the emoji data files and the version is 10.0.0 or earlier,
-    this function tries to map the version to the earliest available Emoji
-    version. Alas, that works only for 10.0.0, 9.0.0, and 8.0.0, which map to
-    5.0, 3.0, and 1.0, respectively. More complete support for early Emoji
-    versions would require exposing the emoji version throughout the UCD code.
+    Get the URL for the given UCD file and version.
+
+    If the file is `ReadMe.txt`, the version is ignored since we only ever
+    access that file to determine the latest version. For all other files, the
+    version must be a valid version.
+
+    A varying number of emoji data files (depending on version) are not part of
+    the Unicode standard itself but belong to the Unicode Emoji standard, which
+    is also known as [Unicode Technical Standard
+    #51](https://unicode.org/reports/tr51/). With Unicode version 11.0, Unicode
+    Emoji started using the same version number as the Unicode standard. But
+    prior versions need to be mapped, with me preferring the earliest available
+    Unicode Emoji version to approximate release dates. Alas, that works only
+    for Unicode versions 10.0, 9.0, and 8.0, which map to E5.0, E3.0, and E1.0,
+    respectively. Earlier Unicode versions must do without emoji data.
     """
-    if file not in _EMOJI_CORE_DATA and file not in _EMOJI_SEQUENCE_DATA:
-        aux = 'auxiliary/' if file in _AUXILIARY_DATA else ''
-        if version is None:
-            path = f'UCD/latest/{aux}{file}'
-        else:
-            path = f'{str(version)}/ucd/{aux}{file}'
+    if file == 'ReadMe.txt':
+        return 'https://www.unicode.org/Public/UCD/latest/ReadMe.txt'
 
-    elif file in _EMOJI_CORE_DATA and (version is None or version >= (13, 0 ,0)):
-        if version is None:
-            path = f'UCD/latest/emoji/{file}'
-        else:
-            path = f'{str(version)}/ucd/{file}'
+    assert version is not None
 
+    if file in _AUXILIARY_DATA:
+        path = f'{version}/ucd/auxiliary'
+    elif file in _EMOJI_CORE_DATA and version >= (13, 0, 0):
+        path = f'{version}/ucd/emoji'
+    elif file in _EMOJI_CORE_DATA or file in _EMOJI_SEQUENCE_DATA:
+        path = f'emoji/{version.in_short_format()}'
     else:
-        if version is None:
-            path = f'emoji/latest/{file}'
-        else:
-            emoji_version = version.to_emoji()
-            if emoji_version.is_v0():
-                raise VersionError(f'UCD {version} has no emoji data')
+        path = f'{version}/ucd'
 
-            path = f'emoji/{emoji_version.in_short_format()}/{file}'
-
-    return f'https://www.unicode.org/Public/{path}'
+    return f'https://www.unicode.org/Public/{path}/{file}'
 
 
 def _build_request(url: str, **kwargs: str) -> Request:
@@ -150,6 +157,25 @@ def retrieve_latest_ucd_version(root: Path) -> Version:
     root.mkdir(parents=True, exist_ok=True)
     stamp_path.write_text(str(version), encoding='utf8')
     return version
+
+
+def local_cache_directory() -> Path:
+    platform = sys.platform
+    if platform == 'win32':
+        raw_path = os.environ.get('LOCALAPPDATA', '')
+        if raw_path:
+            path = Path(raw_path)
+        else:
+            path = Path.home()
+    elif platform == 'darwin':
+        path = Path(os.path.expanduser('~/Library/Caches'))
+    else:
+        raw_path = os.environ.get('XDG_CACHE_HOME', '').strip()
+        if not raw_path:
+            raw_path = os.path.expanduser('~/.cache')
+        path = Path(raw_path)
+
+    return Path(path) / 'demicode'
 
 
 def mirror_unicode_data(root: Path, filename: str, version: Version) -> Path:
@@ -876,4 +902,4 @@ class UnicodeCharacterDatabase:
         return total_width
 
 
-UCD = UnicodeCharacterDatabase(Path.cwd() / 'ucd')
+UCD = UnicodeCharacterDatabase(local_cache_directory())

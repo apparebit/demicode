@@ -23,7 +23,7 @@ from .display import (
 from .model import BinaryProperty
 from .render import Mode, Renderer, StyledRenderer
 from .selection import *
-from .ucd import UCD
+from .ucd import local_cache_directory, UCD
 from demicode import __version__
 
 
@@ -73,7 +73,14 @@ def configure_parser() -> argparse.ArgumentParser:
     ucd_group = parser.add_argument_group('configure UCD')
     ucd_group.add_argument(
         '--ucd-path',
-        help='set path for local mirror of UCD',
+        help='use path for local UCD mirror instead of OS\n'
+        'application cache directory',
+    )
+    ucd_group.add_argument(
+        '--ucd-cwd',
+        action='store_true',
+        help='use "./ucd" as local UCD mirror instead of\n'
+        'OS application cache directory',
     )
     ucd_group.add_argument(
         '--ucd-version',
@@ -106,7 +113,7 @@ def configure_parser() -> argparse.ArgumentParser:
     cp_group.add_argument(
         '--with-arrows',
         action='store_true',
-        help='include codepoints for matching regular and long arrows',
+        help='include codepoints for matching regular\nand long arrows',
     )
     cp_group.add_argument(
         '--with-lingchi',
@@ -223,14 +230,21 @@ def run(arguments: Sequence[str]) -> int:
         return process(options, renderer)
     except Exception as x:
         print(renderer.error(f'Error: {str(x)}'))
-        print('\n'.join(traceback.format_exception(x)[1:-1]))
+        if options.in_verbose:
+            print('\n'.join(traceback.format_exception(x)[1:-1]))
         return 1
 
 
 def process(options: argparse.Namespace, renderer: Renderer) -> int:
     # ---------------------------------------------- Set UCD path and/or version
+    if options.ucd_path and options.ucd_cwd:
+        raise ValueError(
+            "can't use both path and current working directory as local UCD mirror")
+
     if options.ucd_path:
         UCD.use_path(Path(options.ucd_path))
+    if options.ucd_cwd:
+        UCD.use_path(Path.cwd() / 'ucd')
     if options.ucd_version:
         UCD.use_version(options.ucd_version)
 

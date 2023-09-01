@@ -95,6 +95,8 @@ TASTE_OF_EMOJI = tuple(_prep(text) for text in (
     # Unicode versions 1.1, 3.2, 4.0, 4.1, 5.1, 5.2, 6.0, 7.0
     # Emoji versions 0.6, 0.7, 1.0, 2.0, 11.0
     '\u0001A Taste of Emoji',
+    '\u200D',                             # ZERO-WIDTH JOINER
+    '\U0001F1E9',                         # REGIONAL INDICATOR SYMBOL LETTER D
     '\u26a1',                             # HIGH VOLTAGE        E0.6  4.0
     '\u2692',                             # HAMMER AND PICK     E1.0  4.1
     '\U0001F3DD',                         # DESERT ISLAND       E0.7  7.0

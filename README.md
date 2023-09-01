@@ -47,22 +47,27 @@ defaults to the latest version, which is 15.0.0 at the time of this writing in
 August 2023.
 
 By default, demicode displays **one grapheme per line**. Each line starts with
-the background and foreground blot for a primary Unicode code point and then
-continues with hopefully informative metadata:
+the background and foreground blot. For single code points and code point,
+variation selector pairs, demicode next displays the following metadata:
 
   * The code point;
   * The number of the subsequent variation selector (if any);
   * The general category of the code point;
   * Its East Asian width;
-  * Binary properties by the short aliases;
+  * Binary properties relating to pictographs and emoji by short aliases;
+
+Supported binary properties are `Emoji`, `Emoji_Component`, `Emoji_Modifier`,
+`Emoji_Modifier_Base`, `Emoji_Presentation`, and `Extended_Pictographic`. The
+short aliases are `Emoji`, `EComp`, `EMod`, `EBase`, `EPres`, and `ExtPict`.
+
+For more complex graphemes, demicode displays the code points in Unicode
+notation instead of the above metadata. In either case, it follows with:
+
   * The age, i.e., the Unicode version that first assigned the code point;
   * The name followed by the parenthesized block.
 
-While not all binary properties are supported, properties relating to
-pictographs and emoji are included. They are `Emoji`, `Emoji_Component`,
-`Emoji_Modifier`, `Emoji_Modifier_Base`, `Emoji_Presentation`, and
-`Extended_Pictographic`. The short aliases are `Emoji`, `EComp`, `EMod`,
-`EBase`, `EPres`, and `ExtPict`.
+When the age is prefixed with a capital E, it is not the Unicode version but the
+Unicode Emoji version.
 
 Demicode also supports the **more compact `--in-grid` format**, which omits all
 metadata and lines up as many blots per line as window width and good taste
@@ -280,8 +285,10 @@ just grow into a more general library for accessing the UCD.
 
 ## Versions
 
-  - **v0.3.0** (2033/08/??) Expose binary emoji properties, log server accesses,
-    add tests, and improve property count statistics.
+  - **v0.3.0** (2033/08/??) Add support for grapheme clusters in addition to
+    individual code points; account for emoji when calculating width; expose
+    binary emoji properties; log server accesses; add tests; and improve
+    property count statistics.
   - **v0.2.0–0.2.3** (2023/08/13) First advertised release, with more robust UCD
     mirroring, more elaborate output, and support for dark mode. Alas,
     screenshot links and README still needed some TLC.

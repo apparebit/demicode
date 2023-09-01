@@ -4,18 +4,20 @@ Display character blots in the terminal.
 This module contains the functionality for formatting demicode's character blots
 on screen. Its high-level functions are:
 
-  * `add_presentation()` turns a stream of Unicode code points into one of
-    presentation and code point pairs; for supported code points it adds
-    variation selectors and combining characters.
-  * `format_lines()` and `format_grid_lines()` turn the stream of presentation,
-    code point pairs into a stream of formatted lines.
-  * `page_lines()` displays a stream of lines, one screen at a time, and handles
-    the user interaction.
+  * `add_presentation()` enriches a stream of Unicode code points, grapheme
+    clusters, and headings with their presentation. That has little impact on
+    grapheme clusters and headings. But for code points that can be paired with
+    a variation selector, the presentation enables just that.
+  * `format_lines()` and `format_grid_lines()` turn the presentation-enriched
+    stream of code points, graphemes, and headings into a stream of formatted
+    lines.
+  * `page_lines()` displays a stream of lines, one screen at a time, while also
+    handling the user interaction.
 
 The line-level functions are `format_legend()`, `format_heading()`, and
 `format_info()`. The legend goes on top of a screen and headings are embedded in
-the body. `format_info()` handles one presentation, code point pair per
-invocation, generating a background and a foreground character blot.
+the body. `format_info()` handles code point or grapheme per invocation even if
+demicode is building a grid.
 """
 
 from collections.abc import Iterator, Iterable

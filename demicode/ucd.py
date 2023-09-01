@@ -547,8 +547,8 @@ class UnicodeCharacterDatabase:
     def prepare(self, *, validate: bool = False) -> Self:
         """
         Prepare the UCD for active use. This method locks in the current
-        configuration and locally mirrors any required UCD files. Repeated
-        invocations have no effect.
+        configuration and locally mirrors any required UCD as well as CLDR
+        files. Repeated invocations have no effect.
         """
         if self._is_prepared:
             return self
@@ -571,8 +571,9 @@ class UnicodeCharacterDatabase:
         # these aren't UCD code point names but CLDR emoji sequence names. While
         # it is tempting to fall back onto UCD names, CLDR names are not fixed
         # and thus may be more descriptive. The CLDR is distributed as XML,
-        # though an official JSON distribution exists as well—through NPM
-        # packages! 😜
+        # though an official JSON distribution exists as well. Since those
+        # packages are distributed through NPM, this module includes code to
+        # download them—of course, written in Python. 😜
         invalid = False
         annotations = _retrieve_cldr_annotations(path)
         emoji_sequences: dict[CodePoint | CodePointSequence, tuple[str, Version]] = {}
@@ -586,6 +587,7 @@ class UnicodeCharacterDatabase:
             emoji_sequences[codepoints] = (cast(str, name), age)
         self._emoji_sequences = emoji_sequences
 
+        # Fill in miscellaneous properties.
         misc_props = _retrieve_misc_props(path, version)
         self._whitespace = frozenset(misc_props[BinaryProperty.White_Space.name])
         self._dashes = frozenset(misc_props[BinaryProperty.Dash.name])

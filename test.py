@@ -1,3 +1,4 @@
+#!.venv/bin/python
 import re
 
 from demicode.codepoint import CodePoint, CodePointSequence

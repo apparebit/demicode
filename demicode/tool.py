@@ -9,6 +9,7 @@ import logging
 from pathlib import Path
 import re
 from textwrap import dedent
+import traceback
 
 from .codepoint import CodePoint, CodePointSequence
 from .darkmode import is_darkmode
@@ -222,6 +223,7 @@ def run(arguments: Sequence[str]) -> int:
         return process(options, renderer)
     except Exception as x:
         print(renderer.error(f'Error: {str(x)}'))
+        print('\n'.join(traceback.format_exception(x)[1:-1]))
         return 1
 
 

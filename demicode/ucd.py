@@ -120,7 +120,11 @@ def _get_ucd_url(file: str, version: None | Version = None) -> str:
 
 
 def _build_request(url: str, **kwargs: str) -> Request:
-    return Request(url, None, {'User-Agent': f'demicode {__version__}'} | kwargs)
+    agent = (
+        f'demicode/{__version__} (https://github.com/apparebit/demicode) '
+        f'Python/{".".join(str(v) for v in sys.version_info[:3])}'
+    )
+    return Request(url, None, {'User-Agent': agent} | kwargs)
 
 
 _ONE_WEEK = 7 * 24 * 60 * 60

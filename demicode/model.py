@@ -1,9 +1,5 @@
 """
 Representation of Unicode versions and properties.
-
-Representation of Unicode Classes that capture Unicode semanticsClasses that
-capture Unicodde semantics e Unicode properties of code points and sequences of
-code points.
 """
 from dataclasses import dataclass
 from enum import StrEnum

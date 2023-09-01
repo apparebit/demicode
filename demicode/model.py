@@ -401,8 +401,11 @@ class CharacterData:
         return self.category in (Category.Surrogate, Category.Private_Use)
 
     def wcwidth(self) -> int:
-        # https://www.cl.cam.ac.uk/~mgk25/ucs/wcwidth.c
-        # https://github.com/jquast/wcwidth
+        """
+        Determine [wcwidth](https://www.cl.cam.ac.uk/~mgk25/ucs/wcwidth.c) of
+        code point. Instead of calling this method, prefer `UCD.width()`.
+        """
+        # Also https://github.com/jquast/wcwidth
         if self.is_zero_width:
             return 0
         if self.is_invalid or self.codepoint < 32 or 0x7F <= self.codepoint < 0xA0:

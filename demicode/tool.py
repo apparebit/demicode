@@ -231,7 +231,7 @@ def run(arguments: Sequence[str]) -> int:
     except Exception as x:
         print(renderer.error(f'Error: {str(x)}'))
         if options.in_verbose:
-            print('\n'.join(traceback.format_exception(x)[1:-1]))
+            print('\n'.join(traceback.format_exception(x)))
         return 1
 
 

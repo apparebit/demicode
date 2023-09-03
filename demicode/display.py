@@ -4,7 +4,7 @@ Display character blots in the terminal.
 This module contains the functionality for formatting demicode's character blots
 on screen. Its high-level functions are:
 
-  * `add_presentation()` enriches a stream of Unicode code points, grapheme
+  * `make_presentable()` enriches a stream of Unicode code points, grapheme
     clusters, and headings with their presentation. That has little impact on
     grapheme clusters and headings. But for code points that can be paired with
     a variation selector, the presentation enables just that.
@@ -21,110 +21,17 @@ demicode is building a grid.
 """
 
 from collections.abc import Iterator, Iterable
-from enum import auto, Enum
 import itertools
 from typing import cast, Literal, overload, TypeAlias
 
 from .codepoint import CodePoint, CodePointSequence
-from .model import BinaryProperty
+from .model import Presentation
 from .render import Padding, Renderer
 from .ucd import UCD, Version
 
 
 CodePoints: TypeAlias = CodePoint | CodePointSequence
 
-
-class Presentation(Enum):
-    """The presentation style for displaying a character.
-
-    `PLAIN` displays just a character. It is the only valid presentation for
-    most Unicode code points. The other presentation styles add further code
-    points:
-
-      * `CORNER` adds U+FE00 variation selector-1
-      * `CENTER` adds U+FE01 variation selector-2
-      * `TEXT` adds U+FE0E variation selector-15
-      * `EMOJI` adds U+FE0F variation selector-16
-      * `KEYCAP` adds U+FE0F variation selector-16 and U+20E3 combining
-        enclosing keycap
-
-    `CORNER` and `CENTER` may be used with the full-width forms of `!,.:;?`
-    (U+FF01, U+FF0C, U+FF0E, U+FF1A, U+FF1B, U+FF1F), `TEXT` and `EMOJI` with
-    the code points included in `USD.with_emoji_variation`, and `KEYCAP` with
-    `#*0123456789`, which also are in `USD.with_emoji_variation`.
-    """
-
-    PLAIN = auto()
-    CORNER = auto()
-    CENTER = auto()
-    TEXT = auto()
-    EMOJI = auto()
-    KEYCAP = auto()
-
-    @classmethod
-    def unapply(cls, codepoints: CodePointSequence) -> 'Presentation':
-        if len(codepoints) == 2:
-            second = codepoints[1]
-            if second == 0xFE00:
-                return Presentation.CORNER
-            elif second == 0xFE01:
-                return Presentation.CENTER
-            elif second == 0xFE0E:
-                return Presentation.TEXT
-            elif second == 0xFE0F:
-                return Presentation.EMOJI
-        elif (
-            len(codepoints) == 3
-            and codepoints[1] == 0xFE0F
-            and codepoints[2] == 0x20E3
-        ):
-            return Presentation.KEYCAP
-
-        return Presentation.PLAIN
-
-    def apply(self, codepoint: CodePoint) -> str:
-        """Apply this presentation to the code point, yielding a string."""
-        match self:
-            case Presentation.PLAIN:
-                return chr(codepoint)
-            case Presentation.CORNER:
-                assert codepoint in UCD.fullwidth_punctuation
-                return f'{chr(codepoint)}\uFE00'
-            case Presentation.CENTER:
-                assert codepoint in UCD.fullwidth_punctuation
-                return f'{chr(codepoint)}\uFE01'
-            case Presentation.TEXT:
-                assert codepoint in UCD.with_emoji_variation
-                return f'{chr(codepoint)}\uFE0E'
-            case Presentation.EMOJI:
-                assert codepoint in UCD.with_emoji_variation
-                return f'{chr(codepoint)}\uFE0F'
-            case Presentation.KEYCAP:
-                assert codepoint in UCD.with_keycap
-                return f'{chr(codepoint)}\uFE0F\u20E3'
-
-    @property
-    def is_emoji_variation(self) -> bool:
-        return self in (Presentation.EMOJI, Presentation.KEYCAP)
-
-    @property
-    def variation_selector(self) -> str:
-        match self:
-            case Presentation.PLAIN:
-                return '   '
-            case Presentation.CORNER:
-                return ' 1 '
-            case Presentation.CENTER:
-                return ' 2 '
-            case Presentation.TEXT:
-                return '15 '
-            case Presentation.EMOJI:
-                return '16 '
-            case Presentation.KEYCAP:
-                return '16 '
-
-
-# --------------------------------------------------------------------------------------
 
 LEGEND_BLOT = ' 123   123  '
 LEGEND_PROPS = 'Code Pt  VS Ct Wd Other Properties            Age'
@@ -145,17 +52,14 @@ def _name_width(width: int) -> int:
 
 
 def format_legend(renderer: Renderer) -> str:
-    """Format the legend for lines formatted with `format_info`."""
+    """Format the per page legend."""
     if not renderer.has_style:
         return LEGEND[6:]
     return renderer.legend(LEGEND.ljust(renderer.width))
 
 
 def format_heading(renderer: Renderer, heading: str) -> str:
-    """
-    Format the given heading. The initial \\u0001 (Start of Heading) is
-    discarded.
-    """
+    """Format the given heading without the initial \\u0001 (Start of Heading)."""
     if heading[0] != '\u0001':
         raise ValueError(
             f'string "{heading}" is not a valid heading, which starts with U+0001')
@@ -178,13 +82,12 @@ def format_heading(renderer: Renderer, heading: str) -> str:
     return renderer.heading(heading)
 
 
-def format_info(
+def format_blot(
     renderer: Renderer,
     codepoints: CodePoints,
     *,
     start_column: int = 1,
-    include_info: bool = True,
-    presentation: Presentation = Presentation.PLAIN,
+    presentation: Presentation = Presentation.NONE,
 ) -> Iterator[str]:
     """
     Format the fixed-width information for the given code point or grapheme.
@@ -193,12 +96,9 @@ def format_info(
     including relevant metadata after the character blots. Otherwise, it only
     emits the character blot.
     """
-    # Make any implicit presentation explicit.
-    if not codepoints.is_singleton():
-        assert isinstance(codepoints, CodePointSequence)
-        presentation = Presentation.unapply(codepoints)
-        if presentation is not Presentation.PLAIN:
-            codepoints = codepoints[0]
+    # Validate grapheme cluster.
+    if not UCD.is_grapheme_cluster(codepoints):
+        raise ValueError(f'{codepoints!r} are not a single grapheme cluster')
 
     # Determine display and width for blot.
     if codepoints.is_singleton():
@@ -213,7 +113,6 @@ def format_info(
         width = 1
         display = '\u2BD1' # UNCERTAINTY SIGN
 
-    # ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~
     # Render Character Blots
     yield renderer.column(start_column + 1)
     yield renderer.blot(display, Padding.BACKGROUND, 3 - width)
@@ -222,30 +121,39 @@ def format_info(
     yield renderer.blot(display, Padding.FOREGROUND, 3 - width)
     yield ' ' if renderer.has_style else '   '
 
-    if not include_info:
-        return
 
-    # ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~
-    # Render Metadata
+def format_info(
+    renderer: Renderer,
+    codepoints: CodePoints,
+    *,
+    start_column: int = 1,
+    presentation: Presentation = Presentation.NONE,
+) -> Iterator[str]:
     yield renderer.column(start_column + 13)
 
-    # Blotting a grapheme cluster: Display code points. For emoji, also age & name.
+    # Blotting a grapheme cluster. Try to make presentation explicit. If none,
+    # display code points and, for emoji sequences, age and name.
     if not codepoints.is_singleton():
         assert isinstance(codepoints, CodePointSequence)
-        yield renderer.fit(repr(codepoints), width=PROPS_WIDTH - AGE_WIDTH, fill=True)
+        presentation = Presentation.unapply(codepoints)
+        if presentation is Presentation.NONE:
+            yield renderer.fit(repr(codepoints), width=PROPS_WIDTH-AGE_WIDTH, fill=True)
 
-        name, age = UCD.emoji_sequence_data(codepoints)
-        if name:
-            yield f'{cast(Version, age).in_emoji_format():>{AGE_WIDTH}} '
-            yield renderer.fit(name, width=_name_width(renderer.width))
-        return
+            name, age = UCD.emoji_sequence_data(codepoints)
+            if name:
+                yield f'{cast(Version, age).in_emoji_format():>{AGE_WIDTH}} '
+                yield renderer.fit(name, width=_name_width(renderer.width))
+            return
+
+        codepoints = codepoints[0]
 
     # Blotting a code point, maybe with variation selector. Display detailed metadata.
     codepoint = codepoints.to_singleton()
     unidata = UCD.lookup(codepoint)
 
     yield f'{codepoint!r:<8s} '
-    yield presentation.variation_selector
+    vs = presentation.variation_selector
+    yield f'{vs - 0xFE00 + 1:>2} ' if vs > 0 else '   '
     yield unidata.category.value
     yield f' {unidata.east_asian_width:<2} '
     flags = ' '.join(f.value for f in unidata.flags)
@@ -253,7 +161,7 @@ def format_info(
 
     name = age = None
     if presentation is not Presentation.TEXT:
-        name, age = UCD.emoji_sequence_data(display)
+        name, age = UCD.emoji_sequence_data(presentation.apply(codepoint))
 
     age_display = '' if unidata.age is None else str(unidata.age)
     age_display = age.in_emoji_format() if age else age_display
@@ -272,32 +180,21 @@ def format_info(
 
 
 @overload
-def add_presentation(
+def make_presentable(
     data: Iterable[CodePoints|str], *, headings: Literal[False]
 ) -> Iterator[tuple[Presentation, CodePoints]]: ...
 
 @overload
-def add_presentation(
+def make_presentable(
     data: Iterable[CodePoints|str], *, headings: bool = ...
 ) -> Iterator[tuple[Presentation, CodePoints]|tuple[str, None]]: ...
 
-def add_presentation(
+def make_presentable(
     data: Iterable[CodePoints|str],
     *,
     headings: bool = True,  # Allow embedded headings
 ) -> Iterator[tuple[Presentation, CodePoints]|tuple[str, None]]:
-    """
-    Enrich code points with their presentation.
-
-
-    This function takes a stream of
-    code points, grapheme clusters, and headings and enriches the former two
-    with their presentation. For most code points and grapheme clusters, that
-    means just adding the `PLAIN` presentation. However, for some, that means
-    repeating the code point with different presentation options. Headings are
-    passed through the function, unless `headings` is `False`, in which case
-    they are dropped.
-    """
+    """Enrich code points with their presentation."""
     for datum in data:
         if isinstance(datum, str):
             if not datum:
@@ -309,10 +206,7 @@ def add_presentation(
             datum = CodePointSequence.from_string(datum)
 
         if not datum.is_singleton():
-            assert isinstance(datum, CodePointSequence)
-            presentation = Presentation.unapply(datum)
-            datum = datum if presentation is Presentation.PLAIN else datum[0]
-            yield presentation, datum
+            yield Presentation.NONE, datum
             continue
 
         datum = datum.to_singleton()
@@ -320,13 +214,13 @@ def add_presentation(
             yield Presentation.CORNER, datum
             yield Presentation.CENTER, datum
         elif datum in UCD.with_emoji_variation:
-            yield Presentation.PLAIN, datum
+            yield Presentation.NONE, datum
             yield Presentation.TEXT, datum
             yield Presentation.EMOJI, datum
             if datum in UCD.with_keycap:
                 yield Presentation.KEYCAP, datum
         else:
-            yield Presentation.PLAIN, datum
+            yield Presentation.NONE, datum
 
 
 def format_lines(
@@ -338,11 +232,20 @@ def format_lines(
         if isinstance(presentation, str):
             yield format_heading(renderer, presentation)
         else:
-            yield ''.join(format_info(
-                renderer,
-                cast(CodePoint, codepoints),
-                presentation=presentation,
-            ))
+            yield ''.join(
+                itertools.chain(
+                    format_blot(
+                        renderer,
+                        codepoints,
+                        presentation=presentation,
+                    ),
+                    format_info(
+                        renderer,
+                        codepoints,
+                        presentation=presentation,
+                    )
+                )
+            )
 
 
 def format_grid_lines(
@@ -353,12 +256,11 @@ def format_grid_lines(
     column_count = (renderer.width - 1) // 11
     while True:
         line = ''.join(itertools.chain.from_iterable(
-            format_info(
+            format_blot(
                 renderer,
                 codepoints,
                 presentation=presentation,
                 start_column=count * 11 + 2,
-                include_info=False,
             )
             for count, (presentation, codepoints)
             in enumerate(itertools.islice(stream, column_count))

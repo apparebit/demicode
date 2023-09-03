@@ -4,6 +4,7 @@ from .codepoint import CodePoint, CodePointSequence
 
 __all__ = (
     'ARROWS',
+    'CHEVRONS',
     'LINGCHI',
     'MAD_DASH',
     'TASTE_OF_EMOJI',
@@ -45,6 +46,23 @@ ARROWS = tuple(_prep(text) for text in (
     '\u27FF', # long rightwards squiggle arrow
 ))
 
+CHEVRONS = tuple(_prep(text) for text in (
+    '\u0001Making Chevrons Greater Again',
+    '>',
+    '⟩',
+    '›',
+    '＞',
+    '≻',
+    '≫',
+    '⨠',
+    '⪼',
+    '»',
+    '⟫',
+    '⪢',
+    '⫸',
+    '⋙',
+))
+
 LINGCHI = tuple(_prep(text) for text in (
     '\u0001Death by a Thousand Cuts',
     '\u200B',      # ZERO WIDTH SPACE
@@ -58,9 +76,17 @@ LINGCHI = tuple(_prep(text) for text in (
     '\u2034',      # TRIPLE PRIME
     '\u2057',      # QUADRUPLE PRIME
     '%',
+    '٪',
     '‰',
     '‱',
     '℃',
+    '™',
+    '℻',
+    '㎐',
+    '㎯',
+    '=',
+    '⩵',
+    '⩶',
     '∫',
     '∬',
     '∭',
@@ -109,30 +135,22 @@ TASTE_OF_EMOJI = tuple(_prep(text) for text in (
 ))
 
 VERSION_ORACLE = tuple(_prep(text) for text in (
-    '\u0001Emoji Version Oracle', # Comprising Emoji with Wide as East Asian Width
-    # Nothing for 3.0 nor for 3.1
-    '\u303D',      # PART ALTERNATION MARK, 3.2
-    '\u26A1',      # HIGH VOLTAGE, 4.0
-    '\u2693',      # ANCHOR, 4.1
-    # Nothing for 5.0
-    '\u2B50',      # STAR, 5.1
-    '\u26D4',      # NO ENTRY, 5.2
-    '\u23E9',      # BLACK RIGHT-POINTING DOUBLE TRIANGLE 6.0
-    '\u23ED',      # BLACK RIGHT-POINTING DOUBLE TRIANGLE WITH VERTICAL BAR 6.0
-    '\U0001F62C',  # GRIMACING FACE, 6.1
-    '\U0001F596',  # VULCAN SALUTE, 7.0
-    '\U0001F3DD',  # DESERT ISLAND, 7.0
+    # For each version of Unicode Emoji, a code point that has emoji presentation
+    # by default and an East Asian Width of wide.
+    '\u0001Emoji Version Oracle',
+    '\U0001F4A9',  # PILE OF POO (Emoji 0.6)
+    '\U0001F408\uFE0F',  # CAT (Emoji 0.7)
     '\U0001F918',  # SIGN OF THE HORNS, 8.0 (Emoji 1.0, covering Unicode 1.1--8.0)
-    # Emoji 2.0?
+    # Emoji 2.0 didn't add any suitable code points
     '\U0001F991',  # SQUID, 9.0 (Emoji 3.0)
     # Emoji 4.0 added new ZWJ sequences only
     '\U0001F9DB',  # VAMPIRE, 10.0 (Emoji 5.0)
     # There are no Emoji 6--10. Versions align with Unicode thereafter
     '\U0001F973',  # PARTYING FACE, 11.0
     '\U0001F9A9',  # FLAMINGO, 12.0
-    # 12.1 added new ZWJ sequences only and wasn't part of Unicode update
+    # 12.1 added new ZWJ sequences only
     '\U0001FA86',  # NESTING DOLLS, 13.0
-    # 13.1 added new ZWJ sequences only and wasn't part of Unicode update
+    # 13.1 added new ZWJ sequences only
     '\U0001FAA9',  # MIRROR BALL, 14.0
     '\U0001FAE8',  # SHAKING FACE, 15.0
 ))

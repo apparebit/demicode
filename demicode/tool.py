@@ -14,7 +14,7 @@ import traceback
 from .codepoint import CodePoint, CodePointSequence
 from .darkmode import is_darkmode
 from .display import (
-    add_presentation,
+    make_presentable,
     format_grid_lines,
     format_legend,
     format_lines,
@@ -294,11 +294,11 @@ def process(options: argparse.Namespace, renderer: Renderer) -> int:
     if options.with_version_oracle:
         codepoints.append(VERSION_ORACLE)
     if options.with_curation:
-        codepoints.append(CHEVRONS)
         codepoints.append(MAD_DASH)
         codepoints.append(TASTE_OF_EMOJI)
         codepoints.append(LINGCHI)
         codepoints.append(VERSION_ORACLE)
+        codepoints.append(CHEVRONS)
 
     for argument in options.graphemes:
         if HEX_CODEPOINTS.match(argument):
@@ -326,7 +326,7 @@ def process(options: argparse.Namespace, renderer: Renderer) -> int:
             None,
             format_grid_lines(
                 renderer,
-                add_presentation(
+                make_presentable(
                     itertools.chain.from_iterable(codepoints),
                     headings=False
                 ),
@@ -338,7 +338,7 @@ def process(options: argparse.Namespace, renderer: Renderer) -> int:
             format_legend(renderer),
             format_lines(
                 renderer,
-                add_presentation(itertools.chain.from_iterable(codepoints)),
+                make_presentable(itertools.chain.from_iterable(codepoints)),
             ),
         )
 

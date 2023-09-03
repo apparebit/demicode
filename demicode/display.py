@@ -232,6 +232,7 @@ def format_lines(
         if isinstance(presentation, str):
             yield format_heading(renderer, presentation)
         else:
+            assert codepoints is not None
             yield ''.join(
                 itertools.chain(
                     format_blot(

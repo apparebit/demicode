@@ -2,11 +2,11 @@
 Representation of Unicode versions and properties.
 """
 from dataclasses import dataclass
-from enum import StrEnum
+from enum import Enum, StrEnum
 import re
 from typing import NamedTuple
 
-from .codepoint import CodePoint
+from .codepoint import CodePoint, CodePointSequence
 
 
 # --------------------------------------------------------------------------------------
@@ -150,6 +150,7 @@ class Version(NamedTuple):
 
 
 # --------------------------------------------------------------------------------------
+# Unicode Properties
 
 
 class Category(StrEnum):
@@ -257,9 +258,6 @@ class EastAsianWidth(StrEnum):
         return self in (EastAsianWidth.Fullwidth, EastAsianWidth.Wide)
 
 
-# --------------------------------------------------------------------------------------
-
-
 class BinaryProperty(StrEnum):
     """Supported binary Unicode properties"""
     Dash = 'Dash'
@@ -293,18 +291,80 @@ _EMOJI_PROPERTIES = frozenset([
 
 
 # --------------------------------------------------------------------------------------
+# Combining Characters
+
+
+class Presentation(Enum):
+    """A character's presentation.
+
+    This enumeration represents variation selectors and other code points that
+    modify the presentation of another code point:
+
+      * `CORNER` adds U+FE00 variation selector-1
+      * `CENTER` adds U+FE01 variation selector-2
+      * `TEXT` adds U+FE0E variation selector-15
+      * `EMOJI` adds U+FE0F variation selector-16
+      * `KEYCAP` adds U+FE0F variation selector-16 and U+20E3 combining
+        enclosing keycap
+
+    `CORNER` and `CENTER` are only valid with the full-width forms of of
+    `!,.:;?` (U+FF01, U+FF0C, U+FF0E, U+FF1A, U+FF1B, U+FF1F). `TEXT` and
+    `EMOJI` are only valid with the code points included in
+    `USD.with_emoji_variation`, and `KEYCAP` only with `#*0123456789`, which
+    also are in `USD.with_emoji_variation`.
+    """
+
+    NONE = -1
+    CORNER = 0xFE00
+    CENTER = 0xFE01
+    TEXT = 0xFE0E
+    EMOJI = 0xFE0F
+    KEYCAP = 0x20E3
+
+    @classmethod
+    def unapply(cls, codepoints: CodePointSequence) -> 'Presentation':
+        """Make an implicit presentation choice explicit again."""
+        length = len(codepoints)
+        if length == 2:
+            try:
+                return Presentation(codepoints[1])
+            except ValueError:
+                return Presentation.NONE
+        elif length == 3 and codepoints[1] == 0xFE0F and codepoints[2] == 0x20E3:
+            return Presentation.KEYCAP
+        else:
+            return Presentation.NONE
+
+    def apply(self, codepoint: CodePoint) -> str:
+        """Apply this presentation to the code point, yielding a string."""
+        match self:
+            case Presentation.NONE:
+                return chr(codepoint)
+            case Presentation.KEYCAP:
+                return f'{chr(codepoint)}\uFE0F\u20E3'
+            case _:
+                return f'{chr(codepoint)}{chr(self.value)}'
+
+    @property
+    def is_emoji_variation(self) -> bool:
+        return self in (Presentation.EMOJI, Presentation.KEYCAP)
+
+    @property
+    def variation_selector(self) -> int:
+        return 0xFE0F if self == Presentation.KEYCAP else self.value
+
+
+# --------------------------------------------------------------------------------------
+# Grapheme Clusters
 
 
 class GraphemeCluster(StrEnum):
     """
-    The different groups of code points contributing to a grapheme cluster.
-
-    Note that this enumeration departs from regular practice for this module and
-    enumeration constant values are *not* official Unicode aliases. Values still
-    are short, one character only!, because demicode's implementation of
-    grapheme cluster breaking uses a regular expression that [closely follows
-    that in Annex #29](https://unicode.org/reports/tr29/) at cost of translating
-    each string first.
+    Enumeration over the different code points that contribute to grapheme
+    clusters. Note that, unlike for other enumerations in this module,
+    enumeration constant values are *not* official Unicode aliases. Instead they
+    are single, mnemonic characters used by `GRAPHEME_CLUSTER_PATTERN` to
+    recognize grapheme clusters.
     """
 
     Prepend = 'P'
@@ -324,34 +384,26 @@ class GraphemeCluster(StrEnum):
     Extended_Pictographic = 'X'
 
 
+# https://unicode.org/reports/tr29/#Regex_Definitions
 GRAPHEME_CLUSTER_PATTERN = re.compile(
     r"""
-        rn
-        | r
-        | n
-        | C
-        | (?:
-            P*                        # precore
+            rn
+        |   r
+        |   n
+        |   C
+        |   P*      # precore
             (?:
-                (?:                   # hangul-syllable
-                    l*
-                    (?: v+ | Vv* | T )
-                    t*
-                )
+                    (?:  l* (?: v+ | Vv* | T ) t*  )  # hangul-syllable
                 |   l+
                 |   t+
-                |   RR                # ri-sequence
-                |   X (?: E* Z X )*   # xpicto-sequence
-                |   [^Cnr]            # all but Control, CR, LF
+                |   RR               # ri-sequence
+                |   X (?: E* Z X )*  # xpicto-sequence
+                |   [^Cnr]           # all but Control, CR, LF
             )
-            [EZS]*                    # postcore
-        )
+            [EZS]*  # postcore
     """,
     re.VERBOSE,
 )
-
-
-# --------------------------------------------------------------------------------------
 
 
 class EmojiSequence(StrEnum):
@@ -365,6 +417,7 @@ class EmojiSequence(StrEnum):
 
 
 # --------------------------------------------------------------------------------------
+# A Code Point with Properties
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)

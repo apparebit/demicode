@@ -23,7 +23,7 @@ from .display import (
 from .model import BinaryProperty
 from .render import Mode, Renderer, StyledRenderer
 from .selection import *
-from .ucd import local_cache_directory, UCD
+from .ucd import UCD
 from demicode import __version__
 
 
@@ -98,22 +98,27 @@ def configure_parser() -> argparse.ArgumentParser:
     cp_group.add_argument(
         '--with-ucd-dashes',
         action='store_true',
-        help='include codepoints with Unicode\'s Dash property',
+        help='include code points with Unicode\'s Dash property',
     )
     cp_group.add_argument(
         '--with-ucd-emoji-variation',
         action='store_true',
-        help='include all codepoints that have text and\nemoji variations'
+        help='include all code points that have text and\nemoji variations'
     )
     cp_group.add_argument(
         '--with-ucd-keycaps',
         action='store_true',
-        help='include codepoints that combine with U+20E3\ninto enclosing keycaps'
+        help='include code points that combine with U+20E3\ninto enclosing keycaps'
     )
     cp_group.add_argument(
         '--with-arrows',
         action='store_true',
-        help='include codepoints for matching regular\nand long arrows',
+        help='include code points for matching regular\nand long arrows',
+    )
+    cp_group.add_argument(
+        '--with-chevrons',
+        action='store_true',
+        help='include a sample of code points representing\nrightward-pointing chevrons'
     )
     cp_group.add_argument(
         '--with-lingchi',
@@ -138,7 +143,7 @@ def configure_parser() -> argparse.ArgumentParser:
     cp_group.add_argument(
         '--with-curation',
         action='store_true',
-        help='include curated selection of codepoints'
+        help='include curated selection of code points'
     )
     cp_group.add_argument(
         'graphemes',
@@ -248,13 +253,13 @@ def process(options: argparse.Namespace, renderer: Renderer) -> int:
     if options.ucd_version:
         UCD.use_version(options.ucd_version)
 
+    # So UCD access logs don't separate heading from counts
+    UCD.prepare(validate=options.ucd_validation)
+
     # ------------------------------------------------ Handle version and stats
     if options.version:
         print(renderer.very_strong(f' demicode {__version__} '))
         return 0
-
-    # So UCD access logs don't separate heading from counts
-    UCD.prepare(validate=options.ucd_validation)
 
     if options.stats:
         print()
@@ -278,6 +283,8 @@ def process(options: argparse.Namespace, renderer: Renderer) -> int:
     # Non-standard selections
     if options.with_arrows:
         codepoints.append(ARROWS)
+    if options.with_chevrons:
+        codepoints.append(CHEVRONS)
     if options.with_lingchi:
         codepoints.append(LINGCHI)
     if options.with_mad_dash:
@@ -287,6 +294,7 @@ def process(options: argparse.Namespace, renderer: Renderer) -> int:
     if options.with_version_oracle:
         codepoints.append(VERSION_ORACLE)
     if options.with_curation:
+        codepoints.append(CHEVRONS)
         codepoints.append(MAD_DASH)
         codepoints.append(TASTE_OF_EMOJI)
         codepoints.append(LINGCHI)
@@ -306,7 +314,7 @@ def process(options: argparse.Namespace, renderer: Renderer) -> int:
     # -------------------------------- If there's nothing to display, help user
     if len(codepoints) == 0:
         raise ValueError(dedent("""\
-            There are no codepoints to show.
+            There are no code points to show.
             Maybe try again with "1F49D" as argument——
             or with "-h" to see all options.
         """))

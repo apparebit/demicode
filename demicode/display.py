@@ -375,16 +375,21 @@ def page_lines(
 ) -> None:
     """Display one page of lines at a time."""
 
+    page_number = 0
     hint = renderer.hint(' ‹return›: next page; q‹return›/‹ctrl-c›: quit') + '  '
     legend_height = 0 if legend is None else len(legend.splitlines())
 
     while True:
         renderer.refresh()
+        page_number += 1
+        print(renderer.window_title(f'demicode (page {page_number})'))
+
         body_height = renderer.height - legend_height - 1
         body = [*itertools.islice(lines, body_height)]
 
         actual_body_height = len(body)
         if actual_body_height == 0:
+            print(renderer.window_title(''))
             return
         if actual_body_height < body_height:
             body.extend([''] * (body_height - actual_body_height))

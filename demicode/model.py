@@ -327,7 +327,7 @@ class GraphemeCluster(StrEnum):
 GRAPHEME_CLUSTER_PATTERN = re.compile(
     r"""
         rn
-        | r (?! n )
+        | r
         | n
         | C
         | (?:
@@ -341,9 +341,8 @@ GRAPHEME_CLUSTER_PATTERN = re.compile(
                 |   l+
                 |   t+
                 |   RR                # ri-sequence
-                |   R (?! R )
                 |   X (?: E* Z X )*   # xpicto-sequence
-                |   [^CnrlvtVTRX]     # all but Control, CR, LF, already covered symbols
+                |   [^Cnr]            # all but Control, CR, LF
             )
             [EZS]*                    # postcore
         )

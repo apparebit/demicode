@@ -48,19 +48,35 @@ ARROWS = tuple(_prep(text) for text in (
 
 CHEVRONS = tuple(_prep(text) for text in (
     '\u0001Making Chevrons Greater Again',
-    '>',
-    '⟩',
-    '›',
-    '＞',
-    '≻',
-    '≫',
-    '⨠',
-    '⪼',
-    '»',
-    '⟫',
-    '⪢',
-    '⫸',
-    '⋙',
+    # >
+    '>',  #   U+003E  GREATER-THAN SIGN
+    '›',  #   U+203A  SINGLE RIGHT-POINTING QUOTATION MARK
+    '≻',  #   U+227B  SUCCEEDS
+    '⊱',  #  U+22B1  SUCCEEDS UNDER RELATION
+    '❯',  #   U+276F  HEAVY RIGHT-POINTING ANGLE QUOTATION MARK ORNAMENT
+    '➢',  #  U+27A2  THREE-D TOP-LIGHTED RIGHTWARDS ARROWHEAD
+    '➣',  #  U+27A3  THREE-D BOTTOM-LIGHTED RIGHTWARDS ARROWHEAD
+    '➤',  #  U+27A4  BLACK RIGHTWARDS ARROWHEAD
+    '⟩',  #   U+27E9  MATHEMATICAL RIGHT ANGLE BRACKET
+    '⥼',  #  U+297C  LEFT FISH TAIL
+    '⧽',  #  U+29FD  RIGHT-POINTING CURVED ANGLE BRACKET
+    '〉',  #  U+3009  RIGHT ANGLE BRACKET
+    '﹥',  #  U+FE65  SMALL GREATER-THAN SIGN
+    '＞',  #   U+FF1E  FULLWIDTH GREATER-THAN SIGN
+    # >>
+    '»',  #   U+00BB  RIGHT-POINTING DOUBLE ANGLE QUOTATION MARK
+    '≫',  #   U+226B  MUCH GREATER-THAN
+    '⟫',  #   U+27EB  MATHEMATICAL RIGHT DOUBLE ANGLE BRACKET
+    '⨠',  #   U+2A20  Z NOTATION SCHEMA PIPING
+    '⪢',  #   U+2AA2  DOUBLE NESTED GREATER-THAN
+    '⪼',  #   U+2ABC  DOUBLE SUCCEEDS
+    '》',  #  U+300B  RIGHT DOUBLE ANGLE BRACKET
+    # >>>
+    '⋙',  #   U+22D9  VERY MUCH GREATER-THAN
+    '⫸',  #   U+2AF8  TRIPLE NESTED GREATER-THAN
+    # >>>>
+    '⧘',  #  U+29D8  LEFT WIGGLY FENCE
+    '⧚',  #  U+29DA  LEFT DOUBLE WIGGLY FENCE
 ))
 
 LINGCHI = tuple(_prep(text) for text in (
@@ -71,22 +87,13 @@ LINGCHI = tuple(_prep(text) for text in (
     '\u2042',      # ASTERISM
     '\u2234',      # THEREFORE
     '\u0B83',      # TAMIL SIGN VISARGA
-    '\u2032',      # PRIME
-    '\u2033',      # DOUBLE PRIME
-    '\u2034',      # TRIPLE PRIME
-    '\u2057',      # QUADRUPLE PRIME
     '%',
-    '٪',
     '‰',
     '‱',
     '℃',
     '™',
-    '℻',
     '㎐',
     '㎯',
-    '=',
-    '⩵',
-    '⩶',
     '∫',
     '∬',
     '∭',
@@ -153,6 +160,23 @@ VERSION_ORACLE = tuple(_prep(text) for text in (
     # 13.1 added new ZWJ sequences only
     '\U0001FAA9',  # MIRROR BALL, 14.0
     '\U0001FAE8',  # SHAKING FACE, 15.0
+))
+
+EXTRAS = tuple(CodePoint.of(cp) for cp in (
+    '\u2042',      # ASTERISM
+    '\u2234',      # THEREFORE
+    '\u0B83',      # TAMIL SIGN VISARGA
+    '\u2032',      # PRIME
+    '\u2033',      # DOUBLE PRIME
+    '\u2034',      # TRIPLE PRIME
+    '\u2057',      # QUADRUPLE PRIME
+    '%',
+    '٪',
+    '‰',
+    '‱',
+    '=',
+    '⩵',
+    '⩶',
 ))
 
 _EXTRA_TEST_POINTS = tuple(CodePoint.of(cp) for cp in (

@@ -124,6 +124,9 @@ class Renderer:
     def width(self) -> int:
         return self._width
 
+    def window_title(self, text: str) -> str:
+        return ''
+
     def fit(self, text: str, *, width: None | int = None, fill: bool = False) -> str:
         if width is None:
             width = self.width
@@ -169,6 +172,9 @@ class StyledRenderer(Renderer):
     @property
     def has_style(self) -> bool:
         return True
+
+    def window_title(self, text: str) -> str:
+        return f'\x1b]2;{text}\x07'
 
     def column(self, column: int) -> str:
         return CHA(column)

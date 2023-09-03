@@ -588,11 +588,13 @@ class UnicodeCharacterDatabase:
             index = grapheme.end()
             yield index
 
-    def is_grapheme_cluster(self, text: str | CodePointSequence) -> bool:
+    def is_grapheme_cluster(self, text: str | CodePoint | CodePointSequence) -> bool:
         """
-        Determine whether the string or sequence of code points forms a single
-        Unicode grapheme cluster.
+        Determine whether the string, code point, or sequence of code points
+        forms a single Unicode grapheme cluster.
         """
+        if isinstance(text, CodePoint):
+            return True
         return [*self.grapheme_cluster_breaks(text)] == [0, len(text)]
 
     def test_property(self, codepoint: CodePoint, property: BinaryProperty) -> bool:

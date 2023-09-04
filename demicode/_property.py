@@ -1,4 +1,5 @@
 # This module is machine-generated. Do not edit by hand.
+
 from enum import StrEnum
 
 
@@ -327,3 +328,5 @@ class Script(StrEnum):
     Inherited = "Zinh"
     Common = "Zyyy"
     Unknown = "Zzzz"
+
+

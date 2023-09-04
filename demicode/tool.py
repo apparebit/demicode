@@ -11,7 +11,7 @@ import re
 from textwrap import dedent
 import traceback
 
-from .codegen import generate_property_model, retrieve_property_values
+from .codegen import generate_code
 from .codepoint import CodePoint, CodePointSequence
 from .darkmode import is_darkmode
 from .display import (
@@ -88,14 +88,14 @@ def configure_parser() -> argparse.ArgumentParser:
         help='set UCD version from 4.1 onwards',
     )
     ucd_group.add_argument(
+        '--ucd-optimize',
+        action=argparse.BooleanOptionalAction,
+        help='optimize UCD data',
+    )
+    ucd_group.add_argument(
         '--ucd-validate',
         action='store_true',
         help='validate UCD data',
-    )
-    ucd_group.add_argument(
-        '--ucd-condense',
-        action='store_true',
-        help='condense UCD data',
     )
 
     # ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~
@@ -212,9 +212,9 @@ def configure_parser() -> argparse.ArgumentParser:
         help='display the package version and exit'
     )
     about_group.add_argument(
-        '--generate-model',
+        '--generate-code',
         action='store_true',
-        help='generate Python module with Unicod\nproperty enumerations and exit',
+        help='generate Python modules based on Unicode\ndata files and exit',
     )
 
     return parser
@@ -272,17 +272,14 @@ def process(options: argparse.Namespace, renderer: Renderer) -> int:
     # So UCD access logs don't separate heading from counts
     UCD.prepare()
 
-    if options.ucd_condense:
-        UCD.condense()
+    if options.ucd_optimize:
+        UCD.optimize()
     if options.ucd_validate:
         UCD.validate()
 
     # -------------------------------------------------------------- Leverage UCD
-    if options.generate_model:
-        property_values = retrieve_property_values(UCD.path, UCD.version)
-        with open('demicode/_property.py', mode='w', encoding='utf8') as file:
-            for line in generate_property_model(property_values):
-                print(line, file=file)
+    if options.generate_code:
+        generate_code(UCD.path, UCD.version)
         return 0
 
     if options.stats:
@@ -291,6 +288,7 @@ def process(options: argparse.Namespace, renderer: Renderer) -> int:
         print()
         for property in (
             BinaryProperty.Emoji,
+            BinaryProperty.Emoji_Component,
             BinaryProperty.Emoji_Modifier,
             BinaryProperty.Emoji_Modifier_Base,
             BinaryProperty.Emoji_Presentation,

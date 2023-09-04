@@ -328,7 +328,7 @@ class UnicodeCharacterDatabase:
         self._path = path
         self._version = None if version is None else Version.of(version)
         self._is_prepared: bool = False
-        self._is_condensed: bool = False
+        self._is_optimized: bool = False
 
     @property
     def path(self) -> Path:
@@ -337,6 +337,10 @@ class UnicodeCharacterDatabase:
     @property
     def version(self) -> None | Version:
         return self._version
+
+    @property
+    def is_optimized(self) -> bool:
+        return self._is_optimized
 
     def use_path(self, path: Path) -> None:
         """
@@ -417,9 +421,9 @@ class UnicodeCharacterDatabase:
         self._is_prepared = True
         return self
 
-    def condense(self) -> None:
+    def optimize(self) -> None:
         self.prepare()
-        if self._is_condensed:
+        if self._is_optimized:
             return
 
         self._grapheme_props = condense_ranges(self._grapheme_props)
@@ -431,10 +435,11 @@ class UnicodeCharacterDatabase:
                 decompose=lambda r: (r, None),
                 compose=lambda r, _: r,
             )
-        self._is_condensed = True
+        self._is_optimized = True
 
     def validate(self) -> None:
         self.prepare()
+        invalid = False
 
         # Check that Extended_Pictographic code points have grapheme cluster
         # property Other only.
@@ -448,7 +453,7 @@ class UnicodeCharacterDatabase:
                         '%s, not Other',
                         codepoint, codepoint, entry[1].name
                     )
-                    invalid = False
+                    invalid = True
 
         # Check that the number of ingested emoji sequences is the same as the
         # sum of total counts in UCD files.

@@ -22,7 +22,7 @@ demicode is building a grid.
 
 from collections.abc import Iterator, Iterable
 import itertools
-from typing import cast, Literal, overload, TypeAlias
+from typing import Callable, cast, Literal, overload, TypeAlias
 
 from .codepoint import CodePoint, CodePointSequence
 from .model import Presentation
@@ -31,6 +31,57 @@ from .ucd import UCD, Version
 
 
 CodePoints: TypeAlias = CodePoint | CodePointSequence
+
+
+# --------------------------------------------------------------------------------------
+# Enrich Code Points with Presentation
+
+
+@overload
+def make_presentable(
+    data: Iterable[CodePoints | str], *, headings: Literal[False]
+) -> Iterator[tuple[Presentation, CodePoints]]: ...
+
+@overload
+def make_presentable(
+    data: Iterable[CodePoints | str], *, headings: bool = ...
+) -> Iterator[tuple[Presentation, CodePoints]|tuple[str, None]]: ...
+
+def make_presentable(
+    data: Iterable[CodePoints | str],
+    *,
+    headings: bool = True,  # Allow embedded headings
+) -> Iterator[tuple[Presentation, CodePoints]|tuple[str, None]]:
+    """Enrich code points with their presentation."""
+    for datum in data:
+        if isinstance(datum, str):
+            if not datum:
+                continue
+            if datum[0] == '\u0001':
+                if headings:
+                    yield datum, None
+                continue
+            datum = CodePointSequence.from_string(datum)
+
+        if not datum.is_singleton():
+            yield Presentation.NONE, datum
+            continue
+
+        datum = datum.to_singleton()
+        if datum in UCD.fullwidth_punctuation:
+            yield Presentation.CORNER, datum
+            yield Presentation.CENTER, datum
+        elif datum in UCD.with_emoji_variation:
+            yield Presentation.NONE, datum
+            yield Presentation.TEXT, datum
+            yield Presentation.EMOJI, datum
+            if datum in UCD.with_keycap:
+                yield Presentation.KEYCAP, datum
+        else:
+            yield Presentation.NONE, datum
+
+
+# --------------------------------------------------------------------------------------
 
 
 LEGEND_BLOT = ' 123   123  '
@@ -52,14 +103,14 @@ def _name_width(width: int) -> int:
 
 
 def format_legend(renderer: Renderer) -> str:
-    """Format the per page legend."""
+    """Format the per-page legend."""
     if not renderer.has_style:
         return LEGEND[6:]
     return renderer.legend(LEGEND.ljust(renderer.width))
 
 
 def format_heading(renderer: Renderer, heading: str) -> str:
-    """Format the given heading without the initial \\u0001 (Start of Heading)."""
+    """Format the heading without the initial \\u0001 (Start of Heading)."""
     if heading[0] != '\u0001':
         raise ValueError(
             f'string "{heading}" is not a valid heading, which starts with U+0001')
@@ -89,13 +140,7 @@ def format_blot(
     start_column: int = 1,
     presentation: Presentation = Presentation.NONE,
 ) -> Iterator[str]:
-    """
-    Format the fixed-width information for the given code point or grapheme.
-
-    If `include_info` is `True`, this function emits a full line of content,
-    including relevant metadata after the character blots. Otherwise, it only
-    emits the character blot.
-    """
+    """Format the fixed-width character blot."""
     # Validate grapheme cluster.
     if not UCD.is_grapheme_cluster(codepoints):
         raise ValueError(f'{codepoints!r} are not a single grapheme cluster')
@@ -129,9 +174,10 @@ def format_info(
     start_column: int = 1,
     presentation: Presentation = Presentation.NONE,
 ) -> Iterator[str]:
+    """Format information about the code points."""
     yield renderer.column(start_column + 13)
 
-    # Blotting a grapheme cluster. Try to make presentation explicit. If none,
+    # A grapheme cluster: Try to make presentation explicit. If it is none,
     # display code points and, for emoji sequences, age and name.
     if not codepoints.is_singleton():
         assert isinstance(codepoints, CodePointSequence)
@@ -147,7 +193,7 @@ def format_info(
 
         codepoints = codepoints[0]
 
-    # Blotting a code point, maybe with variation selector. Display detailed metadata.
+    # A single code point: Display detailed metadata including presentation.
     codepoint = codepoints.to_singleton()
     unidata = UCD.lookup(codepoint)
 
@@ -177,50 +223,6 @@ def format_info(
 
 
 # --------------------------------------------------------------------------------------
-
-
-@overload
-def make_presentable(
-    data: Iterable[CodePoints|str], *, headings: Literal[False]
-) -> Iterator[tuple[Presentation, CodePoints]]: ...
-
-@overload
-def make_presentable(
-    data: Iterable[CodePoints|str], *, headings: bool = ...
-) -> Iterator[tuple[Presentation, CodePoints]|tuple[str, None]]: ...
-
-def make_presentable(
-    data: Iterable[CodePoints|str],
-    *,
-    headings: bool = True,  # Allow embedded headings
-) -> Iterator[tuple[Presentation, CodePoints]|tuple[str, None]]:
-    """Enrich code points with their presentation."""
-    for datum in data:
-        if isinstance(datum, str):
-            if not datum:
-                continue
-            if datum[0] == '\u0001':
-                if headings:
-                    yield datum, None
-                continue
-            datum = CodePointSequence.from_string(datum)
-
-        if not datum.is_singleton():
-            yield Presentation.NONE, datum
-            continue
-
-        datum = datum.to_singleton()
-        if datum in UCD.fullwidth_punctuation:
-            yield Presentation.CORNER, datum
-            yield Presentation.CENTER, datum
-        elif datum in UCD.with_emoji_variation:
-            yield Presentation.NONE, datum
-            yield Presentation.TEXT, datum
-            yield Presentation.EMOJI, datum
-            if datum in UCD.with_keycap:
-                yield Presentation.KEYCAP, datum
-        else:
-            yield Presentation.NONE, datum
 
 
 def format_lines(
@@ -271,22 +273,31 @@ def format_grid_lines(
         yield line
 
 
+# --------------------------------------------------------------------------------------
+
+
 def page_lines(
     renderer: Renderer,
-    legend: None | str,
     lines: Iterable[str],
+    *,
+    make_legend: None | Callable[[Renderer], str] = None,
 ) -> None:
-    """Display one page of lines at a time."""
-
+    """
+    Display one page of lines at a time. This function updates the terminal size
+    for every page and accordingly adjusts output. For that reason, it recreates
+    the legend for every page as well, hence requiring a function.
+    """
     page_number = 0
     hint = renderer.hint(' ‹return›: next page; q‹return›/‹ctrl-c›: quit') + '  '
-    legend_height = 0 if legend is None else len(legend.splitlines())
 
     while True:
         renderer.refresh()
+
         page_number += 1
         print(renderer.window_title(f'demicode (page {page_number})'))
 
+        legend = None if make_legend is None else make_legend(renderer)
+        legend_height = 0 if legend is None else len(legend.splitlines())
         body_height = renderer.height - legend_height - 1
         body = [*itertools.islice(lines, body_height)]
 

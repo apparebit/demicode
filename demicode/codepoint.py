@@ -15,12 +15,16 @@ and implementation of the UCD parser.
 """
 
 from collections.abc import Iterator
+from dataclasses import dataclass
 from enum import Enum
 from types import NotImplementedType
-from typing import Any, NamedTuple, Self, SupportsInt, SupportsIndex
+from typing import Any, ClassVar, Self, SupportsInt, SupportsIndex
 
 
 class CodePoint(int):
+
+    MIN: 'ClassVar[CodePoint]'
+    MAX: 'ClassVar[CodePoint]'
 
     __slots__ = ()
 
@@ -77,7 +81,10 @@ class CodePoint(int):
 # --------------------------------------------------------------------------------------
 
 
-class CodePointRange(NamedTuple):
+@dataclass(frozen=True, slots=True)
+class CodePointRange:
+
+    ALL: 'ClassVar[CodePointRange]'
 
     start: CodePoint
     stop: CodePoint
@@ -113,6 +120,24 @@ class CodePointRange(NamedTuple):
             return other.stop < self.start
         else:
             return NotImplemented
+
+    def can_merge_with(self, other: 'CodePoint | CodePointRange') -> bool:
+        if isinstance(other, CodePoint):
+            return self.start - 1 <= other <= self.stop + 1
+        else:
+            # not (other.stop < self.start - 1 or self.stop + 1 < other.start)
+            return self.start - 1 <= other.stop and other.start <= self.stop + 1
+
+    def merge(self, other: 'CodePoint | CodePointRange') -> 'CodePointRange':
+        if isinstance(other, CodePoint):
+            if self.start - 1 <= other <= self.stop + 1:
+                return CodePointRange(min(self.start, other), max(self.stop, other))
+        elif self.start - 1 <= other.stop and other.start <= self.stop + 1:
+            return CodePointRange(
+                min(self.start, other.start),
+                max(self.stop, other.stop)
+            )
+        raise ValueError(f'{self!r} is apart from {other!r}')
 
     def __len__(self) -> int:
         return self.stop - self.start + 1
@@ -151,6 +176,8 @@ class CodePointRange(NamedTuple):
 
 
 class CodePointSequence(tuple[CodePoint,...]):
+
+    __slots__ = ()
 
     def __init__(self, *args, **kwargs) -> None:
         if len(self) == 0:
@@ -192,12 +219,6 @@ class CodePointSequence(tuple[CodePoint,...]):
 
 # --------------------------------------------------------------------------------------
 
-
-class Limit(CodePoint, Enum):
-    MIN = CodePoint(0)
-    MAX = CodePoint(0x10_FFFF)
-
-class RangeLimit(CodePointRange, Enum):
-    ALL = CodePointRange(Limit.MIN, Limit.MAX)
-
-setattr(CodePointRange, '__iter__', None)
+CodePoint.MIN = CodePoint(0)
+CodePoint.MAX = CodePoint(0x10_FFFF)
+CodePointRange.ALL = CodePointRange(CodePoint.MIN, CodePoint.MAX)

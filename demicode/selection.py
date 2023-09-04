@@ -134,6 +134,8 @@ TASTE_OF_EMOJI = tuple(_prep(text) for text in (
     '\u2692',                             # HAMMER AND PICK     E1.0  4.1
     '\U0001F3DD',                         # DESERT ISLAND       E0.7  7.0
     '\U0001F596',                         # VULCAN SALUTE       E1.0  7.0
+    '\U0001F9D1',                         # PERSON              E5.0
+    '\U0001F4BB',                         # LAPTOP              E0.6  6.0
     '\U0001F9D1\u200D\U0001F4BB',         # technologist
     '\U0001F9D1\u200D\U0001F9B0',         # person: red hair
     '\U0001F3F3\uFE0F\u200D\U0001F308',   # rainbow flag

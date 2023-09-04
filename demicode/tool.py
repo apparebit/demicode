@@ -78,12 +78,6 @@ def configure_parser() -> argparse.ArgumentParser:
         'application cache directory',
     )
     ucd_group.add_argument(
-        '--ucd-cwd',
-        action='store_true',
-        help='use "./ucd" as local UCD mirror instead of\n'
-        'OS application cache directory',
-    )
-    ucd_group.add_argument(
         '--ucd-version',
         help='set UCD version from 4.1 onwards',
     )
@@ -119,7 +113,7 @@ def configure_parser() -> argparse.ArgumentParser:
     cp_group.add_argument(
         '--with-arrows',
         action='store_true',
-        help='include code points for matching regular\nand long arrows',
+        help='include code points for matching regular and\nlong arrows',
     )
     cp_group.add_argument(
         '--with-chevrons',
@@ -129,7 +123,7 @@ def configure_parser() -> argparse.ArgumentParser:
     cp_group.add_argument(
         '--with-lingchi',
         action='store_true',
-        help='include several highlights for incoherent\nand inconsistent widths'
+        help='include several highlights for incoherent and\ninconsistent widths'
     )
     cp_group.add_argument(
         '--with-mad-dash',
@@ -185,7 +179,7 @@ def configure_parser() -> argparse.ArgumentParser:
         '--in-more-color', '-c',
         default=0,
         action='count',
-        help='use brighter colors in output;\nmay be repeated once'
+        help='use brighter colors in output; may be used twice'
     )
     out_group.add_argument(
         '--in-plain-text', '-p',
@@ -258,18 +252,11 @@ def process(options: argparse.Namespace, renderer: Renderer) -> int:
         return 0
 
     # --------------------------------------------------------------- Prepare UCD
-    if options.ucd_path and options.ucd_cwd:
-        raise ValueError(
-            "can't use both path and current working directory as local UCD mirror")
-
     if options.ucd_path:
         UCD.use_path(Path(options.ucd_path))
-    if options.ucd_cwd:
-        UCD.use_path(Path.cwd() / 'ucd')
     if options.ucd_version:
         UCD.use_version(options.ucd_version)
 
-    # So UCD access logs don't separate heading from counts
     UCD.prepare()
 
     if options.ucd_optimize:

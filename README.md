@@ -101,7 +101,7 @@ The output of the last command should look something like the first screenshot.
 
 ## Versions
 
-  - **v0.5.0** (2023/09/03) Optimize range-based Unicode data for space and
+  - **v0.5.0** (2023/09/04) Optimize range-based Unicode data for space and
     bisection speed. Improve built-in selections of graphemes; notably, the
     Unicode version oracle now displays exactly one emoji per detectable Unicode
     version.

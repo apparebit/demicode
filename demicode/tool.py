@@ -11,6 +11,7 @@ import re
 from textwrap import dedent
 import traceback
 
+from .codegen import generate_property_model, retrieve_property_values
 from .codepoint import CodePoint, CodePointSequence
 from .darkmode import is_darkmode
 from .display import (
@@ -20,7 +21,7 @@ from .display import (
     format_lines,
     page_lines,
 )
-from .model import BinaryProperty
+from .model import BinaryProperty, ComplexProperty
 from .render import Mode, Renderer, StyledRenderer
 from .selection import *
 from .ucd import UCD
@@ -87,9 +88,14 @@ def configure_parser() -> argparse.ArgumentParser:
         help='set UCD version from 4.1 onwards',
     )
     ucd_group.add_argument(
-        '--ucd-validation',
+        '--ucd-validate',
         action='store_true',
-        help='perform extra validation on UCD',
+        help='validate UCD data',
+    )
+    ucd_group.add_argument(
+        '--ucd-condense',
+        action='store_true',
+        help='condense UCD data',
     )
 
     # ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~
@@ -205,6 +211,11 @@ def configure_parser() -> argparse.ArgumentParser:
         action='store_true',
         help='display the package version and exit'
     )
+    about_group.add_argument(
+        '--generate-model',
+        action='store_true',
+        help='generate Python module with Unicod\nproperty enumerations and exit',
+    )
 
     return parser
 
@@ -241,7 +252,12 @@ def run(arguments: Sequence[str]) -> int:
 
 
 def process(options: argparse.Namespace, renderer: Renderer) -> int:
-    # ---------------------------------------------- Set UCD path and/or version
+    # ------------------------------------------------------------ Handle version
+    if options.version:
+        print(renderer.very_strong(f' demicode {__version__} '))
+        return 0
+
+    # --------------------------------------------------------------- Prepare UCD
     if options.ucd_path and options.ucd_cwd:
         raise ValueError(
             "can't use both path and current working directory as local UCD mirror")
@@ -254,19 +270,37 @@ def process(options: argparse.Namespace, renderer: Renderer) -> int:
         UCD.use_version(options.ucd_version)
 
     # So UCD access logs don't separate heading from counts
-    UCD.prepare(validate=options.ucd_validation)
+    UCD.prepare()
 
-    # ------------------------------------------------ Handle version and stats
-    if options.version:
-        print(renderer.very_strong(f' demicode {__version__} '))
+    if options.ucd_condense:
+        UCD.condense()
+    if options.ucd_validate:
+        UCD.validate()
+
+    # -------------------------------------------------------------- Leverage UCD
+    if options.generate_model:
+        property_values = retrieve_property_values(UCD.path, UCD.version)
+        with open('demicode/_property.py', mode='w', encoding='utf8') as file:
+            for line in generate_property_model(property_values):
+                print(line, file=file)
         return 0
 
     if options.stats:
         print()
-        print(renderer.strong('Code Points with Given Property'))
+        print(renderer.strong('Code Points / Ranges with Given Property'))
         print()
-        for property in BinaryProperty:
-            print(f'    {property.name:<25} : {UCD.count_property(property):5,d}')
+        for property in (
+            BinaryProperty.Emoji,
+            BinaryProperty.Emoji_Modifier,
+            BinaryProperty.Emoji_Modifier_Base,
+            BinaryProperty.Emoji_Presentation,
+            BinaryProperty.Extended_Pictographic,
+            ComplexProperty.East_Asian_Width,
+            ComplexProperty.Grapheme_Cluster_Break,
+        ):
+            points = UCD.count_property(property)
+            ranges = UCD.count_property(property, ranges_only=True)
+            print(f'    {property.name:<25} : {points:7,d} / {ranges:5,d}')
         print()
         return 0
 
@@ -323,7 +357,6 @@ def process(options: argparse.Namespace, renderer: Renderer) -> int:
     if options.in_grid:
         page_lines(
             renderer,
-            None,
             format_grid_lines(
                 renderer,
                 make_presentable(
@@ -335,11 +368,11 @@ def process(options: argparse.Namespace, renderer: Renderer) -> int:
     else:
         page_lines(
             renderer,
-            format_legend(renderer),
             format_lines(
                 renderer,
                 make_presentable(itertools.chain.from_iterable(codepoints)),
             ),
+            make_legend=format_legend,
         )
 
     # -------------------------------------------------------------------- Done

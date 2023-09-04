@@ -7,6 +7,7 @@ import re
 from typing import NamedTuple
 
 from .codepoint import CodePoint, CodePointSequence
+from ._property import *
 
 
 # --------------------------------------------------------------------------------------
@@ -153,109 +154,21 @@ class Version(NamedTuple):
 # Unicode Properties
 
 
-class Category(StrEnum):
+class ComplexProperty(StrEnum):
     """
-    The Unicode categories. Constant names are the property values in Unicode
-    notation, i.e., preserving capitalization. Constant values are the shorter
-    aliases.
+    An enumeration of complex properties, i.e., Unicode properties that have
+    more than two values. For each included property, this module exports an
+    enumeration with the same name modulo underscores. The enumeration's
+    constants represent the domain of named values for the property, with each
+    constant's value providing a shorter alias. Most enumerations are
+    machine-generated from Unicode data.
     """
-
-    # L for Letter
-    Uppercase_Letter = 'Lu'
-    Lowercase_Letter = 'Ll'
-    Titlecase_Letter = 'Lt'
-    Modifier_Letter = 'Lm'
-    Other_Letter = 'Lo'
-
-    # M for Mark
-    Nonspacing_Mark = 'Mn'
-    Spacing_Mark = 'Mc'
-    Enclosing_Mark = 'Me'
-
-    # N for Number
-    Decimal_Number = 'Nd'
-    Letter_Number = 'Nl'
-    Other_Number = 'No'
-
-    # P for Punctuation
-    Connector_Punctuation = 'Pc'
-    Dash_Punctuation = 'Pd'
-    Open_Punctuation = 'Ps'
-    Close_Punctuation = 'Pe'
-    Initial_Punctuation = 'Pi'
-    Final_Punctuation = 'Pf'
-    Other_Punctuation = 'Po'
-
-    # S for Symbol
-    Math_Symbol = 'Sm'
-    Currency_Symbol = 'Sc'
-    Modifier_Symbol = 'Sk'
-    Other_Symbol = 'So'
-
-    # Z for Zeparator
-    Space_Separator = 'Zs'
-    Line_Separator = 'Zl'
-    Paragraph_Separator = 'Zp'
-
-    # C for Control
-    Control = 'Cc'
-    Format = 'Cf'
-    Surrogate = 'Cs'
-    Private_Use = 'Co'
-    Unassigned = 'Cn'
-
-    @property
-    def is_letter(self) -> bool:
-        return self.value[0] == 'L'
-
-    @property
-    def is_mark(self) -> bool:
-        return self.value[0] == 'M'
-
-    @property
-    def is_number(self) -> bool:
-        return self.value[0] == 'N'
-
-    @property
-    def is_punctuation(self) -> bool:
-        return self.value[0] == 'P'
-
-    @property
-    def is_symbol(self) -> bool:
-        return self.value[0] == 'S'
-
-    @property
-    def is_separator(self) -> bool:
-        return self.value[0] == 'Z'
-
-    @property
-    def is_other(self) -> bool:
-        return self.value[0] == 'C'
-
-
-class EastAsianWidth(StrEnum):
-    Ambiguous = 'A'
-    Fullwidth = 'F'
-    Halfwidth = 'H'
-    Neutral = 'N'
-    Narrow = 'Na'
-    Wide = 'W'
-
-    @property
-    def is_ambiguous(self) -> bool:
-        return self is EastAsianWidth.Ambiguous
-
-    @property
-    def is_narrow(self) -> bool:
-        return self in (EastAsianWidth.Halfwidth, EastAsianWidth.Narrow)
-
-    @property
-    def is_neutral(self) -> bool:
-        return self is EastAsianWidth.Neutral
-
-    @property
-    def is_wide(self) -> bool:
-        return self in (EastAsianWidth.Fullwidth, EastAsianWidth.Wide)
+    Canonical_Combining_Class = 'ccc'
+    East_Asian_Width = 'ea'
+    General_Category = 'gc'
+    Grapheme_Cluster_Break = 'GCB'
+    Indic_Syllabic_Category = 'InSC'
+    Script = 'sc'
 
 
 class BinaryProperty(StrEnum):
@@ -362,14 +275,14 @@ class GraphemeCluster(StrEnum):
     """
     Enumeration over the different code points that contribute to grapheme
     clusters. Note that, unlike for other enumerations in this module,
-    enumeration constant values are *not* official Unicode aliases. Instead they
+    enumeration constant values are *not* official Unicode aliases. Instea d they
     are single, mnemonic characters used by `GRAPHEME_CLUSTER_PATTERN` to
     recognize grapheme clusters.
     """
 
     Prepend = 'P'
-    CR = 'r'
-    LF = 'n'
+    CR = 'r'         # U+000D
+    LF = 'n'         # U+000A
     Control = 'C'
     Extend = 'E'
     Regional_Indicator = 'R'
@@ -379,7 +292,7 @@ class GraphemeCluster(StrEnum):
     T = 't'
     LV = 'V'
     LVT = 'T'
-    ZWJ = 'Z'
+    ZWJ = 'Z'        # U+200D
     Other = 'O'
     Extended_Pictographic = 'X'
 
@@ -425,7 +338,7 @@ class CharacterData:
     """A Unicode code point and its properties."""
 
     codepoint: CodePoint
-    category: Category
+    category: GeneralCategory
     east_asian_width: EastAsianWidth
     age: None | str
     name: None | str
@@ -437,9 +350,9 @@ class CharacterData:
         return (
             self.codepoint == 0
             or self.category in (
-                Category.Enclosing_Mark,
-                Category.Nonspacing_Mark,
-                Category.Format
+                GeneralCategory.Enclosing_Mark,
+                GeneralCategory.Nonspacing_Mark,
+                GeneralCategory.Format
             ) and self.codepoint != 0x00AD
             or 0x1160 <= self.codepoint <= 0x11FF
         )
@@ -450,7 +363,7 @@ class CharacterData:
         # may appear but aren't very meaningful in general. Still, a robust
         # width property might want to consider assigning different widths to
         # different private use ranges.
-        return self.category in (Category.Surrogate, Category.Private_Use)
+        return self.category in (GeneralCategory.Surrogate, GeneralCategory.Private_Use)
 
     def wcwidth(self) -> int:
         """
@@ -462,6 +375,6 @@ class CharacterData:
             return 0
         if self.is_invalid or self.codepoint < 32 or 0x7F <= self.codepoint < 0xA0:
             return -1
-        if self.east_asian_width.is_wide:
+        if self.east_asian_width in (EastAsianWidth.Fullwidth, EastAsianWidth.Wide):
             return 2
         return 1

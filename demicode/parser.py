@@ -1,6 +1,6 @@
-from collections.abc import Iterable, Iterator
+from collections.abc import Iterable, Iterator, Sequence
 from pathlib import Path
-from typing import Any, Callable, Literal, TypeAlias, TypeVar
+from typing import Callable, cast, Literal, TypeAlias, TypeVar
 
 from .codepoint import CodePoint, CodePointRange, CodePointSequence
 
@@ -128,32 +128,41 @@ def ingest(
         )
 
 
-def condense_ranges(
-    range_data: Iterable[T],
-    *,
-    decompose: Callable[[T], tuple[CodePointRange, P]] = lambda rp: rp,
-    compose: Callable[[CodePointRange, P], T] = lambda r, p: (r, p)
-) -> list[T]:
-    """
-    Maximize ranges and hence minimize items in the given range-based data. The
-    default `decompose` and `compose` work for range, value pairs.
-    """
-    fresh_range_data: list[T] = []
-    current_range: None | CodePointRange = None
-    current_properties: None | P = None
+def extract_default(
+    defaults: Sequence[tuple[CodePoints, P]],
+    fallback: P,
+    label: str,
+) -> P:
+    length = len(defaults)
+    if length == 0:
+        return fallback
+    if length == 1:
+        r, p = defaults[0]
+        if r == CodePointRange.ALL:
+            return p
+        raise ValueError(f'Default {label} covers only {r!r}')
+    raise ValueError(f'Default {label} comprises {length} entries')
 
-    for datum in range_data:
-        range, properties = decompose(datum)
-        if current_range is not None:
-            if current_range.can_merge_with(range) and current_properties == properties:
-                current_range = current_range.merge(range)
+
+def simplify_range_data(
+    data: Iterable[tuple[CodePointRange, P]]
+) -> Iterator[tuple[CodePointRange, P]]:
+    range_accumulator: None | CodePointRange = None
+    props_accumulator: None | P = None
+
+    for range, props in data:
+        if range_accumulator is not None:
+            if range_accumulator.can_merge_with(range) and props_accumulator == props:
+                range_accumulator = range_accumulator.merge(range)
                 continue
+            yield range_accumulator, cast(P, props_accumulator)
 
-            fresh_range_data.append(compose(current_range, current_properties))
+        range_accumulator = range
+        props_accumulator = props
 
-        current_range = range
-        current_properties = properties
+    if range_accumulator is not None:
+        yield range_accumulator, cast(P, props_accumulator)
 
-    if current_range is not None:
-        fresh_range_data.append(compose(current_range, current_properties))
-    return fresh_range_data
+
+def simplify_only_ranges(data: Iterable[CodePointRange]) -> list[CodePointRange]:
+    return [r for r, _ in simplify_range_data((r, None) for r in data)]

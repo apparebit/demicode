@@ -19,6 +19,9 @@ UCD.prepare()
 UCD.validate()
 
 
+# --------------------------------------------------------------------------------------
+
+
 def test_versions() -> None:
     assert Version.of('13') == Version(13, 0, 0)
     assert Version.of('13').to_emoji() == Version(13, 0, 0)
@@ -33,6 +36,9 @@ def test_versions() -> None:
     print('PASS: UCD and Emoji versions')
 
 
+# --------------------------------------------------------------------------------------
+
+
 PROPERTY_COUNTS = {
     BinaryProperty.Emoji: (1_424, 404, 151),
     BinaryProperty.Emoji_Component: (146, 10, 10),
@@ -45,7 +51,9 @@ PROPERTY_COUNTS = {
 }
 
 
-def do_test_counts() -> None:
+def do_test_counts() -> dict[BinaryProperty | ComplexProperty, int]:
+    counts: dict[BinaryProperty | ComplexProperty, int] = {}
+
     for property, (cp_count, range_count, min_range_count) in PROPERTY_COUNTS.items():
         actual_count, actual_range_count = UCD.count_property_values(property)
         expected_range_count = min_range_count if UCD.is_optimized else range_count
@@ -55,17 +63,30 @@ def do_test_counts() -> None:
             f'{property.name} has {actual_range_count} ranges, '\
             f'not {expected_range_count}'
 
+        counts[property] = actual_count
+    return counts
+
 
 def test_counts() -> None:
-    do_test_counts()
+    counts1 = do_test_counts()
     print(f'PASS: code point and range counts (optimized={UCD.is_optimized})')
 
     UCD.optimize()
     UCD.validate()
 
-    do_test_counts()
+    counts2 = do_test_counts()
     print(f'PASS: code point and range counts (optimized={UCD.is_optimized})')
 
+    for property in counts1:
+        value_count1 = counts1[property]
+        value_count2 = counts2[property]
+        assert value_count1 == value_count2,\
+            f'{property.name} has {value_count1} values before '\
+            f'and {value_count2} after optimization'
+    print(f'PASS: invariant code point counts')
+
+
+# --------------------------------------------------------------------------------------
 
 RANGE_MERGING = (
     # Merge range and code point
@@ -111,6 +132,9 @@ def test_ranges() -> None:
         assert result == expected,\
             f'{range!r} should combine with {other!r} to {expected!r}, not {result!r}'
     print('PASS: range merging')
+
+
+# --------------------------------------------------------------------------------------
 
 
 CHARACTER_DATA = (
@@ -170,6 +194,9 @@ def test_unicode_properties() ->  None:
             f'but are {actual}'
         )
     print('PASS: grapheme cluster breaks')
+
+
+# --------------------------------------------------------------------------------------
 
 
 if __name__ == '__main__':

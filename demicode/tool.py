@@ -10,6 +10,7 @@ from pathlib import Path
 import re
 from textwrap import dedent
 import traceback
+from typing import cast
 
 from .codegen import generate_code
 from .codepoint import CodePoint, CodePointSequence
@@ -266,6 +267,7 @@ def process(options: argparse.Namespace, renderer: Renderer) -> int:
 
     # -------------------------------------------------------------- Leverage UCD
     if options.generate_code:
+        assert UCD.version is not None
         generate_code(UCD.path, UCD.version)
         return 0
 
@@ -273,7 +275,8 @@ def process(options: argparse.Namespace, renderer: Renderer) -> int:
         print()
         print(renderer.strong('Code Points / Ranges with Given Property'))
         print()
-        for property in (
+
+        for property in cast(tuple[BinaryProperty | ComplexProperty,...], (
             BinaryProperty.Emoji,
             BinaryProperty.Emoji_Component,
             BinaryProperty.Emoji_Modifier,
@@ -282,9 +285,8 @@ def process(options: argparse.Namespace, renderer: Renderer) -> int:
             BinaryProperty.Extended_Pictographic,
             ComplexProperty.East_Asian_Width,
             ComplexProperty.Grapheme_Cluster_Break,
-        ):
-            points = UCD.count_property(property)
-            ranges = UCD.count_property(property, ranges_only=True)
+        )):
+            points, ranges = UCD.count_property(property)
             print(f'    {property.name:<25} : {points:7,d} / {ranges:5,d}')
         print()
         return 0

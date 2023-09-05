@@ -22,11 +22,18 @@ CSI = '\x1b['
 
 
 def SGR(code: str) -> str:
+    """Format Select Graphic Rendition."""
     return f'{CSI}{code}m'
 
 
 def CHA(column: int | str) -> str:
+    """Format Cursor Horizontal Absolute (an editor function)."""
     return f'{CSI}{column}G'
+
+
+def HPA(column: int | str) -> str:
+    """Format Horizontal Position Absolute (a format effector)."""
+    return f'{CSI}{column}`'
 
 
 def bg(color: int | str) -> str:
@@ -72,6 +79,7 @@ class Theme:
 class Styles:
     RESET = SGR('0')
     BOLD = SGR('1')
+    ITALIC = SGR('3')
 
     LIGHT = (
         Theme.of(bg(252), fg('246;3'), bg(254), fg(244), fg(246), '1', fg('160;1')),
@@ -152,6 +160,9 @@ class Renderer:
     def hint(self, text:str) -> str:
         return text
 
+    def em(self, text: str) -> str:
+        return text
+
     def strong(self, text: str) -> str:
         return text
 
@@ -203,6 +214,9 @@ class StyledRenderer(Renderer):
 
     def hint(self, text:str) -> str:
         return f'{self._theme.hint}{text}{Styles.RESET}'
+
+    def em(self, text: str) -> str:
+        return f'{Styles.ITALIC}{text}{Styles.RESET}'
 
     def strong(self, text: str) -> str:
         return f'{Styles.BOLD}{text}{Styles.RESET}'

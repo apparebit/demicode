@@ -7,6 +7,7 @@ from demicode.model import (
     CharacterData,
     EastAsianWidth,
     GeneralCategory,
+    Version,
 )
 from demicode.ucd import UCD
 from test.grapheme_clusters import GRAPHEME_CLUSTERS
@@ -16,6 +17,21 @@ VERBOSE = True
 UCD.use_version('15.0.0')
 UCD.prepare()
 UCD.validate()
+
+
+def test_versions() -> None:
+    assert Version.of('13') == Version(13, 0, 0)
+    assert Version.of('13').to_emoji() == Version(13, 0, 0)
+    assert Version.of('10') == Version(10, 0, 0)
+    assert Version.of('10').to_emoji() == Version(5, 0, 0)
+    assert Version.of('9').to_emoji() == Version(3, 0, 0)
+    assert Version.of('8').to_emoji() == Version(1, 0, 0)
+    assert Version.of('7').to_emoji() == Version(0, 7, 0)
+    assert Version.of('6').to_emoji() == Version(0, 6, 0)
+    assert Version.of('5').to_emoji() == Version(0, 0, 0)
+    assert Version.of('4.1').to_emoji() == Version(0, 0, 0)
+    print('PASS: UCD and Emoji versions')
+
 
 PROPERTY_COUNTS = {
     BinaryProperty.Emoji: (1_424, 404, 151),
@@ -31,8 +47,7 @@ PROPERTY_COUNTS = {
 
 def do_test_counts() -> None:
     for property, (cp_count, range_count, min_range_count) in PROPERTY_COUNTS.items():
-        actual_count = UCD.count_property(property)
-        actual_range_count = UCD.count_property(property, ranges_only=True)
+        actual_count, actual_range_count = UCD.count_property(property)
         expected_range_count = min_range_count if UCD.is_optimized else range_count
         assert actual_count == cp_count,\
             f'{property.name} has {actual_count} code points, not {cp_count}'
@@ -158,6 +173,7 @@ def test_unicode_properties() ->  None:
 
 
 if __name__ == '__main__':
+    test_versions()
     test_counts()
     test_ranges()
     test_unicode_properties()

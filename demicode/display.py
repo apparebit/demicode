@@ -194,11 +194,15 @@ def format_info(
         # Account for non-grapheme-clusters and emoji sequences.
         name = age = None
         if not UCD.is_grapheme_cluster(codepoints):
-            name = renderer.em(f'Not a grapheme cluster in v{UCD.version}')
-            name = f'[{name}]'
-        else:
-            name, age = UCD.emoji_sequence_data(codepoints)
+            name = renderer.fit(
+                f'Not a grapheme cluster in UCD {UCD.version.in_short_format()}',
+                width=_name_width(renderer.width)
+            )
+            yield ' ' * AGE_WIDTH
+            yield f' {renderer.hint(name)}'
+            return
 
+        name, age = UCD.emoji_sequence_data(codepoints)
         if age:
             yield f'{cast(Version, age).in_emoji_format():>{AGE_WIDTH}}'
         elif name:
@@ -228,17 +232,20 @@ def format_info(
     yield f' {age_display:>{AGE_WIDTH}} '
 
     if unidata.category is GeneralCategory.Unassigned:
-        name = renderer.em(f'Unassigned in v{UCD.version}')
-        name = f'[{name}]'
-        block = ''
-    else:
-        name = name or unidata.name or ''
-        block = unidata.block or ''
+        name = renderer.fit(
+            f'Unassigned in UCD {UCD.version.in_short_format()}',
+            width=_name_width(renderer.width)
+        )
+        yield renderer.hint(name)
+        return
+
+    name = name or unidata.name or ''
+    block = unidata.block or ''
     if name and block:
         name = name + ' '
     if block:
         name = f'{name}({block})'
-    yield renderer.fit(name, width=renderer.width-FIXED_WIDTH)
+    yield renderer.fit(name, width=_name_width(renderer.width))
 
 
 # --------------------------------------------------------------------------------------
@@ -313,7 +320,8 @@ def page_lines(
         renderer.refresh()
 
         page_number += 1
-        print(renderer.window_title(f'demicode (page {page_number})'))
+        print(renderer.window_title(
+            f'demicode • UCD {UCD.version.in_short_format()} • page {page_number}'))
 
         legend = None if make_legend is None else make_legend(renderer)
         legend_height = 0 if legend is None else len(legend.splitlines())

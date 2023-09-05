@@ -25,9 +25,13 @@ terminals I have been testing—[Hyper](https://hyper.is),
 Code's terminal](https://code.visualstudio.com/docs/terminal/basics),
 [Warp](https://www.warp.dev), and
 [wezTerm](https://wezfurlong.org/wezterm/index.html)—it generates middling
-output: I like the way it handles overly wide glyphs better than most. However,
-even though demicode uses ANSI escape codes to prevent alignment failure,
-Terminal.app still manages to do so, as you can see in the last three lines.
+output: I find Terminal.app's and iTerm2's handling of overly wide glyphs the
+least bad. However, even with demicode using ANSI escape codes to line up
+columns, Terminal.app still manages to distort the column grid, as the lines for
+the technologist, person: red hair, and rainbow flag emoji in the screenshot
+below illustrate. I haven't found an effective work-around, despite trying
+several alternatives such as rendering character information first and blots
+second.
 
 
 ![Demicode's output in the default one-grapheme-per-line format and light

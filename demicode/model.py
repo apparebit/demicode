@@ -97,7 +97,7 @@ class Version(NamedTuple):
             return False
         return True
 
-    def ucd(self) -> 'Version':
+    def to_ucd(self) -> 'Version':
         """Validate this version as a UCD version."""
         if self.is_ucd():
             return self
@@ -266,6 +266,18 @@ class Presentation(Enum):
     def variation_selector(self) -> int:
         return 0xFE0F if self == Presentation.KEYCAP else self.value
 
+    def normalize(
+        self, codepoints: CodePoint | CodePointSequence
+    ) -> 'tuple[Presentation, CodePoint | CodePointSequence]':
+        if codepoints.is_singleton():
+            return self, codepoints
+        assert isinstance(codepoints, CodePointSequence)
+        presentation = Presentation.unapply(codepoints)
+        return (
+            presentation,
+            codepoints if presentation is Presentation.NONE else codepoints[0]
+        )
+
 
 # --------------------------------------------------------------------------------------
 # Grapheme Clusters
@@ -296,6 +308,12 @@ class GraphemeCluster(StrEnum):
     Other = 'O'
     Extended_Pictographic = 'X'
 
+    # Obsolete property values (using Etruscan letters)
+    E_Base = '\U00010300'
+    E_Modifier = '\U00010301'
+    Glue_After_Zwj = '\U00010302'
+    E_Base_GAZ = '\U00010303'
+
 
 # https://unicode.org/reports/tr29/#Regex_Definitions
 GRAPHEME_CLUSTER_PATTERN = re.compile(
@@ -323,10 +341,16 @@ class EmojiSequence(StrEnum):
     """The different kinds of emoji sequences."""
     Basic_Emoji = 'Basic_Emoji'
     Emoji_Keycap_Sequence = 'Emoji_Keycap_Sequence'
+    # In more recent UCD versions:
     RGI_Emoji_Flag_Sequence = 'RGI_Emoji_Flag_Sequence'
     RGI_Emoji_Tag_Sequence = 'RGI_Emoji_Tag_Sequence'
     RGI_Emoji_Modifier_Sequence = 'RGI_Emoji_Modifier_Sequence'
     RGI_Emoji_ZWJ_Sequence = 'RGI_Emoji_ZWJ_Sequence'
+    # In older Unicode Emoji versions:
+    Emoji_Flag_Sequence = 'Emoji_Flag_Sequence'
+    Emoji_Tag_Sequence = 'Emoji_Tag_Sequence'
+    Emoji_Modifier_Sequence = 'Emoji_Modifier_Sequence'
+    Emoji_ZWJ_Sequence = 'Emoji_ZWJ_Sequence'
 
 
 # --------------------------------------------------------------------------------------

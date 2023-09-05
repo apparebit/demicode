@@ -23,7 +23,7 @@ from .codepoint import (
     CodePointSequence,
 )
 
-from .parser import ingest, condense_ranges
+from .parser import extract_default, ingest, simplify_range_data, simplify_only_ranges
 from .mirror import (
     local_cache_directory,
     mirror_cldr_annotations,
@@ -125,11 +125,10 @@ def _retrieve_grapheme_cluster_properties(
     path = mirror_unicode_data(path, file, version)
     defaults, data = ingest(
         path, lambda cp, p: (cp.to_range(), GraphemeCluster[p[0]]))
-    if len(defaults) != 1:
-        raise ValueError(f'"{file}" with {len(defaults)} instead of one')
-    if defaults[0][0] != CodePointRange.ALL:
-        raise ValueError(f'"{file}" with default that covers only {defaults[0][0]}')
-    return defaults[0][1], sorted(data, key=lambda d: d[0])
+    return (
+        extract_default(defaults, GraphemeCluster.Other, 'grapheme cluster break'),
+        sorted(data, key=lambda d: d[0])
+    )
 
 
 def _retrieve_blocks(path: Path, version: Version) -> list[tuple[CodePointRange, str]]:
@@ -149,12 +148,10 @@ def _retrieve_widths(
 ) -> tuple[EastAsianWidth, list[tuple[CodePointRange, EastAsianWidth]]]:
     path = mirror_unicode_data(path, 'EastAsianWidth.txt', version)
     defaults, data = ingest(path, lambda cp, p: (cp.to_range(), EastAsianWidth(p[0])))
-    if len(defaults) != 1:
-        raise ValueError(f'"EastAsianWidth.txt" with {len(defaults)} instead of one')
-    if defaults[0][0] != CodePointRange.ALL:
-        raise ValueError(
-            f'"EastAsianWidth.txt" with default that covers only {defaults[0][0]}')
-    return EastAsianWidth(defaults[0][1]), data
+    return (
+        extract_default(defaults, EastAsianWidth.Neutral, 'East Asian width'),
+        data
+    )
 
 
 def _retrieve_emoji_data(
@@ -164,7 +161,7 @@ def _retrieve_emoji_data(
         path = mirror_unicode_data(path, 'emoji-data.txt', version)
     except VersionError:
         logger.warning('skipping emoji data for UCD %s', version)
-        return {}
+        return defaultdict(list)
 
     _, raw_data = ingest(path, lambda cp, p: (cp.to_range(), p[0]))
 
@@ -189,7 +186,7 @@ def _retrieve_emoji_variations(path: Path, version: Version) -> list[CodePoint]:
 _EMOJI_VERSION = re.compile(r'E(\d+\.\d+)')
 
 _EmojiSequenceEntry: TypeAlias = tuple[
-    CodePoint | CodePointSequence, EmojiSequence, None | str, Version]
+    CodePoint | CodePointSequence, EmojiSequence, None | str, None | Version]
 
 def _retrieve_emoji_sequences(
     root: Path, version: Version
@@ -216,9 +213,7 @@ def _retrieve_emoji_sequences(
     result: list[_EmojiSequenceEntry] = []
     for codepoints, prop, name, emoji_version in itertools.chain(data1, data2):
         match = _EMOJI_VERSION.match(emoji_version)
-        if match is None:
-            raise ValueError(f'emoji sequence {codepoints!r} lacks comment with age')
-        age = Version.of(match.group(1))
+        age = None if match is None else Version.of(match.group(1))
 
         if isinstance(codepoints, (CodePoint, CodePointSequence)):
             result.append((codepoints, prop, name, age))
@@ -362,7 +357,7 @@ class UnicodeCharacterDatabase:
         """
         if self._is_prepared:
             raise ValueError('trying to update UCD version after UCD has been ingested')
-        self._version = Version.of(version).ucd()
+        self._version = Version.of(version).to_ucd()
 
     def prepare(self) -> Self:
         """
@@ -396,7 +391,7 @@ class UnicodeCharacterDatabase:
         # download them—of course, written in Python. 😜
         invalid = False
         annotations = _retrieve_cldr_annotations(path)
-        emoji_sequences: dict[CodePoint | CodePointSequence, tuple[str, Version]] = {}
+        emoji_sequences: dict[CodePoint | CodePointSequence, tuple[str, None | Version]] = {}
         for codepoints, _, name, age in _retrieve_emoji_sequences(path, version):
             if name is None:
                 name = annotations.get(str(codepoints))
@@ -426,15 +421,11 @@ class UnicodeCharacterDatabase:
         if self._is_optimized:
             return
 
-        self._grapheme_props = condense_ranges(self._grapheme_props)
-        self._width_ranges = condense_ranges(self._width_ranges)
+        self._grapheme_props = [*simplify_range_data(self._grapheme_props)]
+        self._width_ranges = [*simplify_range_data(self._width_ranges)]
         for property in self._emoji_data:
-            ranges = self._emoji_data[property]
-            self._emoji_data[property] = condense_ranges(
-                ranges,
-                decompose=lambda r: (r, None),
-                compose=lambda r, _: r,
-            )
+            self._emoji_data[property] = (
+                simplify_only_ranges(self._emoji_data[property]))
         self._is_optimized = True
 
     def validate(self) -> None:
@@ -631,47 +622,58 @@ class UnicodeCharacterDatabase:
                     idx -= 1
                 return 0 <= idx < len(ranges) and codepoint in ranges[idx]
 
-    def count_property(
+    def count_property_values(
         self,
         property: BinaryProperty | ComplexProperty,
-        *,
-        ranges_only: bool = False
-    ) -> int:
+    ) -> tuple[int, int]:
+        """
+        Count the number of code points that have a non-default property value.
+        If the property is accessed by bisecting an ordered list of code point
+        ranges, also count the number of distinct ranges. Otherwise, the second
+        count is the same. A pair of negative ones indicates that the property
+        is not currently maintained.
+        """
         self.prepare()
 
         if isinstance(property, BinaryProperty):
             match property:
                 case BinaryProperty.Dash:
-                    return len(self._dashes)
+                    count = len(self._dashes)
+                    return count, count
                 case BinaryProperty.Noncharacter_Code_Point:
-                    return len(self._noncharacters)
+                    count = len(self._noncharacters)
+                    return count, count
                 case BinaryProperty.Variation_Selector:
-                    return len(self._variation_selectors)
+                    count = len(self._variation_selectors)
+                    return count, count
                 case BinaryProperty.White_Space:
-                    return len(self._whitespace)
+                    count = len(self._whitespace)
+                    return count, count
                 case _:
-                    if ranges_only:
-                        return len(self._emoji_data[property.name])
-                    return sum(len(r) for r in self._emoji_data[property.name])
+                    return (
+                        sum(len(r) for r in self._emoji_data[property.name]),
+                        len(self._emoji_data[property.name]),
+                    )
 
-        def count(ranges: Sequence[tuple[CodePointRange, *_Ts]]) -> int:
-            if ranges_only:
-                return len(ranges)
-            return sum(len(r[0]) for r in ranges)
+        def get_counts(
+            ranges: Sequence[tuple[CodePointRange, *_Ts]]  # type: ignore[valid-type]
+        ) -> tuple[int, int]:
+            return sum(len(r[0]) for r in ranges), len(ranges)
 
         match property:
             case ComplexProperty.Canonical_Combining_Class:
-                return 0
+                return -1, -1
             case ComplexProperty.East_Asian_Width:
-                return count(self._width_ranges)
+                return get_counts(self._width_ranges)
             case ComplexProperty.General_Category:
-                return 0
+                count = len(self._info_entries)
+                return count, count
             case ComplexProperty.Grapheme_Cluster_Break:
-                return count(self._grapheme_props)
+                return get_counts(self._grapheme_props)
             case ComplexProperty.Indic_Syllabic_Category:
-                return 0
+                return -1, -1
             case ComplexProperty.Script:
-                return 0
+                return -1, -1
 
     # ----------------------------------------------------------------------------------
     # Emoji sequences
@@ -687,7 +689,7 @@ class UnicodeCharacterDatabase:
 
     def _to_emoji_info(
         self, codepoints: CodePoint | CodePointSequence
-    ) -> None | tuple[str, Version]:
+    ) -> None | tuple[str, None | Version]:
         # codepoints.is_singleton() MUST IMPLY isinstance(codepoints, CodePoint)
         result = self._emoji_sequences.get(codepoints)
         if result is not None or codepoints.is_singleton():
@@ -710,7 +712,7 @@ class UnicodeCharacterDatabase:
 
     def emoji_sequence_data(
         self, codepoints: CodePoint | CodePointSequence | str
-    ) -> tuple[None, None] | tuple[str, Version]:
+    ) -> tuple[None, None] | tuple[str, None | Version]:
         """
         Get the CLDR name and Unicode Emoji age for the emoji sequence.
         Unlike Unicode Emoji's files, this method recognizes code points that

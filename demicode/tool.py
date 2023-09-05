@@ -286,7 +286,7 @@ def process(options: argparse.Namespace, renderer: Renderer) -> int:
             ComplexProperty.East_Asian_Width,
             ComplexProperty.Grapheme_Cluster_Break,
         )):
-            points, ranges = UCD.count_property(property)
+            points, ranges = UCD.count_property_values(property)
             print(f'    {property.name:<25} : {points:7,d} / {ranges:5,d}')
         print()
         return 0

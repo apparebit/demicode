@@ -47,7 +47,7 @@ PROPERTY_COUNTS = {
 
 def do_test_counts() -> None:
     for property, (cp_count, range_count, min_range_count) in PROPERTY_COUNTS.items():
-        actual_count, actual_range_count = UCD.count_property(property)
+        actual_count, actual_range_count = UCD.count_property_values(property)
         expected_range_count = min_range_count if UCD.is_optimized else range_count
         assert actual_count == cp_count,\
             f'{property.name} has {actual_count} code points, not {cp_count}'

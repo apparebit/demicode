@@ -6,6 +6,13 @@ code editors. However, because terminals support styling a program's output with
 [ANSI escape sequences](https://en.wikipedia.org/wiki/ANSI_escape_code), they
 also are more amenable to helpful visualization than code editors.
 
+  - [Fixed-Width Character Blots](#fixed-width-character-blots)
+  - [Features](#features)
+  - [Installation](#installation)
+  - [Versions](#versions)
+  - [Etc](#etc)
+
+
 ## Fixed-Width Character Blots
 
 Demicode's core functionality is the **fixed-width character blot**, which
@@ -51,7 +58,7 @@ Demicode supports the following features:
   * Optionally **display blots `--in-more-color`/`-c` and
     `--in-dark-mode`/`-d`**. The first option may be given twice for even more
     color. The second option usually is superfluous because demicode
-    automatically detects dark mode.
+    automatically detects dark mode. See screenshot below.
   * Run `--with-curation` and `--with-…` other **carefully selected groups of
     graphemes**. Or provide your own graphemes as regular command line
     arguments. Both literal strings and Unicode's `U+…` notation are acceptable.
@@ -63,6 +70,10 @@ Demicode supports the following features:
     `--ucd-version` lets you pick older UCD versions at will.
   * **Page output** while also adjusting to terminal size changes just before
     rendering the next page.
+
+
+![Demicode's themes for light and dark mode and with more colors and doubly more
+colors](https://raw.githubusercontent.com/apparebit/demicode/boss/docs/terminal.app-mode-vs-brightness.png)
 
 
 ## Installation

@@ -30,7 +30,7 @@ from typing import Any, cast, IO, Literal, overload
 from urllib.request import Request, urlopen
 
 
-from .model import Version
+from .model import Version, VersionError
 from demicode import __version__
 
 
@@ -82,19 +82,27 @@ def ucd_url_of(file: str, version: None | Version = None) -> str:
     for Unicode versions 10.0, 9.0, and 8.0, which map to E5.0, E3.0, and E1.0,
     respectively. Earlier Unicode versions must do without emoji data.
     """
+    # ReadMe for latest version
     if file == 'ReadMe.txt':
         return 'https://www.unicode.org/Public/UCD/latest/ReadMe.txt'
 
     assert version is not None
 
+    # UCD files
     if file in _AUXILIARY_FILES:
         path = f'{version}/ucd/auxiliary'
     elif file in _CORE_EMOJI_FILES and version >= (13, 0, 0):
         path = f'{version}/ucd/emoji'
-    elif file in _CORE_EMOJI_FILES or file in _ALSO_EMOJI_FILES:
-        path = f'emoji/{version.in_short_format()}'
-    else:
+    elif file not in _CORE_EMOJI_FILES and file not in _ALSO_EMOJI_FILES:
         path = f'{version}/ucd'
+
+    # Unicode Emoji files
+    else:
+        emoji_version = version.to_emoji()
+        if emoji_version.is_v0():
+            raise VersionError(
+                f'UCD {version} corresponds to Emoji {emoji_version} without files')
+        path = f'emoji/{emoji_version.in_short_format()}'
 
     return f'https://www.unicode.org/Public/{path}/{file}'
 
@@ -115,7 +123,7 @@ def retrieve_latest_ucd_version(root: Path) -> Version:
     stamp_path = root / 'latest-ucd-version.txt'
     if stamp_path.is_file() and stamp_path.stat().st_mtime + _ONE_WEEK > time.time():
         try:
-            return Version.of(stamp_path.read_text('utf8')).ucd()
+            return Version.of(stamp_path.read_text('utf8')).to_ucd()
         except ValueError:
             pass
 

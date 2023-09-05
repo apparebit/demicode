@@ -25,7 +25,7 @@ import itertools
 from typing import Callable, cast, Literal, overload, TypeAlias
 
 from .codepoint import CodePoint, CodePointSequence
-from .model import Presentation
+from .model import GeneralCategory, Presentation
 from .render import Padding, Renderer
 from .ucd import UCD, Version
 
@@ -141,14 +141,21 @@ def format_blot(
     presentation: Presentation = Presentation.NONE,
 ) -> Iterator[str]:
     """Format the fixed-width character blot."""
-    # Validate grapheme cluster.
-    if not UCD.is_grapheme_cluster(codepoints):
-        raise ValueError(f'{codepoints!r} are not a single grapheme cluster')
+    # Determine display and width for blot. If the code points are an unassigned
+    # singleton or more than one grapheme cluster, their blots are elided.
+    presentation, codepoints = presentation.normalize(codepoints)
 
-    # Determine display and width for blot.
-    if codepoints.is_singleton():
-        display = presentation.apply(codepoints.to_singleton())
-        width = UCD.width(display)
+    if not UCD.is_grapheme_cluster(codepoints):
+        display = '···'
+        width = 3
+    elif codepoints.is_singleton():
+        codepoint = codepoints.to_singleton()
+        if UCD.category(codepoint) is GeneralCategory.Unassigned:
+            display = '···'
+            width = 3
+        else:
+            display = presentation.apply(codepoints.to_singleton())
+            width = UCD.width(display)
     else:
         display = str(codepoints)
         width = UCD.width(codepoints)
@@ -177,21 +184,28 @@ def format_info(
     """Format information about the code points."""
     yield renderer.column(start_column + 13)
 
-    # A grapheme cluster: Try to make presentation explicit. If it is none,
-    # display code points and, for emoji sequences, age and name.
+    # For code points, if they have implicit presentation, switch to single code
+    # point and presentation instead. Otherwise, display the code points, plus
+    # age and name for emoji sequences, plus disclaimer for non-grapheme-clusters.
+    presentation, codepoints = presentation.normalize(codepoints)
     if not codepoints.is_singleton():
-        assert isinstance(codepoints, CodePointSequence)
-        presentation = Presentation.unapply(codepoints)
-        if presentation is Presentation.NONE:
-            yield renderer.fit(repr(codepoints), width=PROPS_WIDTH-AGE_WIDTH, fill=True)
+        yield renderer.fit(repr(codepoints), width=PROPS_WIDTH - AGE_WIDTH, fill=True)
 
+        # Account for non-grapheme-clusters and emoji sequences.
+        name = age = None
+        if not UCD.is_grapheme_cluster(codepoints):
+            name = renderer.em(f'Not a grapheme cluster in v{UCD.version}')
+            name = f'[{name}]'
+        else:
             name, age = UCD.emoji_sequence_data(codepoints)
-            if name:
-                yield f'{cast(Version, age).in_emoji_format():>{AGE_WIDTH}} '
-                yield renderer.fit(name, width=_name_width(renderer.width))
-            return
 
-        codepoints = codepoints[0]
+        if age:
+            yield f'{cast(Version, age).in_emoji_format():>{AGE_WIDTH}}'
+        elif name:
+            yield ' ' * AGE_WIDTH
+        if name:
+            yield f' {renderer.fit(name, width=_name_width(renderer.width))}'
+        return
 
     # A single code point: Display detailed metadata including presentation.
     codepoint = codepoints.to_singleton()
@@ -213,8 +227,13 @@ def format_info(
     age_display = age.in_emoji_format() if age else age_display
     yield f' {age_display:>{AGE_WIDTH}} '
 
-    name = name or unidata.name or ''
-    block = unidata.block or ''
+    if unidata.category is GeneralCategory.Unassigned:
+        name = renderer.em(f'Unassigned in v{UCD.version}')
+        name = f'[{name}]'
+        block = ''
+    else:
+        name = name or unidata.name or ''
+        block = unidata.block or ''
     if name and block:
         name = name + ' '
     if block:

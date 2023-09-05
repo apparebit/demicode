@@ -62,12 +62,14 @@ Demicode supports the following features:
   * Run `--with-curation` and `--with-…` other **carefully selected groups of
     graphemes**. Or provide your own graphemes as regular command line
     arguments. Both literal strings and Unicode's `U+…` notation are acceptable.
+    Quote several `U+…` forms to group them into a grapheme.
   * **Automatically download necessary files** from the [Unicode Character
     Database](https://unicode.org/ucd/) (UCD) and [Common Locale Data
     Repository](https://cldr.unicode.org/) (CLDR) and then cache them locally.
-  * **Automatically detect the most recent version of UCD and CLDR**. The latter
-    provides names only and hence doesn't support any other versions. But
-    `--ucd-version` lets you pick older UCD versions at will.
+  * **Automatically detect the most recent version of the UCD and the CLDR**.
+    Since CLDR data serves one, non-normative purpose only, emoji sequence
+    names, demicode always utilizes the latest version. But `--ucd-version` lets
+    you pick older UCD versions at will.
   * **Page output** while also adjusting to terminal size changes just before
     rendering the next page.
 
@@ -116,6 +118,9 @@ The output of the last command should look something like the first screenshot.
 
 ## Versions
 
+  - **v0.6.0** (2023/09/05) Fix handling of emoji data for early versions of
+    Unicode. Suppress blot for unassigned code points or sequences that are more
+    than one grapheme cluster; add explanatory note.
   - **v0.5.0** (2023/09/04) Optimize range-based Unicode data for space and
     bisection speed. Improve built-in selections of graphemes; notably, the
     Unicode version oracle now displays exactly one emoji per detectable Unicode

@@ -85,7 +85,8 @@ def configure_parser() -> argparse.ArgumentParser:
     ucd_group.add_argument(
         '--ucd-optimize',
         action=argparse.BooleanOptionalAction,
-        help='optimize UCD data',
+        default=True,
+        help='optimize UCD data (default is to optimize)',
     )
     ucd_group.add_argument(
         '--ucd-validate',
@@ -276,6 +277,7 @@ def process(options: argparse.Namespace, renderer: Renderer) -> int:
         print(renderer.strong('Code Points / Ranges with Given Property'))
         print()
 
+        total_ranges = 0
         for property in cast(tuple[BinaryProperty | ComplexProperty,...], (
             BinaryProperty.Emoji,
             BinaryProperty.Emoji_Component,
@@ -284,10 +286,15 @@ def process(options: argparse.Namespace, renderer: Renderer) -> int:
             BinaryProperty.Emoji_Presentation,
             BinaryProperty.Extended_Pictographic,
             ComplexProperty.East_Asian_Width,
+            ComplexProperty.Emoji_Sequence,
             ComplexProperty.Grapheme_Cluster_Break,
         )):
-            points, ranges = UCD.count_property_values(property)
+            points, ranges = cast(tuple[int, int], UCD.count_property_values(property))
             print(f'    {property.name:<25} : {points:7,d} / {ranges:5,d}')
+            total_ranges += ranges
+
+        print('    ' + '–' * (25 + 13 + 5))
+        print(f'    {"Total number of ranges":<25} :           {total_ranges:5,d}')
         print()
         return 0
 

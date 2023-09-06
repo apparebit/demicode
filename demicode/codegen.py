@@ -27,7 +27,7 @@ def retrieve_property_values(
 
     properties_of_interest = set()
     for complex_property in ComplexProperty:
-        if complex_property is not ComplexProperty.Grapheme_Cluster_Break:
+        if not complex_property.is_manually_generated():
             properties_of_interest.add(complex_property.value)
 
     result = defaultdict(list)
@@ -49,14 +49,14 @@ def generate_property_values(
 
     yield '__all__ = ('
     for property in ComplexProperty:
-        if property is not ComplexProperty.Grapheme_Cluster_Break:
+        if not property.is_manually_generated():
             yield f'    "{property.name.replace("_", "")}",'
     yield ')'
     yield ''
     yield ''
 
     for property in ComplexProperty:
-        if property is not ComplexProperty.Grapheme_Cluster_Break:
+        if not property.is_manually_generated():
             yield f'class {property.name.replace("_", "")}(StrEnum):'
             for name, short_name in property_values[property.value]:
                 yield f'    {name} = "{short_name}"'

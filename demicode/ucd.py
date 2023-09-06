@@ -325,18 +325,6 @@ class UnicodeCharacterDatabase:
         self._is_prepared: bool = False
         self._is_optimized: bool = False
 
-    @property
-    def path(self) -> Path:
-        return self._path
-
-    @property
-    def version(self) -> None | Version:
-        return self._version
-
-    @property
-    def is_optimized(self) -> bool:
-        return self._is_optimized
-
     def use_path(self, path: Path) -> None:
         """
         Use the given path for locally mirroring UCD files. It is an error to
@@ -391,7 +379,9 @@ class UnicodeCharacterDatabase:
         # download them—of course, written in Python. 😜
         invalid = False
         annotations = _retrieve_cldr_annotations(path)
-        emoji_sequences: dict[CodePoint | CodePointSequence, tuple[str, None | Version]] = {}
+        emoji_sequences: dict[
+            CodePoint | CodePointSequence, tuple[str, None | Version]
+        ] = {}
         for codepoints, _, name, age in _retrieve_emoji_sequences(path, version):
             if name is None:
                 name = annotations.get(str(codepoints))
@@ -485,6 +475,23 @@ class UnicodeCharacterDatabase:
 
         if invalid:
             raise AssertionError('UCD validation failed; see log messages')
+
+    # ----------------------------------------------------------------------------------
+    # Introspecting the Configuration
+
+    @property
+    def path(self) -> Path:
+        self.prepare()
+        return self._path
+
+    @property
+    def version(self) -> Version:
+        self.prepare()
+        return cast(Version, self._version)
+
+    @property
+    def is_optimized(self) -> bool:
+        return self._is_optimized
 
     # ----------------------------------------------------------------------------------
     # Property Lookup
@@ -625,35 +632,15 @@ class UnicodeCharacterDatabase:
     def count_property_values(
         self,
         property: BinaryProperty | ComplexProperty,
-    ) -> tuple[int, int]:
+    ) -> None | tuple[int, int]:
         """
         Count the number of code points that have a non-default property value.
         If the property is accessed by bisecting an ordered list of code point
         ranges, also count the number of distinct ranges. Otherwise, the second
-        count is the same. A pair of negative ones indicates that the property
-        is not currently maintained.
+        count is the same. `None` indicates that the property is not currently
+        maintained.
         """
         self.prepare()
-
-        if isinstance(property, BinaryProperty):
-            match property:
-                case BinaryProperty.Dash:
-                    count = len(self._dashes)
-                    return count, count
-                case BinaryProperty.Noncharacter_Code_Point:
-                    count = len(self._noncharacters)
-                    return count, count
-                case BinaryProperty.Variation_Selector:
-                    count = len(self._variation_selectors)
-                    return count, count
-                case BinaryProperty.White_Space:
-                    count = len(self._whitespace)
-                    return count, count
-                case _:
-                    return (
-                        sum(len(r) for r in self._emoji_data[property.name]),
-                        len(self._emoji_data[property.name]),
-                    )
 
         def get_counts(
             ranges: Sequence[tuple[CodePointRange, *_Ts]]  # type: ignore[valid-type]
@@ -661,19 +648,39 @@ class UnicodeCharacterDatabase:
             return sum(len(r[0]) for r in ranges), len(ranges)
 
         match property:
+            case BinaryProperty.Dash:
+                count = len(self._dashes)
+                return count, count
+            case BinaryProperty.Noncharacter_Code_Point:
+                count = len(self._noncharacters)
+                return count, count
+            case BinaryProperty.Variation_Selector:
+                count = len(self._variation_selectors)
+                return count, count
+            case BinaryProperty.White_Space:
+                count = len(self._whitespace)
+                return count, count
+            case BinaryProperty():
+                return (
+                    sum(len(r) for r in self._emoji_data[property.name]),
+                    len(self._emoji_data[property.name]),
+                )
             case ComplexProperty.Canonical_Combining_Class:
-                return -1, -1
+                return None
             case ComplexProperty.East_Asian_Width:
                 return get_counts(self._width_ranges)
+            case ComplexProperty.Emoji_Sequence:
+                count = len(self._emoji_sequences)
+                return count, count
             case ComplexProperty.General_Category:
                 count = len(self._info_entries)
                 return count, count
             case ComplexProperty.Grapheme_Cluster_Break:
                 return get_counts(self._grapheme_props)
             case ComplexProperty.Indic_Syllabic_Category:
-                return -1, -1
+                return None
             case ComplexProperty.Script:
-                return -1, -1
+                return None
 
     # ----------------------------------------------------------------------------------
     # Emoji sequences
@@ -712,7 +719,7 @@ class UnicodeCharacterDatabase:
 
     def emoji_sequence_data(
         self, codepoints: CodePoint | CodePointSequence | str
-    ) -> tuple[None, None] | tuple[str, None | Version]:
+    ) -> tuple[None | str, None | Version]:
         """
         Get the CLDR name and Unicode Emoji age for the emoji sequence.
         Unlike Unicode Emoji's files, this method recognizes code points that

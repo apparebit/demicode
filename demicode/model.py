@@ -165,10 +165,17 @@ class ComplexProperty(StrEnum):
     """
     Canonical_Combining_Class = 'ccc'
     East_Asian_Width = 'ea'
+    Emoji_Sequence = 'Emoji_Sequence'
     General_Category = 'gc'
     Grapheme_Cluster_Break = 'GCB'
     Indic_Syllabic_Category = 'InSC'
     Script = 'sc'
+
+    def is_manually_generated(self) -> bool:
+        return self in (
+            ComplexProperty.Emoji_Sequence,
+            ComplexProperty.Grapheme_Cluster_Break,
+        )
 
 
 class BinaryProperty(StrEnum):

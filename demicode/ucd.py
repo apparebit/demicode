@@ -409,7 +409,7 @@ class UnicodeCharacterDatabase:
     def optimize(self) -> Self:
         self.prepare()
         if self._is_optimized:
-            return
+            return self
 
         self._grapheme_props = [*simplify_range_data(self._grapheme_props)]
         self._width_ranges = [*simplify_range_data(self._width_ranges)]
@@ -690,6 +690,10 @@ class UnicodeCharacterDatabase:
     def _to_codepoints(
         self, codepoints: CodePoint | CodePointSequence | str
     ) -> CodePoint | CodePointSequence:
+        """
+        Convert any string to a code point sequence and any sequence with only
+        one code point to that code point.
+        """
         if isinstance(codepoints, str):
             codepoints = CodePointSequence.from_string(codepoints)
         if codepoints.is_singleton():
@@ -699,7 +703,11 @@ class UnicodeCharacterDatabase:
     def _to_emoji_info(
         self, codepoints: CodePoint | CodePointSequence
     ) -> None | tuple[str, None | Version]:
-        # codepoints.is_singleton() MUST IMPLY isinstance(codepoints, CodePoint)
+        """
+        Retrieve the name and age of the emoji sequence, if the code points are
+        such a sequence indeed. This method only works if the code points
+        argument has been converted to the right types with `_to_codepoints()`.
+        """
         result = self._emoji_sequences.get(codepoints)
         if result is not None or codepoints.is_singleton():
             return result

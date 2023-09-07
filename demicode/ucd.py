@@ -40,7 +40,7 @@ from .model import (
     GRAPHEME_CLUSTER_PATTERN,
     GraphemeCluster,
     Version,
-    VersionError,
+    VersioningError,
 )
 from demicode import __version__
 
@@ -159,8 +159,8 @@ def _retrieve_emoji_data(
 ) -> dict[str, list[CodePointRange]]:
     try:
         path = mirror_unicode_data(path, 'emoji-data.txt', version)
-    except VersionError:
-        logger.warning('skipping emoji data for UCD %s', version)
+    except VersioningError:
+        logger.info('skipping emoji data for UCD %s', version)
         return defaultdict(list)
 
     _, raw_data = ingest(path, lambda cp, p: (cp.to_range(), p[0]))
@@ -175,8 +175,8 @@ def _retrieve_emoji_data(
 def _retrieve_emoji_variations(path: Path, version: Version) -> list[CodePoint]:
     try:
         path = mirror_unicode_data(path, 'emoji-variation-sequences.txt', version)
-    except VersionError:
-        logger.warning('skipping emoji variation sequences for UCD %s', version)
+    except VersioningError:
+        logger.info('skipping emoji variation sequences for UCD %s', version)
         return []
 
     _, data = ingest(path, lambda cp, _: cp.to_sequence()[0])
@@ -193,8 +193,8 @@ def _retrieve_emoji_sequences(
 ) -> list[_EmojiSequenceEntry]:
     try:
         path = mirror_unicode_data(root, 'emoji-sequences.txt', version)
-    except VersionError:
-        logger.warning('skipping emoji sequences for UCD %s', version)
+    except VersioningError:
+        logger.info('skipping emoji sequences for UCD %s', version)
         return []
 
     _, data1 = ingest(

@@ -47,14 +47,18 @@ class CodePoint(int):
             return cls(ord(value))
         if length == 2 and value[1] in ('\uFE0E', '\uFE0F'):
             return cls(ord(value[0]))
-        if 6 <= length <= 8 and value.startswith('U+'):
+        if value.startswith('U+'):
+            if not (6 <= length <= 8):
+                raise ValueError(f'"U+" not followed by 4-6 hex digits in "{value}"')
+            return cls(value[2:], base=16)
+        if value.startswith('0x'):
+            if not (4 <= length <= 8):
+                raise ValueError(f'"0x" not followed by 2-6 hex digits in "{value}"')
             return cls(value[2:], base=16)
         if 4 <= length <= 6:
             return cls(value, base=16)
 
-        codepoints = ' '.join(str(CodePoint.of(c)) for c in value)
-        raise ValueError(
-            f'string of {codepoints} is not a valid code point representation')
+        raise ValueError(f'"{value}" does not consist of 4-6 hex digits')
 
     def is_singleton(self) -> bool:
         return True

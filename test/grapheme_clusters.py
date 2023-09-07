@@ -1,7 +1,6 @@
 # This module is machine-generated. Do not edit by hand.
 
-
-GRAPHEME_CLUSTERS = {
+GRAPHEME_CLUSTER_BREAKS_15_0 = {
     (0x0020, 0x0020): (0, 1, 2),
     (0x0020, 0x0308, 0x0020): (0, 2, 3),
     (0x0020, 0x000D): (0, 1, 2),
@@ -605,5 +604,3 @@ GRAPHEME_CLUSTERS = {
     (0x2701, 0x200D, 0x2701): (0, 3),
     (0x0061, 0x200D, 0x2701): (0, 2, 3),
 }
-
-

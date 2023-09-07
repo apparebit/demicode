@@ -406,7 +406,7 @@ class UnicodeCharacterDatabase:
         self._is_prepared = True
         return self
 
-    def optimize(self) -> None:
+    def optimize(self) -> Self:
         self.prepare()
         if self._is_optimized:
             return
@@ -417,8 +417,9 @@ class UnicodeCharacterDatabase:
             self._emoji_data[property] = (
                 simplify_only_ranges(self._emoji_data[property]))
         self._is_optimized = True
+        return self
 
-    def validate(self) -> None:
+    def validate(self) -> Self:
         self.prepare()
         invalid = False
 
@@ -475,6 +476,7 @@ class UnicodeCharacterDatabase:
 
         if invalid:
             raise AssertionError('UCD validation failed; see log messages')
+        return self
 
     # ----------------------------------------------------------------------------------
     # Introspecting the Configuration

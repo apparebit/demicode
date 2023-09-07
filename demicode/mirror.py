@@ -30,7 +30,7 @@ from typing import Any, cast, IO, Literal, overload
 from urllib.request import Request, urlopen
 
 
-from .model import Version, VersionError
+from .model import Version, VersioningError
 from demicode import __version__
 
 
@@ -100,7 +100,7 @@ def ucd_url_of(file: str, version: None | Version = None) -> str:
     else:
         emoji_version = version.to_emoji()
         if emoji_version.is_v0():
-            raise VersionError(
+            raise VersioningError(
                 f'UCD {version} corresponds to Emoji {emoji_version} without files')
         path = f'emoji/{emoji_version.in_short_format()}'
 
@@ -164,7 +164,13 @@ def local_cache_directory() -> Path:
 
 
 def mirror_unicode_data(root: Path, filename: str, version: Version) -> Path:
-    """Locally mirror a file from the Unicode Character Database."""
+    """
+    Locally mirror a file from the Unicode Character Database. This method
+    raises a `VersioningError` if the requested file does not yet exist for the
+    requested Unicode version. In particular, that may happen for files with
+    emoji data. Callers should be prepared to gracefully recover from this
+    exception.
+    """
     version_root = root / str(version)
     path = version_root / filename
     if not path.exists():

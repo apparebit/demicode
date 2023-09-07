@@ -280,6 +280,8 @@ def show_statistics(renderer: Renderer, is_optimized: bool) -> None:
         print(renderer.heading(text))
         print()
 
+    total_points = total_ranges = 0
+
     def show_counts(property: BinaryProperty | ComplexProperty) -> None:
         nonlocal total_points, total_ranges
         points, ranges = cast(tuple[int, int], UCD.count_property_values(property))
@@ -296,7 +298,6 @@ def show_statistics(renderer: Renderer, is_optimized: bool) -> None:
         print('\n')
 
     show_heading('Binary Emoji Properties:')
-    total_points = total_ranges = 0
     for property in (
         BinaryProperty.Emoji,
         BinaryProperty.Emoji_Component,

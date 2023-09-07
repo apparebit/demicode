@@ -130,6 +130,13 @@ TASTE_OF_EMOJI = tuple(_prep(text) for text in (
     '\u0001A Taste of Emoji',
     '\u200D',                             # ZERO-WIDTH JOINER
     '\U0001F1E9',                         # REGIONAL INDICATOR SYMBOL LETTER D
+    '\U0001F468',
+    '\U0001F468\U0001F3FF',
+    '\u2764\u0080',                       # PAD: no expansion with variation selectors!
+    '\u2764\uFE0F',
+    '\U0001F48B',
+    '\U0001F468\U0001F3FB',
+    '\U0001F468\U0001F3FF\u200D\u2764\uFE0F\u200D\U0001F48B\u200D\U0001F468\U0001F3FB',
     '\u26a1',                             # HIGH VOLTAGE        E0.6  4.0
     '\u2692',                             # HAMMER AND PICK     E1.0  4.1
     '\U0001F3DD',                         # DESERT ISLAND       E0.7  7.0
@@ -148,7 +155,7 @@ VERSION_ORACLE = tuple(_prep(text) for text in (
     # by default and an East Asian Width of wide.
     '\u0001Emoji Version Oracle',
     '\U0001F4A9',  # PILE OF POO (Emoji 0.6)
-    '\U0001F408\uFE0F',  # CAT (Emoji 0.7)
+    '\U0001F408\u0080',  # CAT (Emoji 0.7)
     '\U0001F918',  # SIGN OF THE HORNS, 8.0 (Emoji 1.0, covering Unicode 1.1--8.0)
     # Emoji 2.0 didn't add any suitable code points
     '\U0001F991',  # SQUID, 9.0 (Emoji 3.0)

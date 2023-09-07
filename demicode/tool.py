@@ -4,12 +4,14 @@ Demicode's command line tool.
 
 import argparse
 from collections.abc import Iterable, Sequence
+from contextlib import AbstractContextManager
 import itertools
 import logging
 from pathlib import Path
 import re
 from textwrap import dedent
 import traceback
+from types import TracebackType
 from typing import cast
 
 from .codegen import generate_code
@@ -29,15 +31,63 @@ from .ucd import UCD
 from demicode import __version__
 
 
+# The regular expression is more permissive than CodePoint.of()
+# to avoid treating such malformed inputs as literal strings.
 HEX_CODEPOINTS = re.compile(
     r"""
-        (?: U[+] )?  [0-9A-Fa-f]{4,6}
+        (?: U[+] | 0x )?  [0-9A-Fa-f]+
         (?:
-            \s+  (?: U[+] )?  [0-9A-Fa-f]{4,6}
+            \s+  (?: U[+] | 0x )?  [0-9A-Fa-f]+
         )*
     """,
     re.VERBOSE
 )
+
+
+# --------------------------------------------------------------------------------------
+
+
+class UserError(Exception):
+    """
+    An error indicating invalid user input. When code raises this error, it
+    probably is *not* helpful to print an exception trace.
+    """
+
+
+class user_error(AbstractContextManager):
+    """
+    A context manager to turn one or more exceptions into a user error. If the
+    context manager tries to exit with one of the listed exception types, it
+    instead raises a `UserError` with the message `msg.format(*args, **kwargs)`.
+    """
+
+    def __init__(
+        self,
+        exc_types: type[BaseException] | Sequence[type[BaseException]],
+        msg: str,
+        *args: object,
+        **kwargs: object,
+    ) -> None:
+        if isinstance(exc_types, type):
+            exc_types = (exc_types,)
+
+        self._exc_types = exc_types
+        self._msg = msg
+        self._args = args
+        self._kwargs = kwargs
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_value: BaseException | None,
+        _: TracebackType | None,
+    ) -> None:
+        if exc_type in self._exc_types:
+            msg = self._msg.format(*self._args, **self._kwargs)
+            raise UserError(msg) from exc_value
+
+
+# --------------------------------------------------------------------------------------
 
 
 def width_limited_formatter(prog: str) -> argparse.HelpFormatter:
@@ -62,7 +112,7 @@ def configure_parser() -> argparse.ArgumentParser:
             a sequence.
 
             Demicode requires Python 3.11 or later and a terminal that supports
-            Ansi escape codes including 256 colors. Demicode is © 2023 Robert
+            ANSI escape codes including 256 colors. Demicode is © 2023 Robert
             Grimm, licensed as open source under Apache 2.0.
 
                       <https://github.com/apparebit/demicode>
@@ -219,6 +269,72 @@ def configure_parser() -> argparse.ArgumentParser:
 # --------------------------------------------------------------------------------------
 
 
+def show_statistics(renderer: Renderer, is_optimized: bool) -> None:
+    qualifier = '(optimized)' if is_optimized else '(not optimized)'
+    title = renderer.strong(
+        f'Code Points / Ranges with Non-Default Property Values {qualifier}'
+    )
+    print(f'\n{title}\n')
+
+    def show_heading(text: str) -> None:
+        print(renderer.heading(text))
+        print()
+
+    def show_counts(property: BinaryProperty | ComplexProperty) -> None:
+        nonlocal total_points, total_ranges
+        points, ranges = cast(tuple[int, int], UCD.count_property_values(property))
+        print(f'     {property.name:<25} : {points:7,d} / {ranges:6,d}')
+        total_points += points
+        total_ranges += ranges
+
+    def show_total() -> None:
+        print('    ' + renderer.hint('–' * (1 + 25 + 13 + 6 + 1)))
+        print(
+            f'     {"Totals":<25} : '
+            + f'{total_points:7,d} / {total_ranges:6,d}'
+        )
+        print('\n')
+
+    show_heading('Binary Emoji Properties:')
+    total_points = total_ranges = 0
+    for property in (
+        BinaryProperty.Emoji,
+        BinaryProperty.Emoji_Component,
+        BinaryProperty.Emoji_Modifier,
+        BinaryProperty.Emoji_Modifier_Base,
+        BinaryProperty.Emoji_Presentation,
+        BinaryProperty.Extended_Pictographic,
+    ):
+        show_counts(property)
+    show_total()
+
+    show_heading('Or, Emoji Enumeration:')
+    show_counts(ComplexProperty.Emoji_Sequence)
+    print('\n')
+
+    show_heading('Also Needed, Complex Properties:')
+    total_points = total_ranges = 0
+    for property in (
+        ComplexProperty.East_Asian_Width,
+        ComplexProperty.Grapheme_Cluster_Break,
+    ):
+        show_counts(property)
+    show_total()
+
+    show_heading('Also Needed, Ages and Names:')
+    show_counts(ComplexProperty.General_Category)
+    print('\n')
+
+    q1 = 'no-' if is_optimized else ''
+    q2 = 'before' if is_optimized else 'after'
+    hint = f'Use --{q1}ucd-optimize to see range counts {q2} optimization'
+    print(renderer.hint(hint))
+    print()
+
+
+# --------------------------------------------------------------------------------------
+
+
 def run(arguments: Sequence[str]) -> int:
     # -------------------------- Parse the options and prepare console renderer
     parser = configure_parser()
@@ -240,10 +356,18 @@ def run(arguments: Sequence[str]) -> int:
 
     try:
         return process(options, renderer)
+    except UserError as x:
+        print(renderer.error(x.args[0]))
+        if x.__context__:
+            print(f'In particular: {x.__context__.args[0]}')
+        return 1
     except Exception as x:
-        print(renderer.error(f'Error: {str(x)}'))
-        if options.in_verbose:
-            print('\n'.join(traceback.format_exception(x)))
+        print(renderer.error(
+            'Demicode encountered an unexpected error. For details, please see the\n'
+            'exception trace below. If you can exclude your system as cause, please\n'
+            'file an issue at https://github.com/apparebit/demicode/issues.\n'
+        ))
+        print('\n'.join(traceback.format_exception(x)))
         return 1
 
 
@@ -255,10 +379,15 @@ def process(options: argparse.Namespace, renderer: Renderer) -> int:
 
     # --------------------------------------------------------------- Prepare UCD
     if options.ucd_path:
-        UCD.use_path(Path(options.ucd_path))
+        with user_error(
+            ValueError, '"{}" is not a valid UCD directory', options.ucd_path
+        ):
+            UCD.use_path(Path(options.ucd_path))
     if options.ucd_version:
-        UCD.use_version(options.ucd_version)
-
+        with user_error(
+            ValueError, '"{}" is not a valid UCD version ', options.ucd_version
+        ):
+            UCD.use_version(options.ucd_version)
     UCD.prepare()
 
     if options.ucd_optimize:
@@ -269,36 +398,14 @@ def process(options: argparse.Namespace, renderer: Renderer) -> int:
     # -------------------------------------------------------------- Leverage UCD
     if options.generate_code:
         assert UCD.version is not None
-        generate_code(UCD.path, UCD.version)
+        generate_code(UCD.path)
         return 0
 
     if options.stats:
-        print()
-        print(renderer.strong('Code Points / Ranges with Given Property'))
-        print()
-
-        total_ranges = 0
-        for property in cast(tuple[BinaryProperty | ComplexProperty,...], (
-            BinaryProperty.Emoji,
-            BinaryProperty.Emoji_Component,
-            BinaryProperty.Emoji_Modifier,
-            BinaryProperty.Emoji_Modifier_Base,
-            BinaryProperty.Emoji_Presentation,
-            BinaryProperty.Extended_Pictographic,
-            ComplexProperty.East_Asian_Width,
-            ComplexProperty.Emoji_Sequence,
-            ComplexProperty.Grapheme_Cluster_Break,
-        )):
-            points, ranges = cast(tuple[int, int], UCD.count_property_values(property))
-            print(f'    {property.name:<25} : {points:7,d} / {ranges:5,d}')
-            total_ranges += ranges
-
-        print('    ' + '–' * (25 + 13 + 5))
-        print(f'    {"Total number of ranges":<25} :           {total_ranges:5,d}')
-        print()
+        show_statistics(renderer, options.ucd_optimize)
         return 0
 
-    # ---------------------------------------- Determine code points to display
+    # ----------------------------------------- Determine code points to display
     codepoints: list[Iterable[CodePoint|CodePointSequence|str]] = []
     # Standard selections
     if options.with_ucd_dashes:
@@ -329,19 +436,22 @@ def process(options: argparse.Namespace, renderer: Renderer) -> int:
         codepoints.append(CHEVRONS)
 
     for argument in options.graphemes:
-        if HEX_CODEPOINTS.match(argument):
-            cluster = CodePointSequence.of(*argument.split())
-        else:
-            cluster = CodePointSequence.from_string(argument)
+        with user_error(
+            ValueError, '"{}" is not a valid code point sequence', argument
+        ):
+            if HEX_CODEPOINTS.match(argument):
+                cluster = CodePointSequence.of(*argument.split())
+            else:
+                cluster = CodePointSequence.from_string(argument)
 
         if not UCD.is_grapheme_cluster(cluster):
-            raise ValueError(f'{cluster!r} is more than one grapheme cluster!')
+            raise UserError(f'{cluster!r} is more than one grapheme cluster!')
         codepoints.append(
             [cluster.to_singleton() if cluster.is_singleton() else cluster])
 
     # -------------------------------- If there's nothing to display, help user
     if len(codepoints) == 0:
-        raise ValueError(dedent("""\
+        raise UserError(dedent("""\
             There are no code points to show.
             Maybe try again with "1F49D" as argument——
             or with "-h" to see all options.

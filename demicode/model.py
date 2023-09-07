@@ -14,7 +14,11 @@ from ._property import *
 # Versions
 
 
-class VersionError(Exception):
+class VersioningError(Exception):
+    """
+    An error indicating that some resource is not available for the requested
+    version of Unicode. See `demicode.mirror.mirror_unicode_data()` for details.
+    """
     pass
 
 

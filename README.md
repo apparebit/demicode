@@ -118,6 +118,10 @@ The output of the last command should look something like the first screenshot.
 
 ## Versions
 
+  - **v0.7.0** (2023/09/06) Clearly distinguish between user errors and
+    unexpected exceptions; print traceback only for the latter. Modularize test
+    script using `unittest`. In preparation of Unicode 15.1, specify which
+    versions to use for code generation.
   - **v0.6.0** (2023/09/05) Fix handling of emoji data for early versions of
     Unicode. Suppress blot for unassigned code points or sequences that are more
     than one grapheme cluster; add explanatory note.

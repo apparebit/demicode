@@ -31,6 +31,8 @@ from .ucd import UCD, Version
 
 
 CodePoints: TypeAlias = CodePoint | CodePointSequence
+HeadingPresentation = tuple[Literal[Presentation.HEADING], str]
+CodePointPresentation = tuple[Presentation, CodePoints]
 
 
 # --------------------------------------------------------------------------------------
@@ -40,30 +42,40 @@ CodePoints: TypeAlias = CodePoint | CodePointSequence
 @overload
 def make_presentable(
     data: Iterable[CodePoints | str], *, headings: Literal[False]
-) -> Iterator[tuple[Presentation, CodePoints]]: ...
+) -> Iterator[CodePointPresentation]: ...
 
 @overload
 def make_presentable(
     data: Iterable[CodePoints | str], *, headings: bool = ...
-) -> Iterator[tuple[Presentation, CodePoints]|tuple[str, None]]: ...
+) -> Iterator[HeadingPresentation | CodePointPresentation]: ...
 
 def make_presentable(
     data: Iterable[CodePoints | str],
     *,
     headings: bool = True,  # Allow embedded headings
-) -> Iterator[tuple[Presentation, CodePoints]|tuple[str, None]]:
-    """Enrich code points with their presentation."""
+) -> Iterator[HeadingPresentation | CodePointPresentation]:
+    """
+    Enrich code points with their presentation.
+
+    If a character that usually is subject to variation selectors is directly
+    followed by U+0080, pad, that padding is stripped from the code points and
+    the presentation becomes the default `NONE`. In other words, U+0080 disables
+    this function's enrichment with presentation for a given code point.
+    """
     for datum in data:
         if isinstance(datum, str):
             if not datum:
                 continue
             if datum[0] == '\u0001':
                 if headings:
-                    yield datum, None
+                    yield Presentation.HEADING, datum
                 continue
             datum = CodePointSequence.from_string(datum)
 
         if not datum.is_singleton():
+            datum = datum.to_sequence()
+            if len(datum) == 2 and datum[1] == 0x0080:
+                datum = datum[0]
             yield Presentation.NONE, datum
             continue
 
@@ -253,24 +265,23 @@ def format_info(
 
 def format_lines(
     renderer: Renderer,
-    stream: Iterable[tuple[Presentation, CodePoints]|tuple[str, None]],
+    stream: Iterable[HeadingPresentation | CodePointPresentation],
 ) -> Iterator[str]:
     """Emit the extended, per-line representation for all code points."""
     for presentation, codepoints in stream:
-        if isinstance(presentation, str):
-            yield format_heading(renderer, presentation)
+        if presentation.is_heading:
+            yield format_heading(renderer, cast(str, codepoints))
         else:
-            assert codepoints is not None
             yield ''.join(
                 itertools.chain(
                     format_blot(
                         renderer,
-                        codepoints,
+                        cast(CodePoint | CodePointSequence, codepoints),
                         presentation=presentation,
                     ),
                     format_info(
                         renderer,
-                        codepoints,
+                        cast(CodePoint | CodePointSequence, codepoints),
                         presentation=presentation,
                     )
                 )
@@ -279,7 +290,7 @@ def format_lines(
 
 def format_grid_lines(
     renderer: Renderer,
-    stream: Iterable[tuple[Presentation, CodePoint | CodePointSequence]],
+    stream: Iterable[CodePointPresentation],
 ) -> Iterator[str]:
     """Emit the compact, grid-like representation for all code points."""
     column_count = (renderer.width - 1) // 11
@@ -309,29 +320,46 @@ def page_lines(
     make_legend: None | Callable[[Renderer], str] = None,
 ) -> None:
     """
-    Display one page of lines at a time. This function updates the terminal size
-    for every page and accordingly adjusts output. For that reason, it recreates
-    the legend for every page as well, hence requiring a function.
+    Display one page of lines at a time. This function should update the
+    terminal size just before displaying the previous or next page and then
+    regenerate its output accordingly. That means that the input to the pager
+    should be the list of code points and grapheme clusters to cover as well as
+    the function for rendering lines of output.
+
+    TODO: move full page re-generation into the pager; switch to reading keyboard
+    without enter
     """
-    page_number = 0
-    hint = renderer.hint(' ‹return›: next page; q‹return›/‹ctrl-c›: quit') + '  '
+    p = renderer.strong('p')
+    n = renderer.strong('n')
+    q = renderer.strong('q')
+    hint = renderer.hint(f' [{p}revious • {n}ext • {q}uit] ‹return› /‹ctrl-c› ')
+
+    buffer = [*lines]
+    buffer_size = len(buffer)
+    start = stop = 0
+    forward = True
 
     while True:
         renderer.refresh()
-
-        page_number += 1
-        print(renderer.window_title(
-            f'demicode • UCD {UCD.version.in_short_format()} • page {page_number}'))
-
         legend = None if make_legend is None else make_legend(renderer)
         legend_height = 0 if legend is None else len(legend.splitlines())
         body_height = renderer.height - legend_height - 1
-        body = [*itertools.islice(lines, body_height)]
 
-        actual_body_height = len(body)
-        if actual_body_height == 0:
+        if forward:
+            start = stop + 1
+            stop = start + body_height
+            done = start >= buffer_size
+        else:
+            stop = start - 1
+            start = stop - body_height
+            done = stop <= 0
+
+        if done:
             print(renderer.window_title(''))
             return
+
+        body = buffer[start:stop]
+        actual_body_height = len(body)
         if actual_body_height < body_height:
             body.extend([''] * (body_height - actual_body_height))
 
@@ -342,5 +370,9 @@ def page_lines(
             s = input(hint).lower()
         except KeyboardInterrupt:
             return
-        if s == 'q' or s == 'quit':
+        if s in ('q', 'quit'):
             return
+        if s in ('', 'n', 'next', 'f', 'forward'):
+            forward = True
+        if s in ('p', 'prev', 'previous', 'b', 'back'):
+            forward = False

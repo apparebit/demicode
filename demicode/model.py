@@ -236,8 +236,13 @@ class Presentation(Enum):
     `EMOJI` are only valid with the code points included in
     `USD.with_emoji_variation`, and `KEYCAP` only with `#*0123456789`, which
     also are in `USD.with_emoji_variation`.
+
+    `NONE` means displaying a grapheme cluster without extra combining
+    characters. `HEADING` is *not* associated with code points but rather a
+    string for an instream heading.
     """
 
+    HEADING = -2
     NONE = -1
     CORNER = 0xFE00
     CENTER = 0xFE01
@@ -270,6 +275,10 @@ class Presentation(Enum):
                 return f'{chr(codepoint)}{chr(self.value)}'
 
     @property
+    def is_heading(self) -> bool:
+        return self is Presentation.HEADING
+
+    @property
     def is_emoji_variation(self) -> bool:
         return self in (Presentation.EMOJI, Presentation.KEYCAP)
 
@@ -282,7 +291,7 @@ class Presentation(Enum):
     ) -> 'tuple[Presentation, CodePoint | CodePointSequence]':
         if codepoints.is_singleton():
             return self, codepoints
-        assert isinstance(codepoints, CodePointSequence)
+        codepoints = codepoints.to_sequence()
         presentation = Presentation.unapply(codepoints)
         return (
             presentation,

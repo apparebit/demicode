@@ -110,6 +110,14 @@ def collect(
     return defaults, records
 
 
+def to_range_and_string(
+    codepoints: CodePoints,
+    properties: Properties
+) -> tuple[CodePointRange, str]:
+    """Normalize a parsed record to a code point range and single string."""
+    return codepoints.to_range(), properties[0]
+
+
 def ingest(
     path: Path,
     intern: Callable[[CodePoints, Properties], T],

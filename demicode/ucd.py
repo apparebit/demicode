@@ -636,7 +636,11 @@ class UnicodeCharacterDatabase:
     def is_grapheme_cluster(self, text: str | CodePoint | CodePointSequence) -> bool:
         """
         Determine whether the string, code point, or sequence of code points
-        forms a single Unicode grapheme cluster.
+        forms a single Unicode grapheme cluster. A single code point always is a
+        grapheme cluster. So invoking this method on a known code point makes
+        little sense. This method nonetheless accepts code points to simplify
+        calling code, which often handles code points and code point sequences
+        interchangeably.
         """
         if isinstance(text, CodePoint):
             return True

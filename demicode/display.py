@@ -175,7 +175,7 @@ def format_blot(
     # Fail gracefully for control, surrogate, and private use characters.
     if width == -1:
         width = 1
-        display = '\u2BD1' # UNCERTAINTY SIGN
+        display = '\uFFFD' # REPLACEMENT CHARACTER
 
     # Render Character Blots
     yield renderer.column(start_column + 1)
@@ -329,10 +329,7 @@ def page_lines(
     TODO: move full page re-generation into the pager; switch to reading keyboard
     without enter
     """
-    p = renderer.strong('p')
-    n = renderer.strong('n')
-    q = renderer.strong('q')
-    hint = renderer.hint(f' [{p}revious • {n}ext • {q}uit] ‹return› /‹ctrl-c› ')
+    hint = renderer.hint(f' [ ‹p›revious | ‹n›ext | ‹q›uit ] ‹return› ')
 
     buffer = [*lines]
     buffer_size = len(buffer)

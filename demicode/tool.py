@@ -285,14 +285,14 @@ def show_statistics(renderer: Renderer, is_optimized: bool) -> None:
     def show_counts(property: BinaryProperty | ComplexProperty) -> None:
         nonlocal total_points, total_ranges
         points, ranges = cast(tuple[int, int], UCD.count_property_values(property))
-        print(f'     {property.name:<25} : {points:7,d} / {ranges:6,d}')
+        print(f'     {property.name:<28} : {points:7,d} / {ranges:6,d}')
         total_points += points
         total_ranges += ranges
 
     def show_total() -> None:
-        print('    ' + renderer.hint('–' * (1 + 25 + 13 + 6 + 1)))
+        print('    ' + renderer.hint('–' * (1 + 28 + 13 + 6 + 1)))
         print(
-            f'     {"Totals":<25} : '
+            f'     {"Totals":<28} : '
             + f'{total_points:7,d} / {total_ranges:6,d}'
         )
         print('\n')
@@ -324,6 +324,10 @@ def show_statistics(renderer: Renderer, is_optimized: bool) -> None:
 
     show_heading('Also Needed, Ages and Names:')
     show_counts(ComplexProperty.General_Category)
+    print('\n')
+
+    show_heading('Miscellaneous Properties:')
+    show_counts(BinaryProperty.Default_Ignorable_Code_Point)
     print('\n')
 
     q1 = 'no-' if is_optimized else ''

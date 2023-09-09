@@ -23,7 +23,13 @@ from .codepoint import (
     CodePointSequence,
 )
 
-from .parser import extract_default, ingest, simplify_range_data, simplify_only_ranges
+from .parser import (
+    extract_default,
+    ingest,
+    simplify_range_data,
+    simplify_only_ranges,
+    to_range_and_string,
+)
 from .mirror import (
     local_cache_directory,
     mirror_cldr_annotations,
@@ -133,14 +139,20 @@ def _retrieve_grapheme_cluster_properties(
 
 def _retrieve_blocks(path: Path, version: Version) -> list[tuple[CodePointRange, str]]:
     path = mirror_unicode_data(path, 'Blocks.txt', version)
-    _, data = ingest(path, lambda cp, p: (cp.to_range(), p[0]))
+    _, data = ingest(path, to_range_and_string)
     return data
 
 
 def _retrieve_ages(path: Path, version: Version) -> list[tuple[CodePointRange, str]]:
     path = mirror_unicode_data(path, 'DerivedAge.txt', version)
-    _, data = ingest(path, lambda cp, p: (cp.to_range(), p[0]))
+    _, data = ingest(path, to_range_and_string)
     return sorted(data, key=lambda d: d[0])
+
+
+def _retrieve_default_ignorable(path: Path, version: Version) -> list[CodePointRange]:
+    path = mirror_unicode_data(path, 'DerivedCoreProperties.txt', version)
+    _, data = ingest(path, to_range_and_string)
+    return [r for r, p in data if p == BinaryProperty.Default_Ignorable_Code_Point.name]
 
 
 def _retrieve_widths(
@@ -163,7 +175,7 @@ def _retrieve_emoji_data(
         logger.info('skipping emoji data for UCD %s', version)
         return defaultdict(list)
 
-    _, raw_data = ingest(path, lambda cp, p: (cp.to_range(), p[0]))
+    _, raw_data = ingest(path, to_range_and_string)
 
     data = defaultdict(list)
     for range, label in raw_data:
@@ -236,7 +248,7 @@ _MISC_PROPS = ('White_Space', 'Dash', 'Noncharacter_Code_Point', 'Variation_Sele
 
 def _retrieve_misc_props(path: Path, version: Version) -> dict[str, set[CodePoint]]:
     path = mirror_unicode_data(path, 'PropList.txt', version)
-    _, data = ingest(path, lambda cp, p: (cp.to_range(), p[0]))
+    _, data = ingest(path, to_range_and_string)
 
     # It might be a good idea to actually measure performance and memory impact
     # of bisecting ranges versus hashing code points. Until such times, however,
@@ -269,22 +281,37 @@ def _retrieve_cldr_annotations(root: Path) -> dict[str, str]:
 # Look Up
 
 
-def _bisect_ranges(
+def _is_in_range(codepoint: CodePoint, ranges: Sequence[CodePointRange]) -> bool:
+    idx = stdlib_bisect_right(ranges, codepoint, key=lambda range: range.stop)
+    range_count = len(ranges)
+    if 0 < idx <= range_count and ranges[idx - 1].stop == codepoint:
+        idx -= 1
+    return 0 <= idx < range_count and codepoint in ranges[idx]
+
+
+def _bisect_range_data(
     range_data: Sequence[tuple[CodePointRange, *tuple[Any, ...]]], # type: ignore
     codepoint: CodePoint,
 ) -> int:
     idx = stdlib_bisect_right(range_data, codepoint, key=lambda rd: rd[0].stop)
-    if idx > 0 and range_data[idx - 1][0].stop == codepoint:
+    if 0 < idx <= len(range_data) and range_data[idx - 1][0].stop == codepoint:
         idx -= 1
 
     # Validate result
     if __debug__:
-        range = range_data[idx][0]
-        if codepoint not in range:
-            assert codepoint < range.start, f'{codepoint} should come before {range}'
-            if idx > 0:
-                range = range_data[idx-1][0]
-                assert range.stop < codepoint, f'{codepoint} should come after {range}'
+        if idx == len(range_data):
+            range = range_data[-1][0]
+            assert range.stop < codepoint,\
+                f'{codepoint} should come after last {range}'
+        else:
+            range = range_data[idx][0]
+            if codepoint not in range:
+                assert codepoint < range.start,\
+                     f'{codepoint} should come before {range}'
+                if idx > 0:
+                    range = range_data[idx-1][0]
+                    assert range.stop < codepoint,\
+                        f'{codepoint} should come after {range}'
 
     return idx
 
@@ -363,6 +390,7 @@ class UnicodeCharacterDatabase:
         self._info_ranges, self._info_entries = _retrieve_general_info(path, version)
         self._block_ranges = _retrieve_blocks(path, version)
         self._age_ranges = _retrieve_ages(path, version)
+        self._default_ignorable = _retrieve_default_ignorable(path, version)
         self._width_default, self._width_ranges = _retrieve_widths(path, version)
         self._grapheme_default, self._grapheme_props = (
             _retrieve_grapheme_cluster_properties(path, version))
@@ -413,6 +441,7 @@ class UnicodeCharacterDatabase:
 
         self._grapheme_props = [*simplify_range_data(self._grapheme_props)]
         self._width_ranges = [*simplify_range_data(self._width_ranges)]
+        self._default_ignorable = simplify_only_ranges(self._default_ignorable)
         for property in self._emoji_data:
             self._emoji_data[property] = (
                 simplify_only_ranges(self._emoji_data[property]))
@@ -428,7 +457,7 @@ class UnicodeCharacterDatabase:
         grapheme_props = self._grapheme_props
         for range in self._emoji_data[BinaryProperty.Extended_Pictographic]:
             for codepoint in range.codepoints():
-                entry = grapheme_props[_bisect_ranges(grapheme_props, codepoint)]
+                entry = grapheme_props[_bisect_range_data(grapheme_props, codepoint)]
                 if codepoint in entry[0]:
                     logger.error(
                         'extended pictograph %s %r has grapheme cluster break '
@@ -549,7 +578,7 @@ class UnicodeCharacterDatabase:
         default: _U,
     ) -> _T | _U:
         self.prepare()
-        record = ranges[_bisect_ranges(ranges, codepoint)]
+        record = ranges[_bisect_range_data(ranges, codepoint)]
         return record[1] if codepoint in record[0] else default
 
     def block(self, codepoint: CodePoint) -> None | str:
@@ -618,6 +647,8 @@ class UnicodeCharacterDatabase:
         match property:
             case BinaryProperty.Dash:
                 return codepoint in self._dashes
+            case BinaryProperty.Default_Ignorable_Code_Point:
+                return _is_in_range(codepoint, self._default_ignorable)
             case BinaryProperty.Noncharacter_Code_Point:
                 return codepoint in self._noncharacters
             case BinaryProperty.Variation_Selector:
@@ -625,11 +656,7 @@ class UnicodeCharacterDatabase:
             case BinaryProperty.White_Space:
                 return codepoint in self._whitespace
             case _:
-                ranges = self._emoji_data[property.name]
-                idx = stdlib_bisect_right(ranges, codepoint, key=lambda r: r.stop)
-                if idx > 0 and ranges[idx - 1].stop == codepoint:
-                    idx -= 1
-                return 0 <= idx < len(ranges) and codepoint in ranges[idx]
+                return _is_in_range(codepoint, self._emoji_data[property.name])
 
     def count_property_values(
         self,
@@ -653,6 +680,11 @@ class UnicodeCharacterDatabase:
             case BinaryProperty.Dash:
                 count = len(self._dashes)
                 return count, count
+            case BinaryProperty.Default_Ignorable_Code_Point:
+                return (
+                    sum(len(r) for r in self._default_ignorable),
+                    len(self._default_ignorable),
+                )
             case BinaryProperty.Noncharacter_Code_Point:
                 count = len(self._noncharacters)
                 return count, count

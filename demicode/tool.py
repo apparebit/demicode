@@ -17,13 +17,7 @@ from typing import cast
 from .codegen import generate_code
 from .codepoint import CodePoint, CodePointSequence
 from .darkmode import is_darkmode
-from .display import (
-    make_presentable,
-    format_grid_lines,
-    format_legend,
-    format_lines,
-    page_lines,
-)
+from .display import display
 from .model import BinaryProperty, ComplexProperty
 from .render import Mode, Renderer, StyledRenderer
 from .selection import *
@@ -99,9 +93,17 @@ def configure_parser() -> argparse.ArgumentParser:
         prog='demicode',
         description="""        "It's not just Unicode, it's hemi-semi-demicode!\"""",
         epilog=dedent("""
-            Demicode's output is paged. Press <return> to advance to the next
-            page. If you enter "q" or "quit" before the <return>, demicode
-            terminates immediately. It does the same if you press <control-c>.
+            Demicode pages its output and, after displaying a page, waits for
+            your input on what to do next. On Linux and macOS, use the left and
+            right cursor keys to go backward and forward one page. Use <escape>,
+            <q>, or <x> to terminate demicode instead. On all other operating
+            systems, enter a command and then confirm it with <return>:
+
+              * "b", "back", "backward", "p", and "previous" go backward one page.
+              * "", "f", "forward", "n", and "next" go forward one page.
+              * "q", "quit", "x", and "exit" terminate demicode.
+
+            Linux and macOS recognize the single letter commands as well.
 
             If available, Demicode's grapheme-per-line mode shows the name of a
             code point or emoji sequence. NAMES IN ALL-CAPS denote code points,
@@ -463,26 +465,11 @@ def process(options: argparse.Namespace, renderer: Renderer) -> int:
         """))
 
     # ----------------------------------------------------- Display code points
-    if options.in_grid:
-        page_lines(
-            renderer,
-            format_grid_lines(
-                renderer,
-                make_presentable(
-                    itertools.chain.from_iterable(codepoints),
-                    headings=False
-                ),
-            ),
-        )
-    else:
-        page_lines(
-            renderer,
-            format_lines(
-                renderer,
-                make_presentable(itertools.chain.from_iterable(codepoints)),
-            ),
-            make_legend=format_legend,
-        )
+    display(
+        renderer,
+        itertools.chain.from_iterable(codepoints),
+        in_grid=options.in_grid
+    )
 
     # -------------------------------------------------------------------- Done
     return 0

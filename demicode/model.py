@@ -185,6 +185,7 @@ class ComplexProperty(StrEnum):
 class BinaryProperty(StrEnum):
     """Supported binary Unicode properties"""
     Dash = 'Dash'
+    Default_Ignorable_Code_Point = 'DI'
     Emoji = 'Emoji'
     Emoji_Component = 'EComp'
     Emoji_Modifier = 'EMod'

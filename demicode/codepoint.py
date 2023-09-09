@@ -16,7 +16,6 @@ and implementation of the UCD parser.
 
 from collections.abc import Iterator
 from dataclasses import dataclass
-from enum import Enum
 from types import NotImplementedType
 from typing import Any, ClassVar, Self, SupportsInt, SupportsIndex
 

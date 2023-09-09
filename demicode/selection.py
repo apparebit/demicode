@@ -87,6 +87,12 @@ LINGCHI = tuple(_prep(text) for text in (
     '\u2042',      # ASTERISM
     '\u2234',      # THEREFORE
     '\u0B83',      # TAMIL SIGN VISARGA
+    'a',
+    'z',
+    '\u03B1',      # GREEK SMALL LETTER ALPHA
+    '\u03C9',      # GREEK SMALL LETTER OMEGA
+    '\u0430',      # CYRILLIC SMALL LETTER A
+    '\u044F',      # CYRILLIC SMALL LETTER YA
     '%',
     '‰',
     '‱',

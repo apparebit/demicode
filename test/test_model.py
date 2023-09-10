@@ -4,7 +4,35 @@ from demicode.codepoint import CodePoint, CodePointRange
 from demicode.model import Version
 
 
+POINT_DATA = (
+    ('SPACE', 0x0020),
+    ('DELETE', 0x007F),
+    ('PAD', 0x0080),
+    ('NO_BREAK_SPACE', 0x00A0),
+    ('SOFT_HYPHEN', 0x00AD),
+    ('HANGUL_JUNGSEONG_FILLER', 0x1160),
+    ('HANGUL_JONGSEONG_SSANGNIEUN', 0x11FF),
+    ('ZERO_WIDTH_JOINER', 0x200D),
+    ('COMBINING_ENCLOSING_KEYCAP', 0x20E3),
+    ('FULL_BLOCK', 0x2588),
+    ('LEFTWARDS_BLACK_ARROW', 0x2B05),
+    ('RIGHTWARDS_BLACK_ARROW', 0x2B95),
+    ('VARIATION_SELECTOR_1', 0xFE00),
+    ('VARIATION_SELECTOR_2', 0xFE01),
+    ('TEXT_VARIATION_SELECTOR', 0xFE0E),
+    ('EMOJI_VARIATION_SELECTOR', 0xFE0F),
+    ('REPLACEMENT_CHARACTER', 0xFFFD),
+    ('REGIONAL_INDICATOR_SYMBOL_LETTER_A', 0x1F1E6),
+    ('REGIONAL_INDICATOR_SYMBOL_LETTER_Z', 0x1F1FF),
+)
+
 RANGE_DATA = (
+    # Merge code point and code point
+    (ord('r'), ord('p'), None, None),
+    (ord('r'), ord('q'), ord('q'), ord('r')),
+    (ord('r'), ord('r'), ord('r'), ord('r')),
+    (ord('r'), ord('s'), ord('r'), ord('s')),
+    (ord('r'), ord('t'), None, None),
     # Merge range and code point
     (ord('r'), ord('t'), ord('p'), None, None),
     (ord('r'), ord('t'), ord('q'), ord('q'), ord('t')),
@@ -44,18 +72,30 @@ class TestModel(unittest.TestCase):
         self.assertEqual(Version.of('5').to_emoji(), Version(0, 0, 0))
         self.assertEqual(Version.of('4.1').to_emoji(), Version(0, 0, 0))
 
+    def test_code_points(self) -> None:
+        for name, value in POINT_DATA:
+            self.assertEqual(getattr(CodePoint, name), value)
+            self.assertEqual(getattr(CodePoint, name), CodePoint(value))
+
     def test_ranges(self) -> None:
         for row in RANGE_DATA:
-            range = CodePointRange(CodePoint(row[0]), CodePoint(row[1]))
-            if len(row) == 5:
-                other = CodePoint(row[2])
+            row_length = len(row)
+
+            if row_length == 4:
+                this = CodePoint(row[0])
+                other = CodePoint(row[1])
             else:
-                other = CodePointRange(CodePoint(row[2]), CodePoint(row[3]))
+                this = CodePointRange(CodePoint(row[0]), CodePoint(row[1]))
+                if row_length == 5:
+                    other = CodePoint(row[2])
+                else:
+                    other = CodePointRange(CodePoint(row[2]), CodePoint(row[3]))
 
             if row[-1] is None:
-                self.assertFalse(range.can_merge_with(other))
+                self.assertFalse(this.can_merge_with(other))
                 continue
 
-            result = range.merge(other)
+            self.assertTrue(this.can_merge_with(other))
+            actual = this.merge(other)
             expected = CodePointRange(CodePoint(row[-2]), CodePoint(row[-1]))
-            self.assertEqual(result, expected)
+            self.assertEqual(actual, expected)

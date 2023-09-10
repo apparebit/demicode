@@ -70,8 +70,19 @@ Demicode supports the following features:
     Since CLDR data serves one, non-normative purpose only, emoji sequence
     names, demicode always utilizes the latest version. But `--ucd-version` lets
     you pick older UCD versions at will.
-  * **Page output** while also adjusting to terminal size changes just before
-    rendering the next page.
+  * In interactive mode, **page the output**. Let user control whether to **go
+    backward or forward** while also **automatically adjusting to terminal
+    window size**.
+  * On Linux and macOS, **page backward and forward with the left and right
+    arrow keys**. On other operating systems, use `b` or `p` followed by
+    `‹return›` to page backward; just `‹return›` or alternatively `f` or `n`
+    followed by `‹return›` to page forward; and just `‹control-c›` or
+    alternatively `q` or `x` followed by `‹return›` to terminate demicode. All
+    of these, no `‹return›` required, work on Linux and macOS, too. Plus
+    `‹delete›` or `‹shift-tab›` to page backward; `‹space›` or `‹tab›` to page
+    forward; and `‹escape›` to terminate. So which triple is yours?
+  * In batch mode, i.e., with standard in or out redirected, **emit all
+    character blots at once and consecutively**.
 
 
 ![Demicode's themes for light and dark mode and with more colors and doubly more
@@ -94,7 +105,7 @@ later. The best option for installing demicode is using
 ...
 🍺  /usr/local/Cellar/pipx/1.2.0: 885 files, 11.2MB
 ==> Running `brew cleanup pipx`...
-Disable this behaviour by setting HOMEBREW_NO_INSTALL_CLEANUP.
+Disable this behavior by setting HOMEBREW_NO_INSTALL_CLEANUP.
 Hide these hints with HOMEBREW_NO_ENV_HINTS (see `man brew`).
 %
 ```
@@ -118,6 +129,17 @@ The output of the last command should look something like the first screenshot.
 
 ## Versions
 
+  - **v0.8.0** (2023/09/09):
+      - In interactive mode, render every page from scratch, taking terminal
+        size into account. This enables paging forward *and* backward. On Linux
+        and macOS, use left and right arrow keys to control paging.
+      - In batch mode, i.e., when standard in or out are redirected, emit all
+        character blots without paging.
+      - Test loading of every supported UCD version to squash any remaining
+        crashing bugs. The most recent versions still yield much better results.
+      - In preparation of Unicode 15.1, add support for the
+        Canonical_Combining_Class, Indic_Syllabic_Category, and Script
+        properties.
   - **v0.7.0** (2023/09/06) Clearly distinguish between user errors and
     unexpected exceptions; print traceback only for the latter. Modularize test
     script using `unittest`. In preparation of Unicode 15.1, specify which

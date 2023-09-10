@@ -55,6 +55,11 @@ def request_for(url: str, **headers: str) -> Request:
 
 
 _AUXILIARY_FILES = ('GraphemeBreakProperty.txt', 'GraphemeBreakTest.txt')
+_EXTRACTED_FILES = (
+    'DerivedCombiningClass.txt',
+    'DerivedEastAsianWidth.txt',
+    'DerivedGeneralCategory.txt'
+)
 _CORE_EMOJI_FILES = ('emoji-data.txt', 'emoji-variation-sequences.txt')
 _ALSO_EMOJI_FILES = ('emoji-sequences.txt', 'emoji-test.txt', 'emoji-zwj-sequences.txt')
 
@@ -88,20 +93,36 @@ def ucd_url_of(file: str, version: None | Version = None) -> str:
 
     assert version is not None
 
-    # UCD files
+    # Extended UCD files
     if file in _AUXILIARY_FILES:
         path = f'{version}/ucd/auxiliary'
+    elif file in _EXTRACTED_FILES:
+        path = f'{version}/ucd/extracted'
     elif file in _CORE_EMOJI_FILES and version >= (13, 0, 0):
         path = f'{version}/ucd/emoji'
+
+    # Indic_Syllabic_Category was provisional in 6.0, became normative in 7.0.
+    elif (
+        file == 'IndicSyllabicCategory.txt' and version < (6, 0, 0)
+    ):
+        raise VersioningError(f'UCD {version} does not include {file}')
+
+    # Core UCD files
     elif file not in _CORE_EMOJI_FILES and file not in _ALSO_EMOJI_FILES:
         path = f'{version}/ucd'
 
-    # Unicode Emoji files
+    # Unicode Emoji files (which took way too many iterations to get right)
     else:
         emoji_version = version.to_emoji()
-        if emoji_version.is_v0():
+        if (
+            file == 'emoji-variation-sequences.txt' and emoji_version <= (4, 0, 0)
+            or file == 'emoji-test.txt' and emoji_version <= (3, 0, 0)
+            or file != 'emoji-data.txt' and emoji_version <= (1, 0, 0)
+            or emoji_version.is_v0()
+        ):
             raise VersioningError(
-                f'UCD {version} corresponds to Emoji {emoji_version} without files')
+                f'UCD {version} or Emoji {emoji_version} does not include {file}')
+
         path = f'emoji/{emoji_version.in_short_format()}'
 
     return f'https://www.unicode.org/Public/{path}/{file}'

@@ -16,6 +16,11 @@ the `Renderer.refresh()` method.
 from dataclasses import dataclass
 from enum import StrEnum
 import os
+import sys
+from typing import TextIO
+
+
+from .codepoint import CodePoint
 
 
 CSI = '\x1b['
@@ -101,15 +106,22 @@ class Mode(StrEnum):
 
 class Padding(StrEnum):
     BACKGROUND = ' '
-    FOREGROUND = '\u2588'
+    FOREGROUND = CodePoint.FULL_BLOCK.to_string()
 
 
 class Renderer:
 
     MAX_WIDTH = 140
 
-    def __init__(self, mode: Mode, intensity: int) -> None:
+    def __init__(self, out: TextIO, mode: Mode, intensity: int) -> None:
+        self._out = out
+        self._interactive = sys.__stdin__.isatty() and out.isatty()
+        self._theme = getattr(Styles, mode.value)[min(2, max(0, intensity))]
         self.refresh()
+
+    @property
+    def is_interactive(self) -> bool:
+        return self._interactive
 
     @property
     def has_style(self) -> bool:
@@ -121,8 +133,12 @@ class Renderer:
         method enables polling for size changes when it makes sense to react to
         them, i.e., just before building the next page to display.
         """
-        width, self._height = os.get_terminal_size()
-        self._width = min(width, self.MAX_WIDTH)
+        if self.is_interactive:
+            width, self._height = os.get_terminal_size()
+            self._width = min(width, self.MAX_WIDTH)
+        else:
+            self._height = 30
+            self._width = self.MAX_WIDTH
 
     @property
     def height(self) -> int:
@@ -132,8 +148,8 @@ class Renderer:
     def width(self) -> int:
         return self._width
 
-    def window_title(self, text: str) -> str:
-        return ''
+    def set_window_title(self, text: str) -> None:
+        pass
 
     def fit(self, text: str, *, width: None | int = None, fill: bool = False) -> str:
         if width is None:
@@ -172,20 +188,26 @@ class Renderer:
     def error(self, text: str) -> str:
         return text
 
+    def print(self, text: str) -> None:
+        self._out.write(text)
+        self._out.flush()
+
+    def println(self, text: str) -> None:
+        self._out.write(text)
+        self._out.write('\n')
+        self._out.flush()
+
 
 class StyledRenderer(Renderer):
     """A line-oriented console renderer using ANSI escape codes."""
-
-    def __init__(self, mode: Mode, intensity: int) -> None:
-        self._theme = getattr(Styles, mode.value)[min(2, max(0, intensity))]
-        self.refresh()
 
     @property
     def has_style(self) -> bool:
         return True
 
-    def window_title(self, text: str) -> str:
-        return f'\x1b]2;{text}\x07'
+    def set_window_title(self, text: str) -> None:
+        if self.is_interactive:
+            self.print(f'\x1b]2;{text}\x07')
 
     def column(self, column: int) -> str:
         return CHA(column)

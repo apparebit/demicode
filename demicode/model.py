@@ -71,21 +71,24 @@ class Version(NamedTuple):
     patch: int
 
     @classmethod
-    def of(cls, text: str) -> 'Version':
+    def of(cls, v: 'str | Version') -> 'Version':
         """
         Parse the string as a version number with at most three components. If
         the string has fewer components, pad the missing components with zero.
         """
+        if isinstance(v, Version):
+            return v
+
         try:
-            components = tuple(int(c) for c in text.split('.'))
+            components = tuple(int(c) for c in v.split('.'))
         except:
-            raise ValueError(f'malformed components in version "{text}"')
+            raise ValueError(f'malformed components in version "{v}"')
 
         count = len(components)
         if count < 3:
             components += (0,) * (3 - count)
         elif count > 3:
-            raise ValueError(f'too many components in version "{text}"')
+            raise ValueError(f'too many components in version "{v}"')
 
         return cls(*components)
 
@@ -245,11 +248,11 @@ class Presentation(Enum):
 
     HEADING = -2
     NONE = -1
-    CORNER = 0xFE00
-    CENTER = 0xFE01
-    TEXT = 0xFE0E
-    EMOJI = 0xFE0F
-    KEYCAP = 0x20E3
+    CORNER = CodePoint.VARIATION_SELECTOR_1
+    CENTER = CodePoint.VARIATION_SELECTOR_2
+    TEXT = CodePoint.TEXT_VARIATION_SELECTOR
+    EMOJI = CodePoint.EMOJI_VARIATION_SELECTOR
+    KEYCAP = CodePoint.COMBINING_ENCLOSING_KEYCAP
 
     @classmethod
     def unapply(cls, codepoints: CodePointSequence) -> 'Presentation':
@@ -260,7 +263,11 @@ class Presentation(Enum):
                 return Presentation(codepoints[1])
             except ValueError:
                 return Presentation.NONE
-        elif length == 3 and codepoints[1] == 0xFE0F and codepoints[2] == 0x20E3:
+        elif (
+            length == 3
+            and codepoints[1] == CodePoint.EMOJI_VARIATION_SELECTOR
+            and codepoints[2] == CodePoint.COMBINING_ENCLOSING_KEYCAP
+        ):
             return Presentation.KEYCAP
         else:
             return Presentation.NONE
@@ -285,7 +292,11 @@ class Presentation(Enum):
 
     @property
     def variation_selector(self) -> int:
-        return 0xFE0F if self == Presentation.KEYCAP else self.value
+        return (
+            CodePoint.EMOJI_VARIATION_SELECTOR
+            if self == Presentation.KEYCAP
+            else self.value
+        )
 
     def normalize(
         self, codepoints: CodePoint | CodePointSequence
@@ -364,13 +375,14 @@ class EmojiSequence(StrEnum):
     Emoji_Keycap_Sequence = 'Emoji_Keycap_Sequence'
     # In more recent UCD versions:
     RGI_Emoji_Flag_Sequence = 'RGI_Emoji_Flag_Sequence'
-    RGI_Emoji_Tag_Sequence = 'RGI_Emoji_Tag_Sequence'
     RGI_Emoji_Modifier_Sequence = 'RGI_Emoji_Modifier_Sequence'
+    RGI_Emoji_Tag_Sequence = 'RGI_Emoji_Tag_Sequence'
     RGI_Emoji_ZWJ_Sequence = 'RGI_Emoji_ZWJ_Sequence'
     # In older Unicode Emoji versions:
+    Emoji_Combining_Sequence = 'Emoji_Combining_Sequence'
     Emoji_Flag_Sequence = 'Emoji_Flag_Sequence'
-    Emoji_Tag_Sequence = 'Emoji_Tag_Sequence'
     Emoji_Modifier_Sequence = 'Emoji_Modifier_Sequence'
+    Emoji_Tag_Sequence = 'Emoji_Tag_Sequence'
     Emoji_ZWJ_Sequence = 'Emoji_ZWJ_Sequence'
 
 
@@ -398,8 +410,11 @@ class CharacterData:
                 GeneralCategory.Enclosing_Mark,
                 GeneralCategory.Nonspacing_Mark,
                 GeneralCategory.Format
-            ) and self.codepoint != 0x00AD
-            or 0x1160 <= self.codepoint <= 0x11FF
+            ) and self.codepoint != CodePoint.SOFT_HYPHEN
+            or (
+                CodePoint.HANGUL_JUNGSEONG_FILLER
+                <= self.codepoint <= CodePoint.HANGUL_JONGSEONG_SSANGNIEUN
+            )
         )
 
     @property
@@ -418,7 +433,9 @@ class CharacterData:
         # Also https://github.com/jquast/wcwidth
         if self.is_zero_width:
             return 0
-        if self.is_invalid or self.codepoint < 32 or 0x7F <= self.codepoint < 0xA0:
+        if self.is_invalid or self.codepoint < 32 or (
+            CodePoint.DELETE <= self.codepoint < CodePoint.NO_BREAK_SPACE
+        ):
             return -1
         if self.east_asian_width in (EastAsianWidth.Fullwidth, EastAsianWidth.Wide):
             return 2

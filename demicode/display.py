@@ -1,59 +1,32 @@
 """
 Display character blots in the terminal.
 
-This module contains the functionality for formatting demicode's character blots
-on screen. Its high-level functions are:
-
-  * `make_presentable()` enriches a stream of Unicode code points, grapheme
-    clusters, and headings with their presentation. That has little impact on
-    grapheme clusters and headings. But for code points that can be paired with
-    a variation selector, the presentation enables just that.
-  * `format_lines()` and `format_grid_lines()` turn the presentation-enriched
-    stream of code points, graphemes, and headings into a stream of formatted
-    lines.
-  * `page_lines()` displays a stream of lines, one screen at a time, while also
-    handling the user interaction.
-
-The line-level functions are `format_legend()`, `format_heading()`, and
-`format_info()`. The legend goes on top of a screen and headings are embedded in
-the body. `format_info()` handles code point or grapheme per invocation even if
-demicode is building a grid.
+This module has one entry point, `display()`. It renders character blots one
+page at a time, waits for user input, and then moves a page forward or backward,
+as requested by the user. When displaying a new page, it also updates the
+terminal size to ensure that the output fits into the window.
 """
 
 from collections.abc import Iterator, Iterable
 import itertools
-from typing import Callable, cast, Literal, overload, TypeAlias
+from typing import Callable, cast
 
 from .codepoint import CodePoint, CodePointSequence
+from .control import Action, read_line_action
 from .model import GeneralCategory, Presentation
 from .render import Padding, Renderer
 from .ucd import UCD, Version
-
-
-CodePoints: TypeAlias = CodePoint | CodePointSequence
-HeadingPresentation = tuple[Literal[Presentation.HEADING], str]
-CodePointPresentation = tuple[Presentation, CodePoints]
 
 
 # --------------------------------------------------------------------------------------
 # Enrich Code Points with Presentation
 
 
-@overload
 def make_presentable(
-    data: Iterable[CodePoints | str], *, headings: Literal[False]
-) -> Iterator[CodePointPresentation]: ...
-
-@overload
-def make_presentable(
-    data: Iterable[CodePoints | str], *, headings: bool = ...
-) -> Iterator[HeadingPresentation | CodePointPresentation]: ...
-
-def make_presentable(
-    data: Iterable[CodePoints | str],
+    data: Iterable[str | CodePoint | CodePointSequence],
     *,
     headings: bool = True,  # Allow embedded headings
-) -> Iterator[HeadingPresentation | CodePointPresentation]:
+) -> Iterator[tuple[Presentation, str | CodePoint | CodePointSequence]]:
     """
     Enrich code points with their presentation.
 
@@ -74,7 +47,7 @@ def make_presentable(
 
         if not datum.is_singleton():
             datum = datum.to_sequence()
-            if len(datum) == 2 and datum[1] == 0x0080:
+            if len(datum) == 2 and datum[1] == CodePoint.PAD:
                 datum = datum[0]
             yield Presentation.NONE, datum
             continue
@@ -147,7 +120,7 @@ def format_heading(renderer: Renderer, heading: str) -> str:
 
 def format_blot(
     renderer: Renderer,
-    codepoints: CodePoints,
+    codepoints: CodePoint | CodePointSequence,
     *,
     start_column: int = 1,
     presentation: Presentation = Presentation.NONE,
@@ -175,7 +148,7 @@ def format_blot(
     # Fail gracefully for control, surrogate, and private use characters.
     if width == -1:
         width = 1
-        display = '\uFFFD' # REPLACEMENT CHARACTER
+        display = CodePoint.REPLACEMENT_CHARACTER.to_string()
 
     # Render Character Blots
     yield renderer.column(start_column + 1)
@@ -188,7 +161,7 @@ def format_blot(
 
 def format_info(
     renderer: Renderer,
-    codepoints: CodePoints,
+    codepoints: CodePoint | CodePointSequence,
     *,
     start_column: int = 1,
     presentation: Presentation = Presentation.NONE,
@@ -201,7 +174,8 @@ def format_info(
     # age and name for emoji sequences, plus disclaimer for non-grapheme-clusters.
     presentation, codepoints = presentation.normalize(codepoints)
     if not codepoints.is_singleton():
-        yield renderer.fit(repr(codepoints), width=PROPS_WIDTH - AGE_WIDTH, fill=True)
+        yield renderer.fit(
+            repr(codepoints), width=PROPS_WIDTH - AGE_WIDTH - 1, fill=True)
 
         # Account for non-grapheme-clusters and emoji sequences.
         name = age = None
@@ -210,15 +184,15 @@ def format_info(
                 f'Not a grapheme cluster in UCD {UCD.version.in_short_format()}',
                 width=_name_width(renderer.width)
             )
-            yield ' ' * AGE_WIDTH
+            yield ' ' * (AGE_WIDTH + 1)
             yield f' {renderer.hint(name)}'
             return
 
         name, age = UCD.emoji_sequence_data(codepoints)
         if age:
-            yield f'{cast(Version, age).in_emoji_format():>{AGE_WIDTH}}'
+            yield f' {cast(Version, age).in_emoji_format():>{AGE_WIDTH}}'
         elif name:
-            yield ' ' * AGE_WIDTH
+            yield ' ' * (AGE_WIDTH + 1)
         if name:
             yield f' {renderer.fit(name, width=_name_width(renderer.width))}'
         return
@@ -229,7 +203,7 @@ def format_info(
 
     yield f'{codepoint!r:<8s} '
     vs = presentation.variation_selector
-    yield f'{vs - 0xFE00 + 1:>2} ' if vs > 0 else '   '
+    yield f'{vs - CodePoint.VARIATION_SELECTOR_1 + 1:>2} ' if vs > 0 else '   '
     yield unidata.category.value
     yield f' {unidata.east_asian_width:<2} '
     flags = ' '.join(f.value for f in unidata.flags)
@@ -265,10 +239,10 @@ def format_info(
 
 def format_lines(
     renderer: Renderer,
-    stream: Iterable[HeadingPresentation | CodePointPresentation],
+    data: Iterable[tuple[Presentation, str | CodePoint | CodePointSequence]],
 ) -> Iterator[str]:
     """Emit the extended, per-line representation for all code points."""
-    for presentation, codepoints in stream:
+    for presentation, codepoints in data:
         if presentation.is_heading:
             yield format_heading(renderer, cast(str, codepoints))
         else:
@@ -288,19 +262,28 @@ def format_lines(
             )
 
 
+GRID_COLUMN_WIDTH = 16
+
+def grid_column(index: int) -> int:
+    return index * GRID_COLUMN_WIDTH + 2
+
+
 def format_grid_lines(
     renderer: Renderer,
-    stream: Iterable[CodePointPresentation],
+    data: Iterable[tuple[Presentation, CodePoint | CodePointSequence]],
+    column_count: int,
 ) -> Iterator[str]:
     """Emit the compact, grid-like representation for all code points."""
-    column_count = (renderer.width - 1) // 11
+    # Ensure that every loop iteration consumes more code points
+    stream = iter(data)
+
     while True:
         line = ''.join(itertools.chain.from_iterable(
             format_blot(
                 renderer,
                 codepoints,
                 presentation=presentation,
-                start_column=count * 11 + 2,
+                start_column=grid_column(count),
             )
             for count, (presentation, codepoints)
             in enumerate(itertools.islice(stream, column_count))
@@ -313,63 +296,64 @@ def format_grid_lines(
 # --------------------------------------------------------------------------------------
 
 
-def page_lines(
+def display(
     renderer: Renderer,
-    lines: Iterable[str],
+    stream: Iterable[str | CodePoint | CodePointSequence],
     *,
-    make_legend: None | Callable[[Renderer], str] = None,
+    in_grid: bool = False,
+    read_action: Callable[[Renderer], Action] = read_line_action,
 ) -> None:
-    """
-    Display one page of lines at a time. This function should update the
-    terminal size just before displaying the previous or next page and then
-    regenerate its output accordingly. That means that the input to the pager
-    should be the list of code points and grapheme clusters to cover as well as
-    the function for rendering lines of output.
+    data = [*make_presentable(stream, headings=not in_grid)]
+    total_count = len(data)
+    start = stop = -1
+    action = Action.FORWARD
 
-    TODO: move full page re-generation into the pager; switch to reading keyboard
-    without enter
-    """
-    hint = renderer.hint(f' [ ‹p›revious | ‹n›ext | ‹q›uit ] ‹return› ')
-
-    buffer = [*lines]
-    buffer_size = len(buffer)
-    start = stop = 0
-    forward = True
+    renderer.set_window_title(f'⸺ Demicode • UCD {UCD.version.in_short_format()} ⸺')
 
     while True:
         renderer.refresh()
-        legend = None if make_legend is None else make_legend(renderer)
+
+        legend = None if in_grid else format_legend(renderer)
         legend_height = 0 if legend is None else len(legend.splitlines())
         body_height = renderer.height - legend_height - 1
+        column_count = (renderer.width - 2) // GRID_COLUMN_WIDTH if in_grid else 1
+        display_count = body_height * column_count
 
-        if forward:
+        if action.forward:
             start = stop + 1
-            stop = start + body_height
-            done = start >= buffer_size
-        else:
+            stop = min(start + display_count, total_count)
+            done = start >= total_count
+        elif action.backward:
             stop = start - 1
-            start = stop - body_height
+            start = max(0, stop - display_count)
             done = stop <= 0
 
         if done:
-            print(renderer.window_title(''))
+            renderer.set_window_title('')
             return
 
-        body = buffer[start:stop]
-        actual_body_height = len(body)
-        if actual_body_height < body_height:
-            body.extend([''] * (body_height - actual_body_height))
+        if in_grid:
+            body = [*format_grid_lines(
+                renderer,
+                cast(
+                    Iterable[tuple[Presentation, CodePoint | CodePointSequence]],
+                    data[start:stop],
+                ),
+                column_count,
+            )]
+        else:
+            body = [*format_lines(renderer, data[start:stop])]
+
+        if renderer.is_interactive:
+            actual_body_height = len(body)
+            if actual_body_height < body_height:
+                body.extend([''] * (body_height - actual_body_height))
 
         page = '\n'.join(itertools.chain([] if legend is None else [legend], body))
-        print(page)
+        renderer.println(page)
 
-        try:
-            s = input(hint).lower()
-        except KeyboardInterrupt:
-            return
-        if s in ('q', 'quit'):
-            return
-        if s in ('', 'n', 'next', 'f', 'forward'):
-            forward = True
-        if s in ('p', 'prev', 'previous', 'b', 'back'):
-            forward = False
+        if renderer.is_interactive:
+            action = read_action(renderer)
+            if action.terminate:
+                renderer.set_window_title('')
+                return

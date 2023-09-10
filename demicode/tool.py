@@ -9,6 +9,7 @@ import itertools
 import logging
 from pathlib import Path
 import re
+import sys
 from textwrap import dedent
 import traceback
 from types import TracebackType
@@ -16,6 +17,7 @@ from typing import cast
 
 from .codegen import generate_code
 from .codepoint import CodePoint, CodePointSequence
+from .control import read_key_action, read_line_action
 from .darkmode import is_darkmode
 from .display import display
 from .model import BinaryProperty, ComplexProperty
@@ -211,6 +213,15 @@ def configure_parser() -> argparse.ArgumentParser:
 
     # ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~
 
+    in_group = parser.add_argument_group('control input')
+    in_group.add_argument(
+        '--use-line-input',
+        action='store_true',
+        help='fall back onto line input even if raw input is\navailable',
+    )
+
+    # ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~
+
     out_group = parser.add_argument_group('control output')
     out_group.add_argument(
         '--in-grid', '-g',
@@ -318,19 +329,15 @@ def show_statistics(renderer: Renderer, is_optimized: bool) -> None:
     show_heading('Also Needed, Complex Properties:')
     total_points = total_ranges = 0
     for property in (
+        ComplexProperty.Canonical_Combining_Class,
         ComplexProperty.East_Asian_Width,
+        ComplexProperty.General_Category,
         ComplexProperty.Grapheme_Cluster_Break,
+        ComplexProperty.Indic_Syllabic_Category,
+        ComplexProperty.Script,
     ):
         show_counts(property)
     show_total()
-
-    show_heading('Also Needed, Ages and Names:')
-    show_counts(ComplexProperty.General_Category)
-    print('\n')
-
-    show_heading('Miscellaneous Properties:')
-    show_counts(BinaryProperty.Default_Ignorable_Code_Point)
-    print('\n')
 
     q1 = 'no-' if is_optimized else ''
     q2 = 'before' if is_optimized else 'after'
@@ -343,7 +350,7 @@ def show_statistics(renderer: Renderer, is_optimized: bool) -> None:
 
 
 def run(arguments: Sequence[str]) -> int:
-    # -------------------------- Parse the options and prepare console renderer
+    # ---------------------------- Parse the options and prepare console renderer
     parser = configure_parser()
     options = parser.parse_args(arguments[1:])
 
@@ -357,6 +364,7 @@ def run(arguments: Sequence[str]) -> int:
 
     new_renderer = Renderer if options.in_plain_text else StyledRenderer
     renderer = new_renderer(
+        sys.stdout,
         Mode.DARK if options.in_dark_mode else Mode.LIGHT,
         options.in_more_color
     )
@@ -412,7 +420,7 @@ def process(options: argparse.Namespace, renderer: Renderer) -> int:
         show_statistics(renderer, options.ucd_optimize)
         return 0
 
-    # ----------------------------------------- Determine code points to display
+    # ------------------------------------------ Determine code points to display
     codepoints: list[Iterable[CodePoint|CodePointSequence|str]] = []
     # Standard selections
     if options.with_ucd_dashes:
@@ -456,7 +464,7 @@ def process(options: argparse.Namespace, renderer: Renderer) -> int:
         codepoints.append(
             [cluster.to_singleton() if cluster.is_singleton() else cluster])
 
-    # -------------------------------- If there's nothing to display, help user
+    # ---------------------------------- If there's nothing to display, tell user
     if len(codepoints) == 0:
         raise UserError(dedent("""\
             There are no code points to show.
@@ -464,12 +472,17 @@ def process(options: argparse.Namespace, renderer: Renderer) -> int:
             or with "-h" to see all options.
         """))
 
-    # ----------------------------------------------------- Display code points
+    # ------------------------------------------------------- Display code points
+    read_action = read_line_action
+    if read_key_action is not None and not options.use_line_input:
+        read_action = read_key_action
+
     display(
         renderer,
         itertools.chain.from_iterable(codepoints),
-        in_grid=options.in_grid
+        in_grid=options.in_grid,
+        read_action=read_action,
     )
 
-    # -------------------------------------------------------------------- Done
+    # ---------------------------------------------------------------------- Done
     return 0

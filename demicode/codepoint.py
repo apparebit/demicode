@@ -25,6 +25,26 @@ class CodePoint(int):
     MIN: 'ClassVar[CodePoint]'
     MAX: 'ClassVar[CodePoint]'
 
+    SPACE: 'ClassVar[CodePoint]'
+    DELETE: 'ClassVar[CodePoint]'
+    PAD: 'ClassVar[CodePoint]'
+    NO_BREAK_SPACE: 'ClassVar[CodePoint]'
+    SOFT_HYPHEN: 'ClassVar[CodePoint]'
+    HANGUL_JUNGSEONG_FILLER: 'ClassVar[CodePoint]'
+    HANGUL_JONGSEONG_SSANGNIEUN: 'ClassVar[CodePoint]'
+    ZERO_WIDTH_JOINER: 'ClassVar[CodePoint]'
+    COMBINING_ENCLOSING_KEYCAP: 'ClassVar[CodePoint]'
+    FULL_BLOCK: 'ClassVar[CodePoint]'
+    LEFTWARDS_BLACK_ARROW: 'ClassVar[CodePoint]'
+    RIGHTWARDS_BLACK_ARROW: 'ClassVar[CodePoint]'
+    VARIATION_SELECTOR_1: 'ClassVar[CodePoint]'
+    VARIATION_SELECTOR_2: 'ClassVar[CodePoint]'
+    TEXT_VARIATION_SELECTOR: 'ClassVar[CodePoint]'
+    EMOJI_VARIATION_SELECTOR: 'ClassVar[CodePoint]'
+    REPLACEMENT_CHARACTER: 'ClassVar[CodePoint]'
+    REGIONAL_INDICATOR_SYMBOL_LETTER_A: 'ClassVar[CodePoint]'
+    REGIONAL_INDICATOR_SYMBOL_LETTER_Z: 'ClassVar[CodePoint]'
+
     __slots__ = ()
 
     def __new__(cls, *args: Any, **kwargs: Any) -> Self:
@@ -44,7 +64,10 @@ class CodePoint(int):
         length = len(value)
         if length == 1:
             return cls(ord(value))
-        if length == 2 and value[1] in ('\uFE0E', '\uFE0F'):
+        if length == 2 and (
+            CodePoint.VARIATION_SELECTOR_1
+            <= ord(value[1]) <= CodePoint.EMOJI_VARIATION_SELECTOR
+        ):
             return cls(ord(value[0]))
         if value.startswith('U+'):
             if not (6 <= length <= 8):
@@ -59,6 +82,20 @@ class CodePoint(int):
 
         raise ValueError(f'"{value}" does not consist of 4-6 hex digits')
 
+    def can_merge_with(self, other: 'CodePoint | CodePointRange') -> bool:
+        if isinstance(other, CodePoint):
+            return other - 1 <= self <= other + 1
+        else:
+            return other.start - 1 <= self <= other.stop + 1
+
+    def merge(self, other: 'CodePoint | CodePointRange') -> 'CodePointRange':
+        if isinstance(other, CodePoint):
+            if other - 1 <= self <= other + 1:
+                return CodePointRange(min(self, other), max(self, other))
+        elif other.start - 1 <= self <= other.stop + 1:
+            return CodePointRange(min(self, other.start), max(self, other.stop))
+        raise ValueError(f'{self!r} cannot possibly merge with {other!r}')
+
     def is_singleton(self) -> bool:
         return True
 
@@ -70,6 +107,9 @@ class CodePoint(int):
 
     def to_sequence(self) -> 'CodePointSequence':
         return CodePointSequence((self,))
+
+    def to_string(self) -> str:
+        return self.__str__()
 
     def codepoints(self) -> 'Iterator[CodePoint]':
         yield self
@@ -124,6 +164,9 @@ class CodePointRange:
         else:
             return NotImplemented
 
+    def __len__(self) -> int:
+        return self.stop - self.start + 1
+
     def can_merge_with(self, other: 'CodePoint | CodePointRange') -> bool:
         if isinstance(other, CodePoint):
             return self.start - 1 <= other <= self.stop + 1
@@ -140,10 +183,7 @@ class CodePointRange:
                 min(self.start, other.start),
                 max(self.stop, other.stop)
             )
-        raise ValueError(f'{self!r} is apart from {other!r}')
-
-    def __len__(self) -> int:
-        return self.stop - self.start + 1
+        raise ValueError(f'{self!r} cannot possibly merge with {other!r}')
 
     def is_singleton(self) -> bool:
         return self.start == self.stop
@@ -160,6 +200,9 @@ class CodePointRange:
         if self.is_singleton():
             return CodePointSequence([self.start])
         raise TypeError(f'Unable to convert range {self!r} to sequence')
+
+    def to_string(self) -> str:
+        return self.__str__()
 
     def codepoints(self) -> Iterator[CodePoint]:
         cursor = self.start
@@ -210,6 +253,9 @@ class CodePointSequence(tuple[CodePoint,...]):
     def to_sequence(self) -> 'CodePointSequence':
         return self
 
+    def to_string(self) -> str:
+        return self.__str__()
+
     def codepoints(self) -> Iterator[CodePoint]:
         return self.__iter__()
 
@@ -224,4 +270,25 @@ class CodePointSequence(tuple[CodePoint,...]):
 
 CodePoint.MIN = CodePoint(0)
 CodePoint.MAX = CodePoint(0x10_FFFF)
+
+CodePoint.SPACE = CodePoint(0x0020)
+CodePoint.DELETE = CodePoint(0x007F)
+CodePoint.PAD = CodePoint(0x0080)
+CodePoint.NO_BREAK_SPACE = CodePoint(0x00A0)
+CodePoint.SOFT_HYPHEN = CodePoint(0x00AD)
+CodePoint.HANGUL_JUNGSEONG_FILLER = CodePoint(0x1160)
+CodePoint.HANGUL_JONGSEONG_SSANGNIEUN = CodePoint(0x11FF)
+CodePoint.ZERO_WIDTH_JOINER = CodePoint(0x200D)
+CodePoint.COMBINING_ENCLOSING_KEYCAP = CodePoint(0x20E3)
+CodePoint.FULL_BLOCK = CodePoint(0x2588)
+CodePoint.LEFTWARDS_BLACK_ARROW = CodePoint(0x2B05)
+CodePoint.RIGHTWARDS_BLACK_ARROW = CodePoint(0x2B95)
+CodePoint.VARIATION_SELECTOR_1 = CodePoint(0xFE00)
+CodePoint.VARIATION_SELECTOR_2 = CodePoint(0xFE01)
+CodePoint.TEXT_VARIATION_SELECTOR = CodePoint(0xFE0E)
+CodePoint.EMOJI_VARIATION_SELECTOR = CodePoint(0xFE0F)
+CodePoint.REPLACEMENT_CHARACTER = CodePoint(0xFFFD)
+CodePoint.REGIONAL_INDICATOR_SYMBOL_LETTER_A = CodePoint(0x1F1E6)
+CodePoint.REGIONAL_INDICATOR_SYMBOL_LETTER_Z = CodePoint(0x1F1FF)
+
 CodePointRange.ALL = CodePointRange(CodePoint.MIN, CodePoint.MAX)

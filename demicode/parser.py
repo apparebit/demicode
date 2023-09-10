@@ -110,14 +110,6 @@ def collect(
     return defaults, records
 
 
-def to_range_and_string(
-    codepoints: CodePoints,
-    properties: Properties
-) -> tuple[CodePointRange, str]:
-    """Normalize a parsed record to a code point range and single string."""
-    return codepoints.to_range(), properties[0]
-
-
 def ingest(
     path: Path,
     intern: Callable[[CodePoints, Properties], T],
@@ -136,6 +128,35 @@ def ingest(
         )
 
 
+# --------------------------------------------------------------------------------------
+# Helpful Callbacks (for ingest() etc)
+
+
+def to_range(record: tuple[CodePointRange, T]) -> CodePointRange:
+    """Retrieve the range from a parsed record"""
+    return record[0]
+
+
+def to_range_and_string(
+    codepoints: CodePoints,
+    properties: Properties
+) -> tuple[CodePointRange, str]:
+    """Normalize a parsed record to a code point range and single string."""
+    return codepoints.to_range(), properties[0]
+
+
+def to_sequence(codepoints: CodePoints) -> CodePoint | CodePointSequence:
+    if codepoints.is_singleton():
+        return codepoints.to_singleton()
+    if isinstance(codepoints, CodePointSequence):
+        return codepoints
+    raise TypeError(f'code point range {codepoints!r} where none expected')
+
+
+# --------------------------------------------------------------------------------------
+# Extract Default (With Error Checking)
+
+
 def extract_default(
     defaults: Sequence[tuple[CodePoints, P]],
     fallback: P,
@@ -152,9 +173,14 @@ def extract_default(
     raise ValueError(f'Default {label} comprises {length} entries')
 
 
+# --------------------------------------------------------------------------------------
+# Optimization of Range Records
+
+
 def simplify_range_data(
     data: Iterable[tuple[CodePointRange, P]]
 ) -> Iterator[tuple[CodePointRange, P]]:
+    """Simplify records by combining adjacent ranges with equal properties."""
     range_accumulator: None | CodePointRange = None
     props_accumulator: None | P = None
 
@@ -173,4 +199,5 @@ def simplify_range_data(
 
 
 def simplify_only_ranges(data: Iterable[CodePointRange]) -> list[CodePointRange]:
+    """Combine adjacent ranges."""
     return [r for r, _ in simplify_range_data((r, None) for r in data)]

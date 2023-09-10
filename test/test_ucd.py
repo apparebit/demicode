@@ -67,7 +67,7 @@ CHARACTER_DATA = (
     ),
 )
 
-class TestUnicodeProperties(unittest.TestCase):
+class TestUCD(unittest.TestCase):
 
     def check_property_value_counts(
         self,

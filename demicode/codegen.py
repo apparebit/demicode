@@ -1,3 +1,24 @@
+"""
+Generate Python code based on Unicode UCD data.
+
+Thanks to the [Unicode stability
+policy](https://www.unicode.org/policies/stability_policy.html), we can
+generally assume that obsolete property values won't be deleted. That implies
+that the most recent version is the best version to base code generation on,
+since it includes all values from past as well as recent Unicode versions.
+
+Alas, Unicode 6.0 included Indic_Syllabic_Category as a provisional property
+only, which is not subject to the stability policy. Then Unicode 7.0 replaced
+the Consonant_Repha value with Consonant_Preceding_Repha and
+Consonant_Succeeding_Repha. To still be able to ingest the provisional
+Indic_Syllabic_Category from Unicode 6.0, we manually patch the provisional
+value back in.
+
+Since tests are specific to a version of an algorithm, we do not use the most
+recent version for generating Python code from test data. Instead, we do so for
+a locked version.
+"""
+
 from collections.abc import Iterator
 from collections import defaultdict
 from pathlib import Path
@@ -9,20 +30,17 @@ from .parser import ingest
 
 
 def generate_code(root: Path) -> None:
-    # We assume that obsolete property values won't be deleted (which is the
-    # case for grapheme cluster breaking). Hence the most recent version of
-    # Unicode is just the right version for enumerations of property values.
+    # Define properties and their values based on the most recent version.
+    # Thanks to Unicode's stability policy, it is the most comprehensive.
     property_values = retrieve_property_values(root, retrieve_latest_ucd_version(root))
     with open('demicode/_property.py', mode='w', encoding='utf8') as file:
         for line in generate_property_values(property_values):
             print(line, file=file)
 
-    # Since algorithms may and do change, testing the results of a particular
-    # algorithm is version-specific. Hence specifically targeted versions are
-    # just the right versions for testing.
+    # Algorithms can and do change. So tests always are version-specific.
+    # For now, we test grapheme breaks for 15.0 only. That should change.
     v150 = Version(15, 0, 0)
     path150 = mirror_unicode_data(root, 'GraphemeBreakTest.txt', v150)
-
     with open('test/grapheme_clusters.py', mode='w', encoding='utf8') as file:
         print('# This module is machine-generated. Do not edit by hand.\n', file=file)
         for line in generate_grapheme_cluster_breaks(path150, v150):
@@ -49,6 +67,12 @@ def retrieve_property_values(
         if property not in properties_of_interest:
             continue
         result[property].append((name, short_name))
+
+    # Patch provisional property value Consonant_Repha back in.
+    values = result[ComplexProperty.Indic_Syllabic_Category.value]
+    values.append(('Consonant_Repha', 'Consonant_Repha'))
+    values.sort()
+
     return result
 
 
@@ -57,25 +81,26 @@ def generate_property_values(
 ) -> Iterator[str]:
     yield '# This module is machine-generated. Do not edit by hand.'
     yield ''
-    yield 'from enum import StrEnum'
+    yield 'from enum import IntEnum, StrEnum'
     yield ''
     yield ''
+
+    properties = [p for p in ComplexProperty if not p.is_manually_generated()]
 
     yield '__all__ = ('
-    for property in ComplexProperty:
-        if not property.is_manually_generated():
-            yield f'    "{property.name.replace("_", "")}",'
+    for property in properties:
+        yield f'    "{property.name.replace("_", "")}",'
     yield ')'
-    yield ''
-    yield ''
 
-    for property in ComplexProperty:
-        if not property.is_manually_generated():
-            yield f'class {property.name.replace("_", "")}(StrEnum):'
-            for name, short_name in property_values[property.value]:
-                yield f'    {name} = "{short_name}"'
-            yield ''
-            yield ''
+    for property in properties:
+        yield ''
+        yield ''
+        ccc = property is ComplexProperty.Canonical_Combining_Class
+        parent = 'IntEnum' if ccc else 'StrEnum'
+        yield f'class {property.name.replace("_", "")}({parent}):'
+        for name, short_name in property_values[property.value]:
+            value = str(short_name) if ccc else f'"{short_name}"'
+            yield f'    {name} = {value}'
 
 
 # --------------------------------------------------------------------------------------

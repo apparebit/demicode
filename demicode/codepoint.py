@@ -2,22 +2,61 @@
 Unicode code points.
 
 This module defines demicode's representation for code points, ranges of code
-points, and sequences of code points. It tries to remain lightweight and simple
-while still providing useful object-oriented features. Hence this module defines
-abstractions for code points, ranges, and sequences alike but does not introduce
-a common base or separate mixins for shared functionality. Instead, all three
-classes simply implement methods with the same name and signature. Not all of
-them actually make sense across all three classes. Notably, that is the case for
-`CodePointRange.to_sequence()` and `CodePointSequence.to_range()`, since ranges
-and sequences simply cannot be converted into each other in the general case.
-They nonetheless exist because the shared interface simplifies type annotations
-and implementation of the UCD parser.
+points, and sequences of code points: `CodePoint`, `CodePointRange`, and
+`CodePointSequence`. It also defines convenient type aliases for the union of
+code points with ranges, with sequences, and with both ranges and sequences:
+`CodePointOrRange`, `CodePointOrSequence`, and `CodePoints`. While the three
+classes do *not* share a superclass, they do implement several, parameterless
+methods:
+
+    * `is_singleton()`
+    * `to_singleton()`
+    * `to_range()`
+    * `to_sequence()`
+    * `to_sequence_head()`
+    * `codepoints()`
+    * `__repr__()`
+    * `__str__()`
+
+Since all three classes implement these methods, a parameter or variable
+declared with one of the three type aliases can still safely invoke any of them.
+
+The first five methods help with parsing and processing UCD files: Demicode's
+parsing code processes UCD files one line at a time and instantiates the least
+complex representation for each line's code points. That is consistent with the
+notation in those files and also conserves memory. At the same time, most
+downstream code handles either only ranges or only sequences. The conversion
+methods make integration seamless:
+
+  * `to_range()` converts code points and degenerate sequences (with one
+    element) to ranges, while also failing on unexpected full sequences.
+  * Similarly, `to_sequence()` converts code points and degenerate ranges (with
+    the same start and stop) to sequences, while also failing on unexpected full
+    ranges.
+  * `to_sequence_head()` optimizes a corner case, in which a sequence is
+    expected but only the first element is needed, and avoids the creation of
+    useless intermediate sequences for code points and degenerate ranges.
+  * `is_singleton()` and `to_singleton()` help detect and convert degenerate
+    instances.
+
+`codepoints()` returns an iterator over the individual code points represented
+by the object.
+
+The `repr()` of all three classes uses Unicode `U+` notation for code points,
+whereas `str()` shows actual characters.
+
+Code point ranges `can_merge()` and `merge()` with each other. Two ranges are
+mergeable if the union of all their code points can be represented by a single,
+continuous range. As a convenience, code points implement the same two methods,
+albeit they too return ranges, even for degenerate cases. To exclude degenerate
+ranges (or sequences for that matter), iterate over the code point objects and
+replace every object that `is_singleton()` with the result of `to_singleton()`.
 """
 
 from collections.abc import Iterator
 from dataclasses import dataclass
 from types import NotImplementedType
-from typing import Any, ClassVar, Self, SupportsInt, SupportsIndex
+from typing import Any, ClassVar, Self, SupportsInt, SupportsIndex, TypeAlias
 
 
 class CodePoint(int):
@@ -82,18 +121,20 @@ class CodePoint(int):
 
         raise ValueError(f'"{value}" does not consist of 4-6 hex digits')
 
-    def can_merge_with(self, other: 'CodePoint | CodePointRange') -> bool:
+    def can_merge(self, other: 'CodePoint | CodePointRange') -> bool:
         if isinstance(other, CodePoint):
             return other - 1 <= self <= other + 1
         else:
             return other.start - 1 <= self <= other.stop + 1
 
     def merge(self, other: 'CodePoint | CodePointRange') -> 'CodePointRange':
-        if isinstance(other, CodePoint):
-            if other - 1 <= self <= other + 1:
-                return CodePointRange(min(self, other), max(self, other))
-        elif other.start - 1 <= self <= other.stop + 1:
-            return CodePointRange(min(self, other.start), max(self, other.stop))
+        match other:
+            case CodePoint():
+                if other - 1 <= self <= other + 1:
+                    return CodePointRange(min(self, other), max(self, other))
+            case _: # CodePointRange()
+                if other.start - 1 <= self <= other.stop + 1:
+                    return CodePointRange(min(self, other.start), max(self, other.stop))
         raise ValueError(f'{self!r} cannot possibly merge with {other!r}')
 
     def is_singleton(self) -> bool:
@@ -108,8 +149,8 @@ class CodePoint(int):
     def to_sequence(self) -> 'CodePointSequence':
         return CodePointSequence((self,))
 
-    def to_string(self) -> str:
-        return self.__str__()
+    def to_sequence_head(self) -> 'CodePoint':
+        return self
 
     def codepoints(self) -> 'Iterator[CodePoint]':
         yield self
@@ -148,6 +189,9 @@ class CodePointRange:
         except:
             return False
 
+    def __len__(self) -> int:
+        return self.stop - self.start + 1
+
     def __lt__(self, other: object) -> NotImplementedType | bool:
         if isinstance(other, CodePoint):
             return self.stop < other
@@ -164,10 +208,7 @@ class CodePointRange:
         else:
             return NotImplemented
 
-    def __len__(self) -> int:
-        return self.stop - self.start + 1
-
-    def can_merge_with(self, other: 'CodePoint | CodePointRange') -> bool:
+    def can_merge(self, other: 'CodePoint | CodePointRange') -> bool:
         if isinstance(other, CodePoint):
             return self.start - 1 <= other <= self.stop + 1
         else:
@@ -175,14 +216,16 @@ class CodePointRange:
             return self.start - 1 <= other.stop and other.start <= self.stop + 1
 
     def merge(self, other: 'CodePoint | CodePointRange') -> 'CodePointRange':
-        if isinstance(other, CodePoint):
-            if self.start - 1 <= other <= self.stop + 1:
-                return CodePointRange(min(self.start, other), max(self.stop, other))
-        elif self.start - 1 <= other.stop and other.start <= self.stop + 1:
-            return CodePointRange(
-                min(self.start, other.start),
-                max(self.stop, other.stop)
-            )
+        match other:
+            case CodePoint():
+                if self.start - 1 <= other <= self.stop + 1:
+                    return CodePointRange(min(self.start, other), max(self.stop, other))
+            case _: # CodePointRange
+                if self.start - 1 <= other.stop and other.start <= self.stop + 1:
+                    return CodePointRange(
+                        min(self.start, other.start),
+                        max(self.stop, other.stop)
+                    )
         raise ValueError(f'{self!r} cannot possibly merge with {other!r}')
 
     def is_singleton(self) -> bool:
@@ -201,8 +244,10 @@ class CodePointRange:
             return CodePointSequence([self.start])
         raise TypeError(f'Unable to convert range {self!r} to sequence')
 
-    def to_string(self) -> str:
-        return self.__str__()
+    def to_sequence_head(self) -> 'CodePoint':
+        if self.is_singleton():
+            return self.start
+        raise TypeError(f'Unable to treat range {self!r} as sequence')
 
     def codepoints(self) -> Iterator[CodePoint]:
         cursor = self.start
@@ -253,8 +298,8 @@ class CodePointSequence(tuple[CodePoint,...]):
     def to_sequence(self) -> 'CodePointSequence':
         return self
 
-    def to_string(self) -> str:
-        return self.__str__()
+    def to_sequence_head(self) -> CodePoint:
+        return self[0]
 
     def codepoints(self) -> Iterator[CodePoint]:
         return self.__iter__()
@@ -292,3 +337,8 @@ CodePoint.REGIONAL_INDICATOR_SYMBOL_LETTER_A = CodePoint(0x1F1E6)
 CodePoint.REGIONAL_INDICATOR_SYMBOL_LETTER_Z = CodePoint(0x1F1FF)
 
 CodePointRange.ALL = CodePointRange(CodePoint.MIN, CodePoint.MAX)
+
+
+CodePoints: TypeAlias = CodePoint | CodePointRange | CodePointSequence
+CodePointOrRange: TypeAlias = CodePoint | CodePointRange
+CodePointOrSequence: TypeAlias = CodePoint | CodePointSequence

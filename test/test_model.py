@@ -92,10 +92,10 @@ class TestModel(unittest.TestCase):
                     other = CodePointRange(CodePoint(row[2]), CodePoint(row[3]))
 
             if row[-1] is None:
-                self.assertFalse(this.can_merge_with(other))
+                self.assertFalse(this.can_merge(other))
                 continue
 
-            self.assertTrue(this.can_merge_with(other))
+            self.assertTrue(this.can_merge(other))
             actual = this.merge(other)
             expected = CodePointRange(CodePoint(row[-2]), CodePoint(row[-1]))
             self.assertEqual(actual, expected)

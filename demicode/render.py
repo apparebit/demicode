@@ -106,7 +106,7 @@ class Mode(StrEnum):
 
 class Padding(StrEnum):
     BACKGROUND = ' '
-    FOREGROUND = CodePoint.FULL_BLOCK.to_string()
+    FOREGROUND = str(CodePoint.FULL_BLOCK)
 
 
 class Renderer:

@@ -24,9 +24,9 @@ from collections import defaultdict
 from pathlib import Path
 import re
 
-from .mirror import mirror_unicode_data, retrieve_latest_ucd_version
+from .mirror import mirrored_data, retrieve_latest_ucd_version
 from .model import ComplexProperty, Version
-from .parser import ingest
+from .parser import parse
 
 
 def generate_code(root: Path) -> None:
@@ -39,12 +39,13 @@ def generate_code(root: Path) -> None:
 
     # Algorithms can and do change. So tests always are version-specific.
     # For now, we test grapheme breaks for 15.0 only. That should change.
-    v150 = Version(15, 0, 0)
-    path150 = mirror_unicode_data(root, 'GraphemeBreakTest.txt', v150)
+    v15 = Version(15, 0, 0)
+
     with open('test/grapheme_clusters.py', mode='w', encoding='utf8') as file:
         print('# This module is machine-generated. Do not edit by hand.\n', file=file)
-        for line in generate_grapheme_cluster_breaks(path150, v150):
-            print(line, file=file)
+        with mirrored_data('GraphemeBreakTest.txt', v15, root) as lines:
+            for line in grapheme_cluster_breaks(lines, v15):
+                print(line, file=file)
 
 
 # --------------------------------------------------------------------------------------
@@ -52,21 +53,20 @@ def generate_code(root: Path) -> None:
 
 
 def retrieve_property_values(
-    path: Path, version: Version
+    root: Path, version: Version
 ) -> dict[str, list[tuple[str, str]]]:
-    path = mirror_unicode_data(path, 'PropertyValueAliases.txt', version)
-    _, data = ingest(path, lambda _, p: p, with_codepoints=False)
-
     properties_of_interest = set()
     for complex_property in ComplexProperty:
         if not complex_property.is_manually_generated():
             properties_of_interest.add(complex_property.value)
 
     result = defaultdict(list)
-    for property, short_name, name, *_ in data:
-        if property not in properties_of_interest:
-            continue
-        result[property].append((name, short_name))
+    with mirrored_data('PropertyValueAliases.txt', version, root) as lines:
+        records = parse(lines, lambda _, p: p, with_codepoints=False)
+        for property, short_name, name, *_ in records:
+            if property not in properties_of_interest:
+                continue
+            result[property].append((name, short_name))
 
     # Patch provisional property value Consonant_Repha back in.
     values = result[ComplexProperty.Indic_Syllabic_Category.value]
@@ -109,22 +109,16 @@ def generate_property_values(
 
 MARK = re.compile(r'[÷×]')
 
-def generate_grapheme_cluster_breaks(path: Path, version: Version) -> Iterator[str]:
+def grapheme_cluster_breaks(lines: Iterator[str], version: Version) -> Iterator[str]:
     # Convert into dictionary entries, ready for testing.
     # https://www.unicode.org/Public/UCD/latest/ucd/auxiliary/GraphemeBreakTest.txt
     yield f'GRAPHEME_CLUSTER_BREAKS_{version.major}_{version.minor} = {{'
 
-    with open(path, mode='r', encoding='utf8') as file:
-        for line in file:
-            if line.startswith('#'):
-                continue
-            spec, _, _ = line.partition('#')
-            spec = spec.strip().replace(' ', '')
-
-            codepoints = ', '.join(f'0x{cp}' for cp in MARK.split(spec) if cp)
-            marks = ', '.join(
-                str(idx) for idx, mark in enumerate(MARK.findall(spec)) if mark == '÷')
-
-            yield f'    ({codepoints}): ({marks}),'
+    for spec in parse(lines, lambda _, p: p[0].replace(' ', ''), with_codepoints=False):
+        codepoints = ', '.join(f'0x{cp}' for cp in MARK.split(spec) if cp)
+        breaks = ', '.join(
+            str(idx) for idx, mark in enumerate(MARK.findall(spec)) if mark == '÷'
+        )
+        yield f'    ({codepoints}): ({breaks}),'
 
     yield '}'

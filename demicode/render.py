@@ -98,6 +98,14 @@ class Styles:
         Theme.of(bg(240), fg('245;3'), bg(53),  fg(93),  fg(245), bg('218;1'), fg('88;1')),
     )
 
+    @classmethod
+    def bold(cls, text: str) -> str:
+        return f'{cls.BOLD}{text}{cls.RESET}'
+
+    @classmethod
+    def italic(cls, text: str) -> str:
+        return f'{cls.ITALIC}{text}{cls.RESET}'
+
 
 class Mode(StrEnum):
     LIGHT = 'LIGHT'

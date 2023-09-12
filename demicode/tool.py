@@ -21,7 +21,7 @@ from .control import read_key_action, read_line_action
 from .darkmode import is_darkmode
 from .display import display
 from .mirror import local_cache_directory
-from .render import Mode, Renderer, StyledRenderer
+from .render import Mode, Renderer, StyledRenderer, Styles
 from .selection import *
 from .statistics import collect_statistics, show_statistics
 from .ucd import UnicodeCharacterDatabase
@@ -92,42 +92,48 @@ def width_limited_formatter(prog: str) -> argparse.HelpFormatter:
 
 
 def configure_parser() -> argparse.ArgumentParser:
+    b = Styles.bold if sys.__stdout__.isatty() else lambda s: s
+    i = Styles.italic if sys.__stdout__.isatty() else lambda s: s
+
+    tagline = i("It's not just Unicode, it's hemi-semi-demicode!")
     parser = argparse.ArgumentParser(
         prog='demicode',
-        description="""        "It's not just Unicode, it's hemi-semi-demicode!\"""",
-        epilog=dedent("""
-            Demicode pages its output and, after displaying a page, waits for
-            your input on what to do next. On Linux and macOS, use the left and
-            right cursor keys to go backward and forward one page. Use <escape>,
-            <q>, or <x> to terminate demicode instead. On all other operating
-            systems, enter a command and then confirm it with <return>:
+        description=f"""        "{tagline}\"""",
+        epilog=dedent(f"""
+            Demicode pages its output and, after rendering a page, waits for
+            your {b("your keyboard input")} to determine what to do next. On Linux
+            and macOS, use the left and right cursor keys to go backward and
+            forward one page. Use <escape>, <q>, or <x> to terminate demicode
+            instead. On all other operating systems, enter a command and then
+            confirm it with <return>:
 
-              * "b", "back", "backward", "p", and "previous" go backward one page.
-              * "", "f", "forward", "n", and "next" go forward one page.
-              * "q", "quit", "x", and "exit" terminate demicode.
+              - `b`, `back`, `backward`, `p`, and `previous` page backward.
+              - ``, `f`, `forward`, `n`, and `next` page forward.
+              - `q`, `quit`, `x`, and `exit` terminate demicode.
 
             Linux and macOS recognize the single letter commands as well.
 
-            If available, Demicode's grapheme-per-line mode shows the name of a
-            code point or emoji sequence. NAMES IN ALL-CAPS denote code points,
-            are from the UCD, and are immutable. names in lower-case (mostly)
-            denote emoji sequences, originate from the CLDR, and may change over
-            time. Age shows the Unicode version that first assigned a code point
-            or when prefixed with E the Unicode Emoji version that first defined
-            a sequence.
+            If available, Demicode's grapheme-per-line mode shows the {b("name")} of
+            a a code point or emoji sequence. NAMES IN ALL-CAPS denote code
+            points, are from the UCD, and are immutable. In contrast, names in
+            lower- case (mostly) denote emoji sequences, originate from the
+            CLDR, and may change over time. The {b("age")} is the Unicode version
+            that first assigned a code point or, when prefixed with E, the
+            Unicode Emoji version that first defined a sequence.
 
-            Demicode requires Python 3.11 or later and a terminal that supports
-            ANSI escape codes including 256 colors. Demicode is © 2023 Robert
+            Demicode requires {b("Python 3.11 or later")} and a terminal that supports
+            {b("ANSI escape codes")} including 256 colors. Demicode is © 2023 Robert
             Grimm, licensed as open source under Apache 2.0.
 
                       <https://github.com/apparebit/demicode>
+             ​
         """),
         formatter_class=width_limited_formatter,
     )
 
     # ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~
 
-    ucd_group = parser.add_argument_group('configure UCD')
+    ucd_group = parser.add_argument_group(b('configure UCD'))
     ucd_group.add_argument(
         '--ucd-path',
         help='use path for local UCD mirror instead of the\n'
@@ -152,17 +158,16 @@ def configure_parser() -> argparse.ArgumentParser:
 
     # ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~
 
-    cp_group = parser.add_argument_group('select code points')
+    cp_group = parser.add_argument_group(b('select code points'))
     cp_group.add_argument(
         '--with-ucd-emoji-variation',
         action='store_true',
-        help='include all code points that have text and\nemoji variations'
+        help='include all code points that have text and emoji\nvariations'
     )
     cp_group.add_argument(
-        '--with-ucd-extended-pictographic',
+        '--with-ucd-extended-pictographic', '-x',
         action='store_true',
-        help='include code points that are extended picto-\ngraphic including '
-        'unassigned ones'
+        help='include extended pictographic code points,\nincluding unassigned ones'
     )
     cp_group.add_argument(
         '--with-ucd-keycaps',
@@ -200,7 +205,7 @@ def configure_parser() -> argparse.ArgumentParser:
         help='include emoji that date supported Unicode version'
     )
     cp_group.add_argument(
-        '--with-curation',
+        '--with-curation', '-q',
         action='store_true',
         help='include curated selection of code points'
     )
@@ -216,7 +221,7 @@ def configure_parser() -> argparse.ArgumentParser:
 
     # ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~
 
-    in_group = parser.add_argument_group('control input')
+    in_group = parser.add_argument_group(b('control input'))
     in_group.add_argument(
         '--use-line-input',
         action='store_true',
@@ -225,7 +230,7 @@ def configure_parser() -> argparse.ArgumentParser:
 
     # ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~
 
-    out_group = parser.add_argument_group('control output')
+    out_group = parser.add_argument_group(b('control output'))
     out_group.add_argument(
         '--in-grid', '-g',
         action='store_true',
@@ -262,7 +267,7 @@ def configure_parser() -> argparse.ArgumentParser:
 
     # ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~
 
-    about_group = parser.add_argument_group('about this tool')
+    about_group = parser.add_argument_group(b('about this tool'))
     about_group.add_argument(
         '--stats',
         action='store_true',
@@ -276,7 +281,7 @@ def configure_parser() -> argparse.ArgumentParser:
     about_group.add_argument(
         '--generate-code',
         action='store_true',
-        help='generate Python modules based on Unicode\ndata files and exit',
+        help='generate Python modules based on Unicode data\nfiles and exit',
     )
 
     return parser

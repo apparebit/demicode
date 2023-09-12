@@ -2,27 +2,31 @@ from collections.abc import Iterable, Iterator, Sequence
 from pathlib import Path
 from typing import Callable, cast, Literal, TypeAlias, TypeVar
 
-from .codepoint import CodePoint, CodePointRange, CodePointSequence
+from .codepoint import (
+    CodePoint,
+    CodePointOrSequence,
+    CodePointRange,
+    CodePoints,
+    CodePointSequence,
+)
 
 
 T = TypeVar('T')
 P = TypeVar('P')
 Tag: TypeAlias = None | Literal['default']
-CodePoints: TypeAlias = CodePoint | CodePointRange | CodePointSequence
 Properties: TypeAlias = tuple[str, ...]
 
 
-def _parse_record(
+def _parse_line(
     line: str,
     *,
-    with_codepoints: bool = True,
-    with_comment: bool = False,
+    with_codepoints: bool = True,   # convert first field to code points
+    with_comment: bool = False,     # include comment as final field
 ) -> tuple[CodePoints, Properties]:
     """
-    Parse a record from a UCD file. If `with_codepoints` is `False`, the
-    returned code points are code point 0 and the first field in the input
-    becomes just another property. If `with_comment` is `True`, this function
-    includes the value of the comment as the last property.
+    Parse a UCD file line. `with_codepoints`, which defaults to `True`, converts
+    the first field to a code point, range, or sequence. `with_comment`, which
+    defaults to `False`, includes the comment as the final field.
     """
     line, _, comment = line.partition('#')
     properties = [f.strip() for f in line.strip().split(';')]
@@ -48,24 +52,21 @@ def _parse_record(
 _EOF = '# EOF'
 _MISSING = '# @missing:'
 
-def parse_records(
+def parse_lines(
     lines: Iterable[str],
     *,
     with_codepoints: bool = True,
     with_comment: bool = False,
 ) -> Iterator[tuple[Tag, CodePoints, Properties]]:
     """
-    Parse the lines of a UCD file into structured records. This function returns
-    a stream of triples:
-
-      * The tag distinguishes between defaults, `"default"`, and regular
-        records, `None`.
-      * The code points are the first of the semicolon-separated fields, with
-        single code points represented as `CodePoint`.
-      * The properties are the remaining fields as a tuple.
-
-    Individual values of properties are stripped of whitespace but otherwise
-    remain unprocessed. This implies that empty fields become empty strings.
+    Parse the lines of a UCD file into structured records. This function
+    processes all lines of a UCD file including comments. It parses comments
+    marked as `@missing`, setting the tag to `"default"` while leaving it `None`
+    for regular lines. When `with_codepoints` is enabled, which is the default,
+    it parses the first field as a code point, code point range, or code point
+    sequence. When `with_comment` is enabled, it parses the comment as the final
+    field. It does not process fields beyond stripping leading and trailing
+    white space. As a result, empty fields have empty strings as values.
     """
     for line in lines:
         if line in ('', '\n'):
@@ -73,7 +74,7 @@ def parse_records(
         elif line.startswith(_EOF):
             return
         elif line.startswith(_MISSING):
-            yield  'default', *_parse_record(
+            yield  'default', *_parse_line(
                 line[len(_MISSING):].strip(),
                 with_codepoints=with_codepoints,
                 with_comment=with_comment,
@@ -81,60 +82,39 @@ def parse_records(
         elif line[0] == '#':
             continue
         else:
-            yield None, *_parse_record(
+            yield None, *_parse_line(
                 line,
                 with_codepoints=with_codepoints,
                 with_comment=with_comment,
             )
 
 
-def collect(
-    property_records: Iterable[tuple[Tag, CodePoints, Properties]],
-    intern: Callable[[CodePoints, Properties], T],
-) -> tuple[list[T], list[T]]:
-    """
-    Convert the stream of parsed triples into a list of defaults and regular
-    records. To avoid repeated iteration over triples, this function takes a
-    converter callback that should convert pair of code points and properties
-    into the desired representation.
-    """
-    defaults: list[T] = []
-    records: list[T] = []
-
-    for tag, codepoints, properties in property_records:
-        if tag is None:
-            records.append(intern(codepoints, properties))
-        else:
-            defaults.append(intern(codepoints, properties))
-
-    return defaults, records
-
-
-def ingest(
-    path: Path,
-    intern: Callable[[CodePoints, Properties], T],
+def parse(
+    lines: Iterable[str],
+    constructor: Callable[[CodePoints, Properties], None | T],
     *,
     with_codepoints: bool = True,
     with_comment: bool = False,
-) -> tuple[list[T], list[T]]:
-    with open(path, mode='r', encoding='utf8') as handle:
-        return collect(
-            parse_records(
-                handle,
-                with_codepoints=with_codepoints,
-                with_comment=with_comment,
-            ),
-            intern,
-        )
+) -> Iterator[T]:
+    """
+    Parse the lines of a UCD file into application-specific records. This
+    function uses `parse_lines()` to parse lines into generic tuples, ignores
+    default values, converts tuples to application-specific records, and yields
+    the non-`None` results.
+    """
+    for tag, codepoints, properties in parse_lines(
+        lines,
+        with_codepoints=with_codepoints,
+        with_comment=with_comment,
+    ):
+        if tag is None:
+            record = constructor(codepoints, properties)
+            if record is not None:
+                yield record
 
 
 # --------------------------------------------------------------------------------------
-# Helpful Callbacks (for ingest() etc)
-
-
-def to_range(record: tuple[CodePointRange, T]) -> CodePointRange:
-    """Retrieve the range from a parsed record"""
-    return record[0]
+# Helpful Callbacks (for parse(), sorted(), ...)
 
 
 def to_range_and_string(
@@ -145,7 +125,11 @@ def to_range_and_string(
     return codepoints.to_range(), properties[0]
 
 
-def to_sequence(codepoints: CodePoints) -> CodePoint | CodePointSequence:
+def no_range(codepoints: CodePoints) -> CodePointOrSequence:
+    """
+    Return the least complex representation for the input while also rejecting
+    any code point ranges.
+    """
     if codepoints.is_singleton():
         return codepoints.to_singleton()
     if isinstance(codepoints, CodePointSequence):
@@ -153,24 +137,9 @@ def to_sequence(codepoints: CodePoints) -> CodePoint | CodePointSequence:
     raise TypeError(f'code point range {codepoints!r} where none expected')
 
 
-# --------------------------------------------------------------------------------------
-# Extract Default (With Error Checking)
-
-
-def extract_default(
-    defaults: Sequence[tuple[CodePoints, P]],
-    fallback: P,
-    label: str,
-) -> P:
-    length = len(defaults)
-    if length == 0:
-        return fallback
-    if length == 1:
-        r, p = defaults[0]
-        if r == CodePointRange.ALL:
-            return p
-        raise ValueError(f'Default {label} covers only {r!r}')
-    raise ValueError(f'Default {label} comprises {length} entries')
+def get_range(record: tuple[CodePointRange, T]) -> CodePointRange:
+    """Retrieve the range from a parsed record"""
+    return record[0]
 
 
 # --------------------------------------------------------------------------------------
@@ -186,7 +155,7 @@ def simplify_range_data(
 
     for range, props in data:
         if range_accumulator is not None:
-            if range_accumulator.can_merge_with(range) and props_accumulator == props:
+            if range_accumulator.can_merge(range) and props_accumulator == props:
                 range_accumulator = range_accumulator.merge(range)
                 continue
             yield range_accumulator, cast(P, props_accumulator)

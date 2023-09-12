@@ -129,17 +129,24 @@ The output of the last command should look something like the first screenshot.
 
 ## Versions
 
-  - **v0.8.0** (2023/09/09):
+  - **v0.8.0** (2023/09/12):
       - In interactive mode, render every page from scratch, taking terminal
         size into account. This enables paging forward *and* backward. On Linux
         and macOS, use left and right arrow keys to control paging.
-      - In batch mode, i.e., when standard in or out are redirected, emit all
-        character blots without paging.
-      - Test loading of every supported UCD version to squash any remaining
-        crashing bugs. The most recent versions still yield much better results.
+      - In batch mode, i.e., when standard input or output are redirected, emit
+        all character blots without paging.
+      - Test file loading and property look up for  every supported UCD version
+        to squash any remaining crashing bugs. Nonetheless, advise in tool help
+        that default, i.e., latest version produces best results.
       - In preparation of Unicode 15.1, add support for the
         Canonical_Combining_Class, Indic_Syllabic_Category, and Script
-        properties.
+        properties. Remove support for unused Dash, Noncharacter_Code_Point,
+        Variation_Selector, and White_Space properties again.
+      - Clean up UCD file loading. Eliminate most boilerplate and private helper
+        functions in `demicode.ucd`.
+      - Eliminate global instance of `UnicodeCharacterDatabase`. Leverage
+        independent instance for collection statistics, eliminating need for two
+        tool runs to collect all data.
   - **v0.7.0** (2023/09/06) Clearly distinguish between user errors and
     unexpected exceptions; print traceback only for the latter. Modularize test
     script using `unittest`. In preparation of Unicode 15.1, specify which

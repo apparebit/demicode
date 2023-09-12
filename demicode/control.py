@@ -85,6 +85,11 @@ if sys.platform in ('linux', 'darwin'):
         finally:
             termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_settings)
 
+        # Terminate line with key hint after all.
+        sys.stdout.write('\n')
+        sys.stdout.flush()
+
+        # Turn key into action. Nibs of 3 characters start with 0x1B 0x5B.
         nib_length = len(nib)
         if nib_length == 3:
             key = ord(nib[2])

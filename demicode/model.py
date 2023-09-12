@@ -187,7 +187,6 @@ class ComplexProperty(StrEnum):
 
 class BinaryProperty(StrEnum):
     """Supported binary Unicode properties"""
-    Dash = 'Dash'
     Default_Ignorable_Code_Point = 'DI'
     Emoji = 'Emoji'
     Emoji_Component = 'EComp'
@@ -195,9 +194,6 @@ class BinaryProperty(StrEnum):
     Emoji_Modifier_Base = 'EBase'
     Emoji_Presentation = 'EPres'
     Extended_Pictographic = 'ExtPict'
-    Noncharacter_Code_Point = 'NChar'
-    Variation_Selector = 'VS'
-    White_Space = 'WSpace'
 
     @property
     def is_emoji(self) -> bool:
@@ -205,17 +201,7 @@ class BinaryProperty(StrEnum):
         Determine whether the property relates to emoji, i.e., is `Emoji`,
         is prefixed with `Emoji_`, or is `Extended_Pictographic`.
         """
-        return self in _EMOJI_PROPERTIES
-
-
-_EMOJI_PROPERTIES = frozenset([
-    BinaryProperty.Emoji,
-    BinaryProperty.Emoji_Component,
-    BinaryProperty.Emoji_Modifier,
-    BinaryProperty.Emoji_Modifier_Base,
-    BinaryProperty.Emoji_Presentation,
-    BinaryProperty.Extended_Pictographic,
-])
+        return self is not BinaryProperty.Default_Ignorable_Code_Point
 
 
 # --------------------------------------------------------------------------------------
@@ -319,8 +305,8 @@ class GraphemeCluster(StrEnum):
     """
     Enumeration over the different code points that contribute to grapheme
     clusters. Note that, unlike for other enumerations in this module,
-    enumeration constant values are *not* official Unicode aliases. Instea d they
-    are single, mnemonic characters used by `GRAPHEME_CLUSTER_PATTERN` to
+    enumeration constant values are *not* official Unicode aliases. Instea d
+    they are single, mnemonic characters used by `GRAPHEME_CLUSTER_PATTERN` to
     recognize grapheme clusters.
     """
 

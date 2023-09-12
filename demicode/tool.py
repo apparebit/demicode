@@ -159,6 +159,12 @@ def configure_parser() -> argparse.ArgumentParser:
         help='include all code points that have text and\nemoji variations'
     )
     cp_group.add_argument(
+        '--with-ucd-extended-pictographic',
+        action='store_true',
+        help='include code points that are extended picto-\ngraphic including '
+        'unassigned ones'
+    )
+    cp_group.add_argument(
         '--with-ucd-keycaps',
         action='store_true',
         help='include code points that combine with U+20E3\ninto enclosing keycaps'
@@ -358,6 +364,12 @@ def process(options: argparse.Namespace, renderer: Renderer) -> int:
     # Standard selections
     if options.with_ucd_emoji_variation:
         codepoints.append(sorted(ucd.with_emoji_variation))
+    if options.with_ucd_extended_pictographic:
+        codepoints.append(
+            itertools.chain.from_iterable(
+                r.codepoints() for r in ucd.extended_pictographic_ranges()
+            )
+        )
     if options.with_ucd_keycaps:
         codepoints.append(sorted(ucd.with_keycap))
 

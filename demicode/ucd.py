@@ -383,7 +383,7 @@ class UnicodeCharacterDatabase:
         grapheme_break = self._grapheme_break
         grapheme_break_count = len(grapheme_break)
         if grapheme_break_count > 0:
-            for range in self._emoji_data[BinaryProperty.Extended_Pictographic]:
+            for range in self._emoji_data[BinaryProperty.Extended_Pictographic.name]:
                 for codepoint in range.codepoints():
                     index = _bisect_range_data(grapheme_break, codepoint)
                     if not (0 <= index < grapheme_break_count):
@@ -402,7 +402,7 @@ class UnicodeCharacterDatabase:
         # emoji components are also listed as valid emoji sequences. If they may
         # be combined with variation selectors, check that the sequence code
         # point, U+FE0F is not redundantly included amongst emoji sequences.
-        for range in self._emoji_data['Emoji_Presentation']:
+        for range in self._emoji_data[BinaryProperty.Emoji_Presentation.name]:
             for cp in range.codepoints():
                 if not (
                     CodePoint.REGIONAL_INDICATOR_SYMBOL_LETTER_A
@@ -670,6 +670,14 @@ class UnicodeCharacterDatabase:
         selector.
         """
         return self._to_emoji_info(self._to_codepoints(codepoints)) or (None, None)
+
+    def extended_pictographic_ranges(self) -> Iterator[CodePointRange]:
+        """
+        Create an iterator over code point ranges that are extended
+        pictographic.
+        """
+        for range in self._emoji_data[BinaryProperty.Extended_Pictographic.name]:
+            yield range.to_range()
 
     # ----------------------------------------------------------------------------------
     # Binary Unicode properties

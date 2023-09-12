@@ -145,7 +145,7 @@ The output of the last command should look something like the first screenshot.
       - Clean up UCD file loading. Eliminate most boilerplate and private helper
         functions in `demicode.ucd`.
       - Eliminate global instance of `UnicodeCharacterDatabase`. Leverage
-        independent instance for collection statistics, eliminating need for two
+        independent instance for collecting statistics, eliminating need for two
         tool runs to collect all data.
   - **v0.7.0** (2023/09/06) Clearly distinguish between user errors and
     unexpected exceptions; print traceback only for the latter. Modularize test

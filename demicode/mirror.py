@@ -1,22 +1,37 @@
 """
-Support for mirroring Unicode data on a user's machine.
+Support for mirroring Unicode data on the local machine.
 
 This module contains the logic for discovering the latest versions of the
 Unicode Character Database (UCD) and the Common Locale Data Repository (CLDR)
 and for downloading necessary files from both. It also mirrors files from the
-Unicode Emoji standard, treating them as part of the UCD.
+Unicode Emoji standard. By default, the local mirror uses the operating system's
+directory for application caches.
 
-The local mirror organizes UCD files by version and hence can easily cache the
-files of more than one version. Since demicode only requires two CLDR files and
-only for the names of emoji sequences, the local mirror only stores the latest
-version of these two files.
+This module downloads UCD and Unicode Emoji files from Unicode's servers at
+https://www.unicode.org/Public/. It downloads CLDR data in JSON format through
+the Unicode Consortium's official distribution at https://registry.npmjs.org.
+The local cache directory contains `latest-ucd-version.txt` and
+`latest-cldr-version.txt`, which store the most recent version of the UCD and
+CLDR. This module uses each file's last modified time to throttle server
+accesses, checking for new versions only after a week.
 
-To avoid generating excessive network traffic, the mirroring code ony queries
-servers for the latest versions of UCD and CLDR once a week. If it finds that
-the version has been updated, it eagerly loads all needed files.
+To accommodate more than one Unicode version, the local mirror organizes
+downloaded files into subdirectories named after the Unicode version. It does
+not maintain nested subdirectories as found in the UCD.
 
-By default, the local mirror uses the operating system's directory for caches.
+Files from the Unicode Emoji standard are not stored separately but with the
+corresponding UCD files. The `demicode.model` module implements the version
+logic equating Unicode 8.0 with Emoji 1.0, 9.0 with E3.0, and 10.0 with E5.0.
+Starting with Unicode 11.0, Unicode Emoji are released on the same schedule and
+use the same version numbers. Starting with Unicode 13.0, the UCD includes
+several emoji files that were previously part of the Unicode Emoji files.
+
+Since demicode only requires two CLDR files and only for the names of emoji
+sequences, the local mirror keeps only the latest version of these two files as
+`annotations1.json` and `annotations2.json` in the cache directory.
 """
+from collections.abc import Iterator
+from contextlib import contextmanager
 import json
 import logging
 import os
@@ -57,7 +72,6 @@ def request_for(url: str, **headers: str) -> Request:
 _AUXILIARY_FILES = ('GraphemeBreakProperty.txt', 'GraphemeBreakTest.txt')
 _EXTRACTED_FILES = (
     'DerivedCombiningClass.txt',
-    'DerivedEastAsianWidth.txt',
     'DerivedGeneralCategory.txt'
 )
 _CORE_EMOJI_FILES = ('emoji-data.txt', 'emoji-variation-sequences.txt')
@@ -155,8 +169,9 @@ def retrieve_latest_ucd_version(root: Path) -> Version:
 
     rematch = _VERSION_PATTERN.search(text)
     if rematch is None:
-        logger.error('UCD\'s "ReadMe.txt" elides version number')
-        raise ValueError("""UCD's "ReadMe.txt" elides version number""")
+        msg = '"ReadMe.txt" in latest UCD elides version number'
+        logger.error(msg)
+        raise ValueError(msg)
     version = Version.of(rematch.group('version'))
 
     root.mkdir(parents=True, exist_ok=True)
@@ -184,7 +199,7 @@ def local_cache_directory() -> Path:
     return Path(path) / 'demicode'
 
 
-def mirror_unicode_data(root: Path, filename: str, version: Version) -> Path:
+def mirror_unicode_data(filename: str, version: Version, cache: Path) -> Path:
     """
     Locally mirror a file from the Unicode Character Database. This method
     raises a `VersioningError` if the requested file does not yet exist for the
@@ -192,7 +207,7 @@ def mirror_unicode_data(root: Path, filename: str, version: Version) -> Path:
     emoji data. Callers should be prepared to gracefully recover from this
     exception.
     """
-    version_root = root / str(version)
+    version_root = cache / str(version)
     path = version_root / filename
     if not path.exists():
         version_root.mkdir(parents=True, exist_ok=True)
@@ -205,6 +220,29 @@ def mirror_unicode_data(root: Path, filename: str, version: Version) -> Path:
         ):
             shutil.copyfileobj(response, file)
     return path
+
+
+@contextmanager
+def mirrored_data(
+    filename: str, version: Version, cache: Path
+) -> Iterator[Iterator[str]]:
+    """
+    Create a new context manager that provides an iterator over the lines of a
+    locally mirrored UCD file. Since the lines are not buffered, they must be
+    consumed before leaving the context manager's scope. If the UCD version does
+    not include the file, the context manager intercepts the resulting
+    versioning error and offers an empty iterator instead. If the file has not
+    been mirrored before, the context manager retrieves it from the Unicode
+    Consortium's server.
+    """
+    try:
+        path = mirror_unicode_data(filename, version, cache)
+    except VersioningError:
+        logger.info('skipping non-existent "%s" for UCD %s', filename, version)
+        yield iter(())
+        return
+    with open(path, mode='r', encoding='utf8') as data:
+        yield data
 
 
 # --------------------------------------------------------------------------------------
@@ -234,6 +272,9 @@ def _load_cldr_annotations(
     ):
         shutil.copyfileobj(response, file)
 
+    # Extract via temporary file so that user isn't left with no file upon failure.
+    tmp = path.with_suffix('.next.json')
+
     logger.info('extracting "%s" to "%s"', member, path)
     with tar.open(tarball) as archive:
         member_info = archive.getmember(member)
@@ -242,9 +283,10 @@ def _load_cldr_annotations(
                 f'entry for "{member}" in CLDR archive "{url}" is not a file')
         with (
             cast(IO[bytes], archive.extractfile(member_info)) as source,
-            open(path, mode='wb') as target
+            open(tmp, mode='wb') as target
         ):
             shutil.copyfileobj(source, target)
+    tmp.replace(path)
 
     tarball.unlink()
 

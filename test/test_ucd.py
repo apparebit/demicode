@@ -6,8 +6,12 @@ from demicode.model import (
     BinaryProperty,
     CharacterData,
     ComplexProperty,
-    GeneralCategory,
     EastAsianWidth,
+    GeneralCategory,
+    IndicSyllabicCategory,
+    KNOWN_UCD_VERSIONS,
+    Script,
+    Version,
 )
 from demicode.ucd import UnicodeCharacterDatabase
 
@@ -23,8 +27,12 @@ PROPERTY_COUNTS = {
     BinaryProperty.Emoji_Modifier_Base: (134, 50, 40),
     BinaryProperty.Emoji_Presentation: (1_205, 282, 81),
     BinaryProperty.Extended_Pictographic: (3_537, 511, 78),
+    ComplexProperty.Canonical_Combining_Class: (286_719, 2_374, 1_196),
     ComplexProperty.East_Asian_Width: (349_871, 2_575, 1_169),
+    ComplexProperty.General_Category: (288_767, 3_300, 3_300),
     ComplexProperty.Grapheme_Cluster_Break: (18_003, 1_391, 1_371),
+    ComplexProperty.Indic_Syllabic_Category: (4_639, 922, 775),
+    ComplexProperty.Script: (149_251, 2_191, 952),
 }
 
 CHARACTER_DATA = (
@@ -67,7 +75,36 @@ CHARACTER_DATA = (
     ),
 )
 
-class TestUCD(unittest.TestCase):
+class TestProperty(unittest.TestCase):
+
+    def test_known_versions(self):
+        for raw_version in KNOWN_UCD_VERSIONS[:-1]:
+            version = Version(*raw_version)
+            with self.subTest(version=version):
+                ucd = UnicodeCharacterDatabase(UCD_PATH, version).prepare()
+                self.assertEqual(ucd.version, version)
+
+                # Check that data is usable by looking up properties.
+                self.assertEqual(ucd.age(CodePoint.FULL_BLOCK), '1.1')
+                self.assertEqual(ucd.block(CodePoint.FULL_BLOCK), 'Block Elements')
+                self.assertEqual(
+                    ucd.canonical_combining_class(CodePoint.FULL_BLOCK),
+                    0,
+                )
+                self.assertEqual(
+                    ucd.east_asian_width(CodePoint.FULL_BLOCK),
+                    EastAsianWidth.Ambiguous,
+                )
+                self.assertEqual(
+                    ucd.general_category(CodePoint.FULL_BLOCK),
+                    GeneralCategory.Other_Symbol,
+                )
+                self.assertEqual(
+                    ucd.indic_syllabic_category(CodePoint.FULL_BLOCK),
+                    IndicSyllabicCategory.Other,
+                )
+                self.assertEqual(ucd.name(CodePoint.FULL_BLOCK), 'FULL BLOCK')
+                self.assertEqual(ucd.script(CodePoint.FULL_BLOCK), Script.Common)
 
     def check_property_value_counts(
         self,
@@ -77,7 +114,7 @@ class TestUCD(unittest.TestCase):
 
         for property, counts in PROPERTY_COUNTS.items():
             expected_cp_count, range_count, min_range_count = counts
-            actual_count, actual_range_count = ucd.count_property_values(property)
+            actual_count, actual_range_count = ucd.count_values(property)
             expected_range_count = min_range_count if ucd.is_optimized else range_count
 
             self.assertEqual(actual_count, expected_cp_count)

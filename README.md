@@ -129,7 +129,7 @@ The output of the last command should look something like the first screenshot.
 
 ## Versions
 
-  - **v0.8.0** (2023/09/12):
+  - **v1.0.0b1** (2023/09/12):
       - In interactive mode, render every page from scratch, taking terminal
         size into account. This enables paging forward *and* backward. On Linux
         and macOS, use left and right arrow keys to control paging.

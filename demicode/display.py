@@ -15,7 +15,7 @@ from .codepoint import CodePoint, CodePointSequence
 from .control import Action, read_line_action
 from .model import GeneralCategory, Presentation
 from .render import Padding, Renderer
-from .ucd import UCD, Version
+from .ucd import UnicodeCharacterDatabase, Version
 
 
 # --------------------------------------------------------------------------------------
@@ -24,6 +24,7 @@ from .ucd import UCD, Version
 
 def make_presentable(
     data: Iterable[str | CodePoint | CodePointSequence],
+    ucd: UnicodeCharacterDatabase,
     *,
     headings: bool = True,  # Allow embedded headings
 ) -> Iterator[tuple[Presentation, str | CodePoint | CodePointSequence]]:
@@ -53,14 +54,14 @@ def make_presentable(
             continue
 
         datum = datum.to_singleton()
-        if datum in UCD.fullwidth_punctuation:
+        if datum in ucd.fullwidth_punctuation:
             yield Presentation.CORNER, datum
             yield Presentation.CENTER, datum
-        elif datum in UCD.with_emoji_variation:
+        elif datum in ucd.with_emoji_variation:
             yield Presentation.NONE, datum
             yield Presentation.TEXT, datum
             yield Presentation.EMOJI, datum
-            if datum in UCD.with_keycap:
+            if datum in ucd.with_keycap:
                 yield Presentation.KEYCAP, datum
         else:
             yield Presentation.NONE, datum
@@ -94,7 +95,7 @@ def format_legend(renderer: Renderer) -> str:
     return renderer.legend(LEGEND.ljust(renderer.width))
 
 
-def format_heading(renderer: Renderer, heading: str) -> str:
+def format_heading(heading: str, renderer: Renderer) -> str:
     """Format the heading without the initial \\u0001 (Start of Heading)."""
     if heading[0] != '\u0001':
         raise ValueError(
@@ -119,8 +120,9 @@ def format_heading(renderer: Renderer, heading: str) -> str:
 
 
 def format_blot(
-    renderer: Renderer,
     codepoints: CodePoint | CodePointSequence,
+    renderer: Renderer,
+    ucd: UnicodeCharacterDatabase,
     *,
     start_column: int = 1,
     presentation: Presentation = Presentation.NONE,
@@ -130,25 +132,25 @@ def format_blot(
     # singleton or more than one grapheme cluster, their blots are elided.
     presentation, codepoints = presentation.normalize(codepoints)
 
-    if not UCD.is_grapheme_cluster(codepoints):
+    if not ucd.is_grapheme_cluster(codepoints):
         display = '···'
         width = 3
     elif codepoints.is_singleton():
         codepoint = codepoints.to_singleton()
-        if UCD.category(codepoint) is GeneralCategory.Unassigned:
+        if ucd.general_category(codepoint) is GeneralCategory.Unassigned:
             display = '···'
             width = 3
         else:
             display = presentation.apply(codepoints.to_singleton())
-            width = UCD.width(display)
+            width = ucd.width(display)
     else:
         display = str(codepoints)
-        width = UCD.width(codepoints)
+        width = ucd.width(codepoints)
 
     # Fail gracefully for control, surrogate, and private use characters.
     if width == -1:
         width = 1
-        display = CodePoint.REPLACEMENT_CHARACTER.to_string()
+        display = str(CodePoint.REPLACEMENT_CHARACTER)
 
     # Render Character Blots
     yield renderer.column(start_column + 1)
@@ -160,8 +162,9 @@ def format_blot(
 
 
 def format_info(
-    renderer: Renderer,
     codepoints: CodePoint | CodePointSequence,
+    renderer: Renderer,
+    ucd: UnicodeCharacterDatabase,
     *,
     start_column: int = 1,
     presentation: Presentation = Presentation.NONE,
@@ -179,16 +182,16 @@ def format_info(
 
         # Account for non-grapheme-clusters and emoji sequences.
         name = age = None
-        if not UCD.is_grapheme_cluster(codepoints):
+        if not ucd.is_grapheme_cluster(codepoints):
             name = renderer.fit(
-                f'Not a grapheme cluster in UCD {UCD.version.in_short_format()}',
+                f'Not a grapheme cluster in UCD {ucd.version.in_short_format()}',
                 width=_name_width(renderer.width)
             )
             yield ' ' * (AGE_WIDTH + 1)
             yield f' {renderer.hint(name)}'
             return
 
-        name, age = UCD.emoji_sequence_data(codepoints)
+        name, age = ucd.emoji_sequence_data(codepoints)
         if age:
             yield f' {cast(Version, age).in_emoji_format():>{AGE_WIDTH}}'
         elif name:
@@ -199,7 +202,7 @@ def format_info(
 
     # A single code point: Display detailed metadata including presentation.
     codepoint = codepoints.to_singleton()
-    unidata = UCD.lookup(codepoint)
+    unidata = ucd.lookup(codepoint)
 
     yield f'{codepoint!r:<8s} '
     vs = presentation.variation_selector
@@ -211,7 +214,7 @@ def format_info(
 
     name = age = None
     if presentation is not Presentation.TEXT:
-        name, age = UCD.emoji_sequence_data(presentation.apply(codepoint))
+        name, age = ucd.emoji_sequence_data(presentation.apply(codepoint))
 
     age_display = '' if unidata.age is None else str(unidata.age)
     age_display = age.in_emoji_format() if age else age_display
@@ -219,7 +222,7 @@ def format_info(
 
     if unidata.category is GeneralCategory.Unassigned:
         name = renderer.fit(
-            f'Unassigned in UCD {UCD.version.in_short_format()}',
+            f'Unassigned in UCD {ucd.version.in_short_format()}',
             width=_name_width(renderer.width)
         )
         yield renderer.hint(name)
@@ -238,24 +241,27 @@ def format_info(
 
 
 def format_lines(
-    renderer: Renderer,
     data: Iterable[tuple[Presentation, str | CodePoint | CodePointSequence]],
+    renderer: Renderer,
+    ucd: UnicodeCharacterDatabase,
 ) -> Iterator[str]:
     """Emit the extended, per-line representation for all code points."""
     for presentation, codepoints in data:
         if presentation.is_heading:
-            yield format_heading(renderer, cast(str, codepoints))
+            yield format_heading(cast(str, codepoints), renderer)
         else:
             yield ''.join(
                 itertools.chain(
                     format_blot(
-                        renderer,
                         cast(CodePoint | CodePointSequence, codepoints),
+                        renderer,
+                        ucd,
                         presentation=presentation,
                     ),
                     format_info(
-                        renderer,
                         cast(CodePoint | CodePointSequence, codepoints),
+                        renderer,
+                        ucd,
                         presentation=presentation,
                     )
                 )
@@ -269,9 +275,10 @@ def grid_column(index: int) -> int:
 
 
 def format_grid_lines(
-    renderer: Renderer,
     data: Iterable[tuple[Presentation, CodePoint | CodePointSequence]],
     column_count: int,
+    renderer: Renderer,
+    ucd: UnicodeCharacterDatabase,
 ) -> Iterator[str]:
     """Emit the compact, grid-like representation for all code points."""
     # Ensure that every loop iteration consumes more code points
@@ -280,8 +287,9 @@ def format_grid_lines(
     while True:
         line = ''.join(itertools.chain.from_iterable(
             format_blot(
-                renderer,
                 codepoints,
+                renderer,
+                ucd,
                 presentation=presentation,
                 start_column=grid_column(count),
             )
@@ -297,18 +305,19 @@ def format_grid_lines(
 
 
 def display(
-    renderer: Renderer,
     stream: Iterable[str | CodePoint | CodePointSequence],
+    renderer: Renderer,
+    ucd: UnicodeCharacterDatabase,
     *,
     in_grid: bool = False,
     read_action: Callable[[Renderer], Action] = read_line_action,
 ) -> None:
-    data = [*make_presentable(stream, headings=not in_grid)]
+    data = [*make_presentable(stream, ucd, headings=not in_grid)]
     total_count = len(data)
     start = stop = -1
     action = Action.FORWARD
 
-    renderer.set_window_title(f'⸺ Demicode • UCD {UCD.version.in_short_format()} ⸺')
+    renderer.set_window_title(f'⸺ Demicode • UCD {ucd.version.in_short_format()} ⸺')
 
     while True:
         renderer.refresh()
@@ -334,15 +343,16 @@ def display(
 
         if in_grid:
             body = [*format_grid_lines(
-                renderer,
                 cast(
                     Iterable[tuple[Presentation, CodePoint | CodePointSequence]],
                     data[start:stop],
                 ),
                 column_count,
+                renderer,
+                ucd,
             )]
         else:
-            body = [*format_lines(renderer, data[start:stop])]
+            body = [*format_lines(data[start:stop], renderer, ucd)]
 
         if renderer.is_interactive:
             actual_body_height = len(body)

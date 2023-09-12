@@ -20,10 +20,11 @@ from .codepoint import CodePoint, CodePointSequence
 from .control import read_key_action, read_line_action
 from .darkmode import is_darkmode
 from .display import display
-from .model import BinaryProperty, ComplexProperty
+from .mirror import local_cache_directory
 from .render import Mode, Renderer, StyledRenderer
 from .selection import *
-from .ucd import UCD
+from .statistics import collect_statistics, show_statistics
+from .ucd import UnicodeCharacterDatabase
 from demicode import __version__
 
 
@@ -129,12 +130,13 @@ def configure_parser() -> argparse.ArgumentParser:
     ucd_group = parser.add_argument_group('configure UCD')
     ucd_group.add_argument(
         '--ucd-path',
-        help='use path for local UCD mirror instead of OS\n'
-        'application cache directory',
+        help='use path for local UCD mirror instead of the\n'
+        'designated cache directory',
     )
     ucd_group.add_argument(
         '--ucd-version',
-        help='set UCD version from 4.1 onwards',
+        help='use UCD version >= 4.1 even though the default,\n'
+        'i.e., latest, version yields best results'
     )
     ucd_group.add_argument(
         '--ucd-optimize',
@@ -151,11 +153,6 @@ def configure_parser() -> argparse.ArgumentParser:
     # ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~
 
     cp_group = parser.add_argument_group('select code points')
-    cp_group.add_argument(
-        '--with-ucd-dashes',
-        action='store_true',
-        help='include code points with Unicode\'s Dash property',
-    )
     cp_group.add_argument(
         '--with-ucd-emoji-variation',
         action='store_true',
@@ -205,9 +202,9 @@ def configure_parser() -> argparse.ArgumentParser:
         'graphemes',
         nargs='*',
         help=dedent("""\
-            include graphemes provided as space-
-            separated hex numbers of 4-6 digits, optionall
-            prefixed with "U+" or as literal character strings
+            include graphemes provided as space-separated
+            hex numbers of 4-6 digits, optionally prefixed
+            with "U+", or as literal strings
         """)
     )
 
@@ -282,73 +279,6 @@ def configure_parser() -> argparse.ArgumentParser:
 # --------------------------------------------------------------------------------------
 
 
-def show_statistics(renderer: Renderer, is_optimized: bool) -> None:
-    qualifier = '(optimized)' if is_optimized else '(not optimized)'
-    title = renderer.strong(
-        f'Code Points / Ranges with Non-Default Property Values {qualifier}'
-    )
-    print(f'\n{title}\n')
-
-    def show_heading(text: str) -> None:
-        print(renderer.heading(text))
-        print()
-
-    total_points = total_ranges = 0
-
-    def show_counts(property: BinaryProperty | ComplexProperty) -> None:
-        nonlocal total_points, total_ranges
-        points, ranges = cast(tuple[int, int], UCD.count_property_values(property))
-        print(f'     {property.name:<28} : {points:7,d} / {ranges:6,d}')
-        total_points += points
-        total_ranges += ranges
-
-    def show_total() -> None:
-        print('    ' + renderer.hint('–' * (1 + 28 + 13 + 6 + 1)))
-        print(
-            f'     {"Totals":<28} : '
-            + f'{total_points:7,d} / {total_ranges:6,d}'
-        )
-        print('\n')
-
-    show_heading('Binary Emoji Properties:')
-    for property in (
-        BinaryProperty.Emoji,
-        BinaryProperty.Emoji_Component,
-        BinaryProperty.Emoji_Modifier,
-        BinaryProperty.Emoji_Modifier_Base,
-        BinaryProperty.Emoji_Presentation,
-        BinaryProperty.Extended_Pictographic,
-    ):
-        show_counts(property)
-    show_total()
-
-    show_heading('Or, Emoji Enumeration:')
-    show_counts(ComplexProperty.Emoji_Sequence)
-    print('\n')
-
-    show_heading('Also Needed, Complex Properties:')
-    total_points = total_ranges = 0
-    for property in (
-        ComplexProperty.Canonical_Combining_Class,
-        ComplexProperty.East_Asian_Width,
-        ComplexProperty.General_Category,
-        ComplexProperty.Grapheme_Cluster_Break,
-        ComplexProperty.Indic_Syllabic_Category,
-        ComplexProperty.Script,
-    ):
-        show_counts(property)
-    show_total()
-
-    q1 = 'no-' if is_optimized else ''
-    q2 = 'before' if is_optimized else 'after'
-    hint = f'Use --{q1}ucd-optimize to see range counts {q2} optimization'
-    print(renderer.hint(hint))
-    print()
-
-
-# --------------------------------------------------------------------------------------
-
-
 def run(arguments: Sequence[str]) -> int:
     # ---------------------------- Parse the options and prepare console renderer
     parser = configure_parser()
@@ -393,42 +323,43 @@ def process(options: argparse.Namespace, renderer: Renderer) -> int:
         return 0
 
     # --------------------------------------------------------------- Prepare UCD
+    ucd = UnicodeCharacterDatabase(local_cache_directory())
+
     if options.ucd_path:
         with user_error(
             ValueError, '"{}" is not a valid UCD directory', options.ucd_path
         ):
-            UCD.use_path(Path(options.ucd_path))
+            ucd.use_path(Path(options.ucd_path))
     if options.ucd_version:
         with user_error(
             ValueError, '"{}" is not a valid UCD version ', options.ucd_version
         ):
-            UCD.use_version(options.ucd_version)
-    UCD.prepare()
+            ucd.use_version(options.ucd_version)
+    ucd.prepare()
 
     if options.ucd_optimize:
-        UCD.optimize()
+        ucd.optimize()
     if options.ucd_validate:
-        UCD.validate()
+        ucd.validate()
 
     # -------------------------------------------------------------- Leverage UCD
     if options.generate_code:
-        assert UCD.version is not None
-        generate_code(UCD.path)
+        assert ucd.version is not None
+        generate_code(ucd.path)
         return 0
 
     if options.stats:
-        show_statistics(renderer, options.ucd_optimize)
+        data = collect_statistics(ucd.path, ucd.version)
+        show_statistics(ucd.version, data, renderer)
         return 0
 
     # ------------------------------------------ Determine code points to display
     codepoints: list[Iterable[CodePoint|CodePointSequence|str]] = []
     # Standard selections
-    if options.with_ucd_dashes:
-        codepoints.append(sorted(UCD.dashes))
     if options.with_ucd_emoji_variation:
-        codepoints.append(sorted(UCD.with_emoji_variation))
+        codepoints.append(sorted(ucd.with_emoji_variation))
     if options.with_ucd_keycaps:
-        codepoints.append(sorted(UCD.with_keycap))
+        codepoints.append(sorted(ucd.with_keycap))
 
     # Non-standard selections
     if options.with_arrows:
@@ -459,7 +390,7 @@ def process(options: argparse.Namespace, renderer: Renderer) -> int:
             else:
                 cluster = CodePointSequence.from_string(argument)
 
-        if not UCD.is_grapheme_cluster(cluster):
+        if not ucd.is_grapheme_cluster(cluster):
             raise UserError(f'{cluster!r} is more than one grapheme cluster!')
         codepoints.append(
             [cluster.to_singleton() if cluster.is_singleton() else cluster])
@@ -478,8 +409,9 @@ def process(options: argparse.Namespace, renderer: Renderer) -> int:
         read_action = read_key_action
 
     display(
-        renderer,
         itertools.chain.from_iterable(codepoints),
+        renderer,
+        ucd,
         in_grid=options.in_grid,
         read_action=read_action,
     )

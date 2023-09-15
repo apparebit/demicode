@@ -1,31 +1,32 @@
 from collections import defaultdict
 from pathlib import Path
+from typing import cast
 
-from .model import BinaryProperty, ComplexProperty, Version
+from .model import BinaryProperty, Property, Version
 from .render import Renderer
 from .ucd import UnicodeCharacterDatabase
 
 
-_PROPERTIES: tuple[BinaryProperty | ComplexProperty, ...] = (
+_PROPERTIES: tuple[BinaryProperty | Property, ...] = (
     BinaryProperty.Emoji,
     BinaryProperty.Emoji_Component,
     BinaryProperty.Emoji_Modifier,
     BinaryProperty.Emoji_Modifier_Base,
     BinaryProperty.Emoji_Presentation,
     BinaryProperty.Extended_Pictographic,
-    ComplexProperty.Emoji_Sequence,
-    ComplexProperty.Canonical_Combining_Class,
-    ComplexProperty.East_Asian_Width,
-    ComplexProperty.General_Category,
-    ComplexProperty.Grapheme_Cluster_Break,
-    ComplexProperty.Indic_Syllabic_Category,
-    ComplexProperty.Script,
+    Property.Emoji_Sequence,
+    Property.Canonical_Combining_Class,
+    Property.East_Asian_Width,
+    Property.General_Category,
+    Property.Grapheme_Cluster_Break,
+    Property.Indic_Syllabic_Category,
+    Property.Script,
 )
 
 
 def collect_statistics(
     root: Path, version: Version
-) -> dict[BinaryProperty | ComplexProperty, list[int]]:
+) -> dict[BinaryProperty | Property, list[int]]:
     """
     For the UCD version cached at the given path, before and after optimizing
     its internal representation, and for each of several Unicode properties,
@@ -34,7 +35,7 @@ def collect_statistics(
     property's number of code points before and after optimizing diverges, this
     function raises an exception.
     """
-    data: defaultdict[BinaryProperty | ComplexProperty, list[int]] = defaultdict(list)
+    data: defaultdict[BinaryProperty | Property, list[int]] = defaultdict(list)
 
     ucd = UnicodeCharacterDatabase(root, version).prepare().validate()
     if ucd.is_optimized:
@@ -58,7 +59,7 @@ def collect_statistics(
 
 def show_statistics(
     version: Version,
-    data: dict[BinaryProperty | ComplexProperty, list[int]],
+    data: dict[BinaryProperty | Property, list[int]],
     renderer: Renderer,
 ) -> None:
     print()
@@ -72,7 +73,7 @@ def show_statistics(
 
     sum_points = sum_ranges = sum_min_ranges = 0
 
-    def show_counts(property: BinaryProperty | ComplexProperty) -> None:
+    def show_counts(property: BinaryProperty | Property) -> None:
         nonlocal sum_points, sum_ranges, sum_min_ranges
 
         points, ranges, _, min_ranges = data[property]
@@ -88,6 +89,8 @@ def show_statistics(
         print(f' {heading}  {sum_points:9,d}  {sum_ranges:6,d}  {sum_min_ranges:6,d}')
         print('\n')
 
+    property: BinaryProperty | Property
+
     show_heading('Binary Properties')
     for property in (
         BinaryProperty.Emoji,
@@ -100,19 +103,34 @@ def show_statistics(
         show_counts(property)
     show_total()
 
-    show_heading('Possible Alternative')
-    show_counts(ComplexProperty.Emoji_Sequence)
-    print('\n')
-
     show_heading('Complex Properties')
     sum_points = sum_ranges = sum_min_ranges = 0
     for property in (
-        ComplexProperty.Canonical_Combining_Class,
-        ComplexProperty.East_Asian_Width,
-        ComplexProperty.General_Category,
-        ComplexProperty.Grapheme_Cluster_Break,
-        ComplexProperty.Indic_Syllabic_Category,
-        ComplexProperty.Script,
+        Property.Canonical_Combining_Class,
+        Property.East_Asian_Width,
+        Property.General_Category,
+        Property.Grapheme_Cluster_Break,
+        Property.Indic_Syllabic_Category,
+        Property.Script,
     ):
+        show_counts(property)
+    show_total()
+
+    show_heading('Sequence Data')
+    show_counts(Property.Emoji_Sequence)
+    print('\n')
+
+    show_heading('Required Properties')
+    sum_points = sum_ranges = sum_min_ranges = 0
+    for property in cast(tuple[BinaryProperty | Property, ...], (
+        BinaryProperty.Emoji_Presentation,
+        BinaryProperty.Extended_Pictographic,
+        Property.Canonical_Combining_Class,
+        Property.East_Asian_Width,
+        Property.General_Category,
+        Property.Grapheme_Cluster_Break,
+        Property.Indic_Syllabic_Category,
+        Property.Script,
+    )):
         show_counts(property)
     show_total()

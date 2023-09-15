@@ -13,7 +13,7 @@ from typing import Callable, cast
 
 from .codepoint import CodePoint, CodePointSequence
 from .control import Action, read_line_action
-from .model import GeneralCategory, Presentation
+from .model import GeneralCategory, Presentation, Property
 from .render import Padding, Renderer
 from .ucd import UnicodeCharacterDatabase, Version
 
@@ -137,7 +137,10 @@ def format_blot(
         width = 3
     elif codepoints.is_singleton():
         codepoint = codepoints.to_singleton()
-        if ucd.general_category(codepoint) is GeneralCategory.Unassigned:
+        if (
+            ucd.resolve(codepoint, Property.General_Category)
+            is GeneralCategory.Unassigned
+        ):
             display = '···'
             width = 3
         else:

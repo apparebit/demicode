@@ -161,14 +161,14 @@ class Version(NamedTuple):
 # Unicode Properties
 
 
-class ComplexProperty(StrEnum):
+class Property(StrEnum):
     """
-    An enumeration of complex properties, i.e., Unicode properties that have
-    more than two values. For each included property, this module exports an
-    enumeration with the same name modulo underscores. The enumeration's
-    constants represent the domain of named values for the property, with each
-    constant's value providing a shorter alias. Most enumerations are
-    machine-generated from Unicode data.
+    An enumeration of Unicode properties. For each included property, this
+    module exports an enumeration with the same name modulo underscores. The
+    enumeration's constants represent the domain of named values for the
+    property, with each constant's value providing a shorter alias. Most
+    enumerations are machine-generated from Unicode data. The enumeration for
+    binary Unicode properties is separate for now.
     """
     Canonical_Combining_Class = 'ccc'
     East_Asian_Width = 'ea'
@@ -180,9 +180,12 @@ class ComplexProperty(StrEnum):
 
     def is_manually_generated(self) -> bool:
         return self in (
-            ComplexProperty.Emoji_Sequence,
-            ComplexProperty.Grapheme_Cluster_Break,
+            Property.Emoji_Sequence,
+            Property.Grapheme_Cluster_Break,
         )
+
+    def is_binary(self) -> bool:
+        return False  # For now
 
 
 class BinaryProperty(StrEnum):
@@ -387,42 +390,3 @@ class CharacterData:
     name: None | str
     block: None | str
     flags: frozenset[BinaryProperty]
-
-    @property
-    def is_zero_width(self) -> bool:
-        return (
-            self.codepoint == 0
-            or self.category in (
-                GeneralCategory.Enclosing_Mark,
-                GeneralCategory.Nonspacing_Mark,
-                GeneralCategory.Format
-            ) and self.codepoint != CodePoint.SOFT_HYPHEN
-            or (
-                CodePoint.HANGUL_JUNGSEONG_FILLER
-                <= self.codepoint <= CodePoint.HANGUL_JONGSEONG_SSANGNIEUN
-            )
-        )
-
-    @property
-    def is_invalid(self) -> bool:
-        # Surrogate code points should not appear inside strings. Private_Use
-        # may appear but aren't very meaningful in general. Still, a robust
-        # width property might want to consider assigning different widths to
-        # different private use ranges.
-        return self.category in (GeneralCategory.Surrogate, GeneralCategory.Private_Use)
-
-    def wcwidth(self) -> int:
-        """
-        Determine [wcwidth](https://www.cl.cam.ac.uk/~mgk25/ucs/wcwidth.c) of
-        code point. Instead of calling this method, prefer `UCD.width()`.
-        """
-        # Also https://github.com/jquast/wcwidth
-        if self.is_zero_width:
-            return 0
-        if self.is_invalid or self.codepoint < 32 or (
-            CodePoint.DELETE <= self.codepoint < CodePoint.NO_BREAK_SPACE
-        ):
-            return -1
-        if self.east_asian_width in (EastAsianWidth.Fullwidth, EastAsianWidth.Wide):
-            return 2
-        return 1

@@ -25,7 +25,7 @@ from pathlib import Path
 import re
 
 from .mirror import mirrored_data, retrieve_latest_ucd_version
-from .model import ComplexProperty, Version
+from .model import Property, Version
 from .parser import parse
 
 
@@ -56,7 +56,7 @@ def retrieve_property_values(
     root: Path, version: Version
 ) -> dict[str, list[tuple[str, str]]]:
     properties_of_interest = set()
-    for complex_property in ComplexProperty:
+    for complex_property in Property:
         if not complex_property.is_manually_generated():
             properties_of_interest.add(complex_property.value)
 
@@ -69,7 +69,7 @@ def retrieve_property_values(
             result[property].append((name, short_name))
 
     # Patch provisional property value Consonant_Repha back in.
-    values = result[ComplexProperty.Indic_Syllabic_Category.value]
+    values = result[Property.Indic_Syllabic_Category.value]
     values.append(('Consonant_Repha', 'Consonant_Repha'))
     values.sort()
 
@@ -85,7 +85,7 @@ def generate_property_values(
     yield ''
     yield ''
 
-    properties = [p for p in ComplexProperty if not p.is_manually_generated()]
+    properties = [p for p in Property if not p.is_manually_generated()]
 
     yield '__all__ = ('
     for property in properties:
@@ -95,7 +95,7 @@ def generate_property_values(
     for property in properties:
         yield ''
         yield ''
-        ccc = property is ComplexProperty.Canonical_Combining_Class
+        ccc = property is Property.Canonical_Combining_Class
         parent = 'IntEnum' if ccc else 'StrEnum'
         yield f'class {property.name.replace("_", "")}({parent}):'
         for name, short_name in property_values[property.value]:

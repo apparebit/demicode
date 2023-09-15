@@ -5,11 +5,11 @@ from demicode.codepoint import CodePoint, CodePointSequence
 from demicode.model import (
     BinaryProperty,
     CharacterData,
-    ComplexProperty,
     EastAsianWidth,
     GeneralCategory,
     IndicSyllabicCategory,
     KNOWN_UCD_VERSIONS,
+    Property,
     Script,
     Version,
 )
@@ -27,12 +27,12 @@ PROPERTY_COUNTS = {
     BinaryProperty.Emoji_Modifier_Base: (134, 50, 40),
     BinaryProperty.Emoji_Presentation: (1_205, 282, 81),
     BinaryProperty.Extended_Pictographic: (3_537, 511, 78),
-    ComplexProperty.Canonical_Combining_Class: (286_719, 2_374, 1_196),
-    ComplexProperty.East_Asian_Width: (349_871, 2_575, 1_169),
-    ComplexProperty.General_Category: (288_767, 3_300, 3_300),
-    ComplexProperty.Grapheme_Cluster_Break: (18_003, 1_391, 1_371),
-    ComplexProperty.Indic_Syllabic_Category: (4_639, 922, 775),
-    ComplexProperty.Script: (149_251, 2_191, 952),
+    Property.Canonical_Combining_Class: (286_719, 2_374, 1_196),
+    Property.East_Asian_Width: (349_871, 2_575, 1_169),
+    Property.General_Category: (288_767, 3_300, 3_300),
+    Property.Grapheme_Cluster_Break: (18_003, 1_391, 1_371),
+    Property.Indic_Syllabic_Category: (4_639, 922, 775),
+    Property.Script: (149_251, 2_191, 952),
 }
 
 CHARACTER_DATA = (
@@ -109,8 +109,8 @@ class TestProperty(unittest.TestCase):
     def check_property_value_counts(
         self,
         ucd: UnicodeCharacterDatabase,
-    ) -> dict[BinaryProperty | ComplexProperty, int]:
-        property_value_counts: dict[BinaryProperty | ComplexProperty, int] = {}
+    ) -> dict[BinaryProperty | Property, int]:
+        property_value_counts: dict[BinaryProperty | Property, int] = {}
 
         for property, counts in PROPERTY_COUNTS.items():
             expected_cp_count, range_count, min_range_count = counts

@@ -4,7 +4,7 @@ Representation of Unicode versions and properties.
 from dataclasses import dataclass
 from enum import Enum, StrEnum
 import re
-from typing import NamedTuple
+from typing import NamedTuple, TypeAlias
 
 from .codepoint import CodePoint, CodePointSequence
 from ._property import *
@@ -158,13 +158,88 @@ class Version(NamedTuple):
 
 
 # --------------------------------------------------------------------------------------
+# Property Values (see _property module for machine-generated ones)
+
+
+class GraphemeCluster(StrEnum):
+    """
+    Enumeration over the different code points that contribute to grapheme
+    clusters. Note that, unlike for other enumerations in this module,
+    enumeration constant values are *not* official Unicode aliases. Instea d
+    they are single, mnemonic characters used by `GRAPHEME_CLUSTER_PATTERN` to
+    recognize grapheme clusters.
+    """
+
+    Prepend = 'P'
+    CR = 'r'         # U+000D
+    LF = 'n'         # U+000A
+    Control = 'C'
+    Extend = 'E'
+    Regional_Indicator = 'R'
+    SpacingMark = 'S'
+    L = 'l'
+    V = 'v'
+    T = 't'
+    LV = 'V'
+    LVT = 'T'
+    ZWJ = 'Z'        # U+200D
+    Other = 'O'
+    Extended_Pictographic = 'X'
+
+    # Obsolete property values (using Etruscan letters)
+    E_Base = '\U00010300'
+    E_Modifier = '\U00010301'
+    Glue_After_Zwj = '\U00010302'
+    E_Base_GAZ = '\U00010303'
+
+
+# https://unicode.org/reports/tr29/#Regex_Definitions
+GRAPHEME_CLUSTER_PATTERN = re.compile(
+    r"""
+            rn
+        |   r
+        |   n
+        |   C
+        |   P*      # precore
+            (?:
+                    (?:  l* (?: v+ | Vv* | T ) t*  )  # hangul-syllable
+                |   l+
+                |   t+
+                |   RR               # ri-sequence
+                |   X (?: E* Z X )*  # xpicto-sequence
+                |   [^Cnr]           # all but Control, CR, LF
+            )
+            [EZS]*  # postcore
+    """,
+    re.VERBOSE,
+)
+
+
+class EmojiSequence(StrEnum):
+    """The different kinds of emoji sequences."""
+    Basic_Emoji = 'Basic_Emoji'
+    Emoji_Keycap_Sequence = 'Emoji_Keycap_Sequence'
+    # In more recent UCD versions:
+    RGI_Emoji_Flag_Sequence = 'RGI_Emoji_Flag_Sequence'
+    RGI_Emoji_Modifier_Sequence = 'RGI_Emoji_Modifier_Sequence'
+    RGI_Emoji_Tag_Sequence = 'RGI_Emoji_Tag_Sequence'
+    RGI_Emoji_ZWJ_Sequence = 'RGI_Emoji_ZWJ_Sequence'
+    # In older Unicode Emoji versions:
+    Emoji_Combining_Sequence = 'Emoji_Combining_Sequence'
+    Emoji_Flag_Sequence = 'Emoji_Flag_Sequence'
+    Emoji_Modifier_Sequence = 'Emoji_Modifier_Sequence'
+    Emoji_Tag_Sequence = 'Emoji_Tag_Sequence'
+    Emoji_ZWJ_Sequence = 'Emoji_ZWJ_Sequence'
+
+
+# --------------------------------------------------------------------------------------
 # Unicode Properties
 
 
 class Property(StrEnum):
     """
-    An enumeration of Unicode properties. For each included property, this
-    module exports an enumeration with the same name modulo underscores. The
+    An enumeration of supported Unicode properties. For each included property,
+    this module exports an enumeration with the same name sans underscores. The
     enumeration's constants represent the domain of named values for the
     property, with each constant's value providing a shorter alias. Most
     enumerations are machine-generated from Unicode data. The enumeration for
@@ -205,6 +280,18 @@ class BinaryProperty(StrEnum):
         is prefixed with `Emoji_`, or is `Extended_Pictographic`.
         """
         return self is not BinaryProperty.Default_Ignorable_Code_Point
+
+
+PropertyValueTypes: TypeAlias = (
+      bool
+    | int
+    | EastAsianWidth
+    | EmojiSequence
+    | GeneralCategory
+    | GraphemeCluster
+    | IndicSyllabicCategory
+    | Script
+)
 
 
 # --------------------------------------------------------------------------------------
@@ -298,81 +385,6 @@ class Presentation(Enum):
             presentation,
             codepoints if presentation is Presentation.NONE else codepoints[0]
         )
-
-
-# --------------------------------------------------------------------------------------
-# Grapheme Clusters
-
-
-class GraphemeCluster(StrEnum):
-    """
-    Enumeration over the different code points that contribute to grapheme
-    clusters. Note that, unlike for other enumerations in this module,
-    enumeration constant values are *not* official Unicode aliases. Instea d
-    they are single, mnemonic characters used by `GRAPHEME_CLUSTER_PATTERN` to
-    recognize grapheme clusters.
-    """
-
-    Prepend = 'P'
-    CR = 'r'         # U+000D
-    LF = 'n'         # U+000A
-    Control = 'C'
-    Extend = 'E'
-    Regional_Indicator = 'R'
-    SpacingMark = 'S'
-    L = 'l'
-    V = 'v'
-    T = 't'
-    LV = 'V'
-    LVT = 'T'
-    ZWJ = 'Z'        # U+200D
-    Other = 'O'
-    Extended_Pictographic = 'X'
-
-    # Obsolete property values (using Etruscan letters)
-    E_Base = '\U00010300'
-    E_Modifier = '\U00010301'
-    Glue_After_Zwj = '\U00010302'
-    E_Base_GAZ = '\U00010303'
-
-
-# https://unicode.org/reports/tr29/#Regex_Definitions
-GRAPHEME_CLUSTER_PATTERN = re.compile(
-    r"""
-            rn
-        |   r
-        |   n
-        |   C
-        |   P*      # precore
-            (?:
-                    (?:  l* (?: v+ | Vv* | T ) t*  )  # hangul-syllable
-                |   l+
-                |   t+
-                |   RR               # ri-sequence
-                |   X (?: E* Z X )*  # xpicto-sequence
-                |   [^Cnr]           # all but Control, CR, LF
-            )
-            [EZS]*  # postcore
-    """,
-    re.VERBOSE,
-)
-
-
-class EmojiSequence(StrEnum):
-    """The different kinds of emoji sequences."""
-    Basic_Emoji = 'Basic_Emoji'
-    Emoji_Keycap_Sequence = 'Emoji_Keycap_Sequence'
-    # In more recent UCD versions:
-    RGI_Emoji_Flag_Sequence = 'RGI_Emoji_Flag_Sequence'
-    RGI_Emoji_Modifier_Sequence = 'RGI_Emoji_Modifier_Sequence'
-    RGI_Emoji_Tag_Sequence = 'RGI_Emoji_Tag_Sequence'
-    RGI_Emoji_ZWJ_Sequence = 'RGI_Emoji_ZWJ_Sequence'
-    # In older Unicode Emoji versions:
-    Emoji_Combining_Sequence = 'Emoji_Combining_Sequence'
-    Emoji_Flag_Sequence = 'Emoji_Flag_Sequence'
-    Emoji_Modifier_Sequence = 'Emoji_Modifier_Sequence'
-    Emoji_Tag_Sequence = 'Emoji_Tag_Sequence'
-    Emoji_ZWJ_Sequence = 'Emoji_ZWJ_Sequence'
 
 
 # --------------------------------------------------------------------------------------

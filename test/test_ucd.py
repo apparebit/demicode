@@ -85,26 +85,33 @@ class TestProperty(unittest.TestCase):
                 self.assertEqual(ucd.version, version)
 
                 # Check that data is usable by looking up properties.
-                self.assertEqual(ucd.age(CodePoint.FULL_BLOCK), '1.1')
-                self.assertEqual(ucd.block(CodePoint.FULL_BLOCK), 'Block Elements')
+                data = ucd.lookup(CodePoint.FULL_BLOCK)
+                self.assertEqual(data.category, GeneralCategory.Other_Symbol)
+                self.assertEqual(data.east_asian_width, EastAsianWidth.Ambiguous)
+                self.assertEqual(data.age, '1.1')
+                self.assertEqual(data.name, 'FULL BLOCK')
+                self.assertEqual(data.block, 'Block Elements')
+
                 self.assertEqual(
-                    ucd.canonical_combining_class(CodePoint.FULL_BLOCK),
-                    0,
-                )
+                    ucd.resolve(
+                        CodePoint.FULL_BLOCK,
+                        Property.Canonical_Combining_Class,
+                    ),
+                    0)
                 self.assertEqual(
-                    ucd.east_asian_width(CodePoint.FULL_BLOCK),
-                    EastAsianWidth.Ambiguous,
-                )
-                self.assertEqual(
-                    ucd.general_category(CodePoint.FULL_BLOCK),
-                    GeneralCategory.Other_Symbol,
-                )
-                self.assertEqual(
-                    ucd.indic_syllabic_category(CodePoint.FULL_BLOCK),
+                    ucd.resolve(
+                        CodePoint.FULL_BLOCK,
+                        Property.Indic_Syllabic_Category,
+                    ),
                     IndicSyllabicCategory.Other,
                 )
-                self.assertEqual(ucd.name(CodePoint.FULL_BLOCK), 'FULL BLOCK')
-                self.assertEqual(ucd.script(CodePoint.FULL_BLOCK), Script.Common)
+                self.assertEqual(
+                    ucd.resolve(
+                        CodePoint.FULL_BLOCK,
+                        Property.Script,
+                    ),
+                    Script.Common
+                )
 
     def check_property_value_counts(
         self,

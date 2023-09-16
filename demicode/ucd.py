@@ -9,6 +9,9 @@ import re
 from typing import (
     Any,
     cast,
+    Literal,
+    Never,
+    overload,
     Self,
     TypeAlias,
     TypeVar,
@@ -43,6 +46,7 @@ from .model import (
     GraphemeCluster,
     IndicSyllabicCategory,
     Property,
+    PropertyValueTypes,
     Script,
     Version,
 )
@@ -274,7 +278,8 @@ class UnicodeCharacterDatabase:
                 for range, label in parse(lines, to_range_and_string):
                     self._emoji_data[label].append(range)
         else:
-            self._emoji_data = {}
+            # Make sure that look-ups don't fail.
+            self._emoji_data = { p.name: [] for p in BinaryProperty }
         with mirrored_data('emoji-variation-sequences.txt', version, path) as lines:
             self._emoji_variations = frozenset(dict.fromkeys(parse(
                 lines, lambda cp, _: cp.to_sequence_head()
@@ -545,9 +550,9 @@ class UnicodeCharacterDatabase:
     def _resolve(
         self,
         codepoint: CodePoint,
-        ranges: Sequence[tuple[CodePointRange, *_Ts]], # type: ignore[valid-type]
-        default: _U,
-    ) -> _T | _U:
+        ranges: Sequence[tuple[CodePointRange, _T]],
+        default: _T,
+    ) -> _T:
         self.prepare()
         index = _bisect_range_data(ranges, codepoint)
         if not (0 <= index < len(ranges)):
@@ -555,15 +560,117 @@ class UnicodeCharacterDatabase:
         record = ranges[index]
         return record[1] if codepoint in record[0] else default
 
+    @overload
+    def resolve(
+        self, codepoint: CodePoint, property: Literal[Property.Canonical_Combining_Class]
+    ) -> int:
+        ...
+    @overload
+    def resolve(
+        self, codepoint: CodePoint, property: Literal[Property.East_Asian_Width]
+    ) -> EastAsianWidth:
+        ...
+    @overload
+    def resolve(
+        self, codepoint: CodePoint, property: Literal[Property.Emoji_Sequence]
+    ) -> Never:
+        ...
+    @overload
+    def resolve(
+        self, codepoint: CodePoint, property: Literal[Property.General_Category]
+    ) -> GeneralCategory:
+        ...
+    @overload
+    def resolve(
+        self, codepoint: CodePoint, property: Literal[Property.Grapheme_Cluster_Break]
+    ) -> GraphemeCluster:
+        ...
+    @overload
+    def resolve(
+        self, codepoint: CodePoint, property: Literal[Property.Indic_Syllabic_Category]
+    ) -> IndicSyllabicCategory:
+        ...
+    @overload
+    def resolve(
+        self, codepoint: CodePoint, property: Literal[Property.Script]
+    ) -> Script:
+        ...
+    @overload
+    def resolve(
+        self, codepoint: CodePoint, property: Property
+    ) -> PropertyValueTypes | Never:
+        ...
     def resolve(
         self, codepoint: CodePoint, property: Property
     ) -> Any:
+        """Resolve the codepoint's property."""
         self.prepare()
         if property is Property.Emoji_Sequence:
             return self.emoji_sequence_data(codepoint)
         else:
             ranges, default = self._ranges_default(property)
             return self._resolve(codepoint, ranges, default)
+
+    def combine(
+        self, *properties: BinaryProperty | Property
+    ) -> list[tuple[CodePointRange, dict[str, PropertyValueTypes]]]:
+        """
+        Combine the internal range data for the given properties into a single
+        list of ranges and mappings containing the properties. The latter is
+        used in lieu of dataclasses so that this method can be used for
+        exploratory analysis of arbitrary properties.
+        """
+        # Collect properties by code point
+        by_codepoint: list[dict[str, PropertyValueTypes]] = [
+            dict() for _ in CodePointRange.ALL.codepoints()
+        ]
+
+        for codepoint in CodePointRange.ALL.codepoints():
+            property_values = by_codepoint[codepoint]
+
+            for property in properties:
+                match property:
+                    case BinaryProperty():
+                        value: PropertyValueTypes = self.test(codepoint, property)
+                        property_values[property] = value
+                    case Property():
+                        value = self.resolve(codepoint, property)
+                        property_values[property] = value
+
+        # Compress properties per code point into consecutive ranges.
+        start: CodePoint = CodePoint.MIN
+        stop: CodePoint = CodePoint.MIN
+        pending: None | dict[str, PropertyValueTypes] = None
+        by_range: list[tuple[CodePointRange, dict[str, PropertyValueTypes]]] = []
+        for codepoint in CodePointRange.ALL.codepoints():
+            current = by_codepoint[codepoint]
+            if pending == current:
+                stop = codepoint
+                continue
+            if pending is not None:
+                by_range.append((CodePointRange(start, stop), pending))
+            start = stop = codepoint
+            pending = current
+
+        if pending is not None:
+            by_range.append((CodePointRange(start, stop), pending))
+
+        # Validate the resulting data.
+        discontinuities = 0
+        prev: None | CodePointRange = None
+        for range, property_values in by_range:
+            if prev is None or prev.stop + 1 == range.start:
+                prev = range
+                continue
+            discontinuities += 1
+            logger.error('{0!r} does not abut {1!r}', prev.stop, range.start)
+            prev = range
+
+        if discontinuities > 0:
+            raise ValueError(
+                f'range compression left {discontinuities} discontinuities')
+
+        return by_range
 
     def count_values(
         self,

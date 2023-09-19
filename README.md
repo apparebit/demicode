@@ -129,7 +129,7 @@ The output of the last command should look something like the first screenshot.
 
 ## Versions
 
-  - **v1.0.0** (2023/09/??):
+  - **v1.0.0** (2023/09/19):
       - Support grapheme cluster segmentation according to Unicode 15.1 and 15.0.
       - Tabulate bit size of Unicode properties, alternative groups of required
         properties for `--stats`.

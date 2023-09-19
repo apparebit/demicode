@@ -23,6 +23,7 @@ from collections.abc import Iterator
 from collections import defaultdict
 from pathlib import Path
 import re
+from textwrap import dedent
 
 from .mirror import mirrored_data, retrieve_latest_ucd_version
 from .model import Property, Version
@@ -39,14 +40,26 @@ def generate_code(root: Path) -> None:
 
     # Algorithms can and do change. So tests always are version-specific.
     # For now, we test grapheme breaks for 15.0 only. That should change.
-    v15 = Version(15, 0, 0)
+    v15_0 = Version(15, 0, 0)
+    v15_1 = Version(15, 1, 0)
 
     with open('test/grapheme_clusters.py', mode='w', encoding='utf8') as file:
         print('# This module is machine-generated. Do not edit by hand.\n', file=file)
-        with mirrored_data('GraphemeBreakTest.txt', v15, root) as lines:
-            for line in grapheme_cluster_breaks(lines, v15):
+        with mirrored_data('GraphemeBreakTest.txt', v15_0, root) as lines:
+            for line in grapheme_cluster_breaks(lines, v15_0):
                 print(line, file=file)
 
+        print('\n', file=file)
+        with mirrored_data('GraphemeBreakTest.txt', v15_1, root) as lines:
+            for line in grapheme_cluster_breaks(lines, v15_1):
+                print(line, file=file)
+        print(dedent("""
+
+            GRAPHEME_CLUSTER_BREAKS = {
+                '15.0': _GRAPHEME_CLUSTER_BREAKS_15_0,
+                '15.1': _GRAPHEME_CLUSTER_BREAKS_15_1,
+            }
+        """), file=file)
 
 # --------------------------------------------------------------------------------------
 # Property Values
@@ -100,7 +113,7 @@ def generate_property_values(
         yield f'class {property.name.replace("_", "")}({parent}):'
         for name, short_name in property_values[property.value]:
             value = str(short_name) if ccc else f'"{short_name}"'
-            yield f'    {name} = {value}'
+            yield f'    {"None_" if name == "None" else name} = {value}'
 
 
 # --------------------------------------------------------------------------------------
@@ -112,7 +125,7 @@ MARK = re.compile(r'[÷×]')
 def grapheme_cluster_breaks(lines: Iterator[str], version: Version) -> Iterator[str]:
     # Convert into dictionary entries, ready for testing.
     # https://www.unicode.org/Public/UCD/latest/ucd/auxiliary/GraphemeBreakTest.txt
-    yield f'GRAPHEME_CLUSTER_BREAKS_{version.major}_{version.minor} = {{'
+    yield f'_GRAPHEME_CLUSTER_BREAKS_{version.major}_{version.minor} = {{'
 
     for spec in parse(lines, lambda _, p: p[0].replace(' ', ''), with_codepoints=False):
         codepoints = ', '.join(f'0x{cp}' for cp in MARK.split(spec) if cp)

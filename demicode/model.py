@@ -166,16 +166,25 @@ class GraphemeClusterBreak(StrEnum):
     """
     Enumeration over the different code points that contribute to grapheme
     clusters. Note that, unlike for other enumerations in this module,
-    enumeration constant values are *not* official Unicode aliases. Instea d
-    they are single, mnemonic characters used by `GRAPHEME_CLUSTER_PATTERN` to
+    enumeration constant values are *not* official Unicode aliases. Instead they
+    are single, mnemonic characters used by `GRAPHEME_CLUSTER_PATTERN` to
     recognize grapheme clusters.
+
+    Also note that technically Indic_Conjunct_Break is a separate property,
+    whose non-default values overlap with Grapheme_Cluster_Break's non-default
+    values. In theory, that gets in the way of maintaining both properties as
+    one. However, in practice Indic_Conjunct_Break's Extend and Linker values
+    overlap with Grapheme_Cluster_Break's Extend only. Hence this enumeration
+    includes the three non-default Indic_Conjunct_Break values, too. However,
+    this does mean that Grapheme_Cluster_Break's actual Extend requires
+    InCB_Extend and InCB_Linker, too.
     """
 
     Prepend = 'P'
-    CR = 'r'         # U+000D
-    LF = 'n'         # U+000A
+    CR = 'r'                     # U+000D
+    LF = 'n'                     # U+000A
     Control = 'C'
-    Extend = 'E'     # Also need Conjunct_Extend and Conjunct_Linker b/c of overlap
+    Extend = 'E'                 # Match "[ελE]"
     Regional_Indicator = 'R'
     SpacingMark = 'S'
     L = 'L'
@@ -183,17 +192,16 @@ class GraphemeClusterBreak(StrEnum):
     T = 'T'
     LV = 'v'
     LVT = 't'
-    ZWJ = 'Z'        # U+200D
+    ZWJ = 'Z'                    # U+200D
     Other = 'O'
 
-    # Code points with Extended_Pictographic
+    # Code points with Extended_Pictographic (does not overlap with non-Other values)
     Extended_Pictographic = 'X'
 
-    # Code points with Indict_Conjunct_Break other than None
-    Conjunct_Extend = 'ε'      # Also E
-    Conjunct_Consonant = 'κ'
-    Conjunct_Linker = 'λ'      # Also E
-    # Note that ZWJ is Extend for Indic_Conjunct_Break
+    # Code points with InCB other than None (using Greek letters)
+    InCB_Consonant = 'κ'
+    InCB_Extend = 'ε'            # Carved out of Extend, missing ZWJ, hence match "[εZ]"
+    InCB_Linker = 'λ'            # Carved out of Extend
 
     # Obsolete property values (using Etruscan letters)
     E_Base = '\U00010300'
@@ -216,7 +224,7 @@ GRAPHEME_CLUSTER_PATTERN = re.compile(
                 |   T+
                 |   RR                                # GB12, GB13
                 |   X (?: [Eελ]* Z X )*               # GB11
-                |   (?: κ (?: [ελZ]* λ [ελZ]* κ )+ )  # GB9c
+                |   (?: κ (?: [ελZ]* λ [ελZ]* κ )+ )  # GB9c  Rewrite: ([εZ]*λ[εZλ]*κ)
                 |   [^Cnr]
             )
             [EελZS]*                                  # GB9, GB9a

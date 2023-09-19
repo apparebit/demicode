@@ -5,8 +5,6 @@ from typing import cast, NamedTuple
 import demicode.model as model
 from .model import (
     BinaryProperty,
-    GraphemeClusterBreak,
-    IndicConjunctBreak,
     Property,
     Version,
 )
@@ -192,8 +190,7 @@ def show_statistics(
 
     # ----------------------------------------------------------------------------------
 
-    print(renderer.hint('                               Code points with'))
-    print(renderer.hint('    InCB       OCB     Count  overlapping properties'))
+    print(renderer.hint('    InCB       GCB     Count  (Properties of code points)'))
 
     print()
     for incb, ocb in overlap.keys():

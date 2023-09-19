@@ -60,6 +60,7 @@ KNOWN_EMOJI_VERSIONS = tuple(v + (0,) for v in (
     (13, 1),
     (14, 0),
     (15, 0),
+    (15, 1),
 ))
 
 
@@ -161,7 +162,7 @@ class Version(NamedTuple):
 # Property Values (see _property module for machine-generated ones)
 
 
-class GraphemeCluster(StrEnum):
+class GraphemeClusterBreak(StrEnum):
     """
     Enumeration over the different code points that contribute to grapheme
     clusters. Note that, unlike for other enumerations in this module,
@@ -174,17 +175,25 @@ class GraphemeCluster(StrEnum):
     CR = 'r'         # U+000D
     LF = 'n'         # U+000A
     Control = 'C'
-    Extend = 'E'
+    Extend = 'E'     # Also need Conjunct_Extend and Conjunct_Linker b/c of overlap
     Regional_Indicator = 'R'
     SpacingMark = 'S'
-    L = 'l'
-    V = 'v'
-    T = 't'
-    LV = 'V'
-    LVT = 'T'
+    L = 'L'
+    V = 'V'
+    T = 'T'
+    LV = 'v'
+    LVT = 't'
     ZWJ = 'Z'        # U+200D
     Other = 'O'
+
+    # Code points with Extended_Pictographic
     Extended_Pictographic = 'X'
+
+    # Code points with Indict_Conjunct_Break other than None
+    Conjunct_Extend = 'ε'      # Also E
+    Conjunct_Consonant = 'κ'
+    Conjunct_Linker = 'λ'      # Also E
+    # Note that ZWJ is Extend for Indic_Conjunct_Break
 
     # Obsolete property values (using Etruscan letters)
     E_Base = '\U00010300'
@@ -196,20 +205,21 @@ class GraphemeCluster(StrEnum):
 # https://unicode.org/reports/tr29/#Regex_Definitions
 GRAPHEME_CLUSTER_PATTERN = re.compile(
     r"""
-            rn
+            rn                                        # GB3, GB4, GB5
         |   r
         |   n
         |   C
-        |   P*      # precore
+        |   P*                                        # GB9b
             (?:
-                    (?:  l* (?: v+ | Vv* | T ) t*  )  # hangul-syllable
-                |   l+
-                |   t+
-                |   RR               # ri-sequence
-                |   X (?: E* Z X )*  # xpicto-sequence
-                |   [^Cnr]           # all but Control, CR, LF
+                    (?:  L* (?: V+ | vV* | t ) T*  )  # GB6, GB7, GB8
+                |   L+
+                |   T+
+                |   RR                                # GB12, GB13
+                |   X (?: [Eελ]* Z X )*               # GB11
+                |   (?: κ (?: [ελZ]* λ [ελZ]* κ )+ )  # GB9c
+                |   [^Cnr]
             )
-            [EZS]*  # postcore
+            [EελZS]*                                  # GB9, GB9a
     """,
     re.VERBOSE,
 )
@@ -250,6 +260,7 @@ class Property(StrEnum):
     Emoji_Sequence = 'Emoji_Sequence'
     General_Category = 'gc'
     Grapheme_Cluster_Break = 'GCB'
+    Indic_Conjunct_Break = 'InCB'
     Indic_Syllabic_Category = 'InSC'
     Script = 'sc'
 
@@ -288,7 +299,8 @@ PropertyValueTypes: TypeAlias = (
     | EastAsianWidth
     | EmojiSequence
     | GeneralCategory
-    | GraphemeCluster
+    | GraphemeClusterBreak
+    | IndicConjunctBreak
     | IndicSyllabicCategory
     | Script
 )

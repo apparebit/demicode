@@ -7,6 +7,7 @@ __all__ = (
     "CanonicalCombiningClass",
     "EastAsianWidth",
     "GeneralCategory",
+    "IndicConjunctBreak",
     "IndicSyllabicCategory",
     "Script",
 )
@@ -121,6 +122,13 @@ class GeneralCategory(StrEnum):
     Line_Separator = "Zl"
     Paragraph_Separator = "Zp"
     Space_Separator = "Zs"
+
+
+class IndicConjunctBreak(StrEnum):
+    Consonant = "Consonant"
+    Extend = "Extend"
+    Linker = "Linker"
+    None_ = "None"
 
 
 class IndicSyllabicCategory(StrEnum):

@@ -43,7 +43,8 @@ from .model import (
     CharacterData,
     EastAsianWidth,
     GRAPHEME_CLUSTER_PATTERN,
-    GraphemeCluster,
+    GraphemeClusterBreak,
+    IndicConjunctBreak,
     IndicSyllabicCategory,
     Property,
     PropertyValueTypes,
@@ -295,8 +296,14 @@ class UnicodeCharacterDatabase:
             ), key=get_range)
         with mirrored_data('GraphemeBreakProperty.txt', version, path) as lines:
             self._grapheme_break = sorted(parse(
-                lines, lambda cp, p: (cp.to_range(), GraphemeCluster[p[0]])
+                lines, lambda cp, p: (cp.to_range(), GraphemeClusterBreak[p[0]])
             ), key=get_range)
+        with mirrored_data('DerivedCoreProperties.txt', version, path) as lines:
+            self._indic_conjunct_break = sorted(parse(lines, lambda cp, p: (
+                (cp.to_range(), IndicConjunctBreak(p[1]))
+                if p[0] == Property.Indic_Conjunct_Break.value
+                else None
+            )))
         with mirrored_data('IndicSyllabicCategory.txt', version, path) as lines:
             self._indic_syllabic = sorted(parse(
                 lines, lambda cp, p: (cp.to_range(), IndicSyllabicCategory[p[0]])
@@ -359,6 +366,7 @@ class UnicodeCharacterDatabase:
                 simplify_only_ranges(self._emoji_data[property]))
         self._general_category = [*simplify_range_data(self._general_category)]
         self._grapheme_break = [*simplify_range_data(self._grapheme_break)]
+        self._indic_conjunct_break = [*simplify_range_data(self._indic_conjunct_break)]
         self._indic_syllabic = [*simplify_range_data(self._indic_syllabic)]
         self._script = [*simplify_range_data(self._script)]
         self._is_optimized = True
@@ -389,17 +397,14 @@ class UnicodeCharacterDatabase:
         grapheme_break_count = len(grapheme_break)
         if grapheme_break_count > 0:
             for range in self._emoji_data[BinaryProperty.Extended_Pictographic.name]:
+                # All code points in range are Extended_Pictographic
                 for codepoint in range.codepoints():
-                    index = _bisect_range_data(grapheme_break, codepoint)
-                    if not (0 <= index < grapheme_break_count):
-                        continue
-                    entry = grapheme_break[index]
-                    if codepoint not in entry[0]:
+                    if (val := self._resolve(codepoint, grapheme_break, None)) is None:
                         continue
                     logger.error(
                         'extended pictograph %s %r has grapheme cluster break '
                         '%s, not Other',
-                        codepoint, codepoint, entry[1].name
+                        codepoint, codepoint, val.name
                     )
                     invalid = True
 
@@ -464,11 +469,40 @@ class UnicodeCharacterDatabase:
             flags=frozenset(p for p in BinaryProperty if self.test(codepoint, p)),
         )
 
-    def grapheme_cluster(self, codepoint: CodePoint) -> GraphemeCluster:
+    def grapheme_cluster(self, codepoint: CodePoint) -> GraphemeClusterBreak:
         """Look up the code point's grapheme cluster."""
         if self.test(codepoint, BinaryProperty.Extended_Pictographic):
-            return GraphemeCluster.Extended_Pictographic
-        return self._resolve(codepoint, self._grapheme_break, GraphemeCluster.Other)
+            return GraphemeClusterBreak.Extended_Pictographic
+        if codepoint != CodePoint.ZERO_WIDTH_JOINER:
+            match self._resolve(codepoint, self._indic_conjunct_break, None):
+                case IndicConjunctBreak.Consonant:
+                    return GraphemeClusterBreak.Conjunct_Consonant
+                case IndicConjunctBreak.Extend:
+                    return GraphemeClusterBreak.Conjunct_Extend
+                case IndicConjunctBreak.Linker:
+                    return GraphemeClusterBreak.Conjunct_Linker
+        return self._resolve(
+            codepoint, self._grapheme_break, GraphemeClusterBreak.Other
+        )
+
+    def check_indic_conjunct_breaks(self) -> None:
+        from collections import Counter
+        counter: Counter[
+            GraphemeClusterBreak
+            | tuple[IndicConjunctBreak, None | GraphemeClusterBreak]
+        ] = Counter()
+        for range, icb in self._indic_conjunct_break:
+            # All code points in range have Indic_Conjunct_Break other than None
+            for codepoint in range.codepoints():
+                gcb = self._resolve(codepoint, self._grapheme_break, None)
+                counter[(icb, gcb)] += 1
+        for range, gcb in self._grapheme_break:
+            if gcb is not GraphemeClusterBreak.Extend:
+                continue
+            counter[gcb] += len(range)
+        from pprint import pprint
+        pprint(counter)
+
 
     # ----------------------------------------------------------------------------------
     # Grapheme Clusters and Their Breaks
@@ -541,7 +575,9 @@ class UnicodeCharacterDatabase:
             case Property.General_Category:
                 return self._general_category, GeneralCategory.Unassigned
             case Property.Grapheme_Cluster_Break:
-                return self._grapheme_break, GraphemeCluster.Other
+                return self._grapheme_break, GraphemeClusterBreak.Other
+            case Property.Indic_Conjunct_Break:
+                return self._indic_conjunct_break, IndicConjunctBreak.None_
             case Property.Indic_Syllabic_Category:
                 return self._indic_syllabic, IndicSyllabicCategory.Other
             case Property.Script:
@@ -583,7 +619,12 @@ class UnicodeCharacterDatabase:
     @overload
     def resolve(
         self, codepoint: CodePoint, property: Literal[Property.Grapheme_Cluster_Break]
-    ) -> GraphemeCluster:
+    ) -> GraphemeClusterBreak:
+        ...
+    @overload
+    def resolve(
+        self, codepoint: CodePoint, property: Literal[Property.Indic_Conjunct_Break]
+    ) -> IndicConjunctBreak:
         ...
     @overload
     def resolve(

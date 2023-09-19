@@ -1,5 +1,5 @@
 from bisect import bisect_right as stdlib_bisect_right
-from collections import defaultdict
+from collections import Counter, defaultdict
 from collections.abc import Iterator, Sequence, Set
 import itertools
 import json
@@ -55,6 +55,12 @@ from demicode import __version__
 
 
 logger = logging.getLogger(__name__)
+
+
+OverlapCounter: TypeAlias = Counter[
+    tuple[None | IndicConjunctBreak, None | GraphemeClusterBreak]
+]
+
 
 _T = TypeVar('_T')
 _Ts = TypeVarTuple('_Ts')
@@ -476,33 +482,28 @@ class UnicodeCharacterDatabase:
         if codepoint != CodePoint.ZERO_WIDTH_JOINER:
             match self._resolve(codepoint, self._indic_conjunct_break, None):
                 case IndicConjunctBreak.Consonant:
-                    return GraphemeClusterBreak.Conjunct_Consonant
+                    return GraphemeClusterBreak.InCB_Consonant
                 case IndicConjunctBreak.Extend:
-                    return GraphemeClusterBreak.Conjunct_Extend
+                    return GraphemeClusterBreak.InCB_Extend
                 case IndicConjunctBreak.Linker:
-                    return GraphemeClusterBreak.Conjunct_Linker
+                    return GraphemeClusterBreak.InCB_Linker
         return self._resolve(
             codepoint, self._grapheme_break, GraphemeClusterBreak.Other
         )
 
-    def check_indic_conjunct_breaks(self) -> None:
-        from collections import Counter
-        counter: Counter[
-            GraphemeClusterBreak
-            | tuple[IndicConjunctBreak, None | GraphemeClusterBreak]
-        ] = Counter()
+    def count_break_overlap(self) -> OverlapCounter:
+        counters: OverlapCounter = Counter()
         for range, icb in self._indic_conjunct_break:
             # All code points in range have Indic_Conjunct_Break other than None
             for codepoint in range.codepoints():
                 gcb = self._resolve(codepoint, self._grapheme_break, None)
-                counter[(icb, gcb)] += 1
+                counters[(icb, gcb)] += 1
         for range, gcb in self._grapheme_break:
             if gcb is not GraphemeClusterBreak.Extend:
                 continue
-            counter[gcb] += len(range)
-        from pprint import pprint
-        pprint(counter)
+            counters[(None, gcb)] += len(range)
 
+        return counters
 
     # ----------------------------------------------------------------------------------
     # Grapheme Clusters and Their Breaks

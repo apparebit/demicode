@@ -360,8 +360,9 @@ def process(options: argparse.Namespace, renderer: Renderer) -> int:
         return 0
 
     if options.stats:
-        data = collect_statistics(ucd.path, ucd.version)
-        show_statistics(ucd.version, data, renderer)
+        prop_counts = collect_statistics(ucd.path, ucd.version)
+        overlap = ucd.count_break_overlap()
+        show_statistics(ucd.version, prop_counts, overlap, renderer)
         return 0
 
     # ------------------------------------------ Determine code points to display

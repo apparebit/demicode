@@ -3,9 +3,15 @@ from pathlib import Path
 from typing import cast, NamedTuple
 
 import demicode.model as model
-from .model import BinaryProperty, Property, Version
+from .model import (
+    BinaryProperty,
+    GraphemeClusterBreak,
+    IndicConjunctBreak,
+    Property,
+    Version,
+)
 from .render import Renderer
-from .ucd import UnicodeCharacterDatabase
+from .ucd import OverlapCounter, UnicodeCharacterDatabase
 
 
 _PROPERTIES: tuple[BinaryProperty | Property, ...] = (
@@ -80,7 +86,8 @@ def collect_statistics(
 
 def show_statistics(
     version: Version,
-    data: dict[BinaryProperty | Property, PropertyInfo],
+    prop_counts: dict[BinaryProperty | Property, PropertyInfo],
+    overlap: OverlapCounter,
     renderer: Renderer,
 ) -> None:
     print()
@@ -97,7 +104,7 @@ def show_statistics(
     def show_counts(property: BinaryProperty | Property) -> None:
         nonlocal sum_bits, sum_points, sum_ranges, sum_max_ranges
 
-        bits, points, ranges, max_ranges = data[property]
+        bits, points, ranges, max_ranges = prop_counts[property]
         sum_bits += bits
         sum_points += points
         sum_ranges += ranges
@@ -116,6 +123,8 @@ def show_statistics(
             f'{sum_ranges:6,d}  {sum_max_ranges:6,d}'
         )
         print('\n')
+
+    # ----------------------------------------------------------------------------------
 
     property: BinaryProperty | Property
 
@@ -149,6 +158,8 @@ def show_statistics(
     show_counts(Property.Emoji_Sequence)
     print('\n')
 
+    # ----------------------------------------------------------------------------------
+
     show_heading('Required Properties I')
     sum_bits = sum_points = sum_ranges = sum_max_ranges = 0
     for property in cast(tuple[BinaryProperty | Property, ...], (
@@ -164,6 +175,8 @@ def show_statistics(
         show_counts(property)
     show_total()
 
+    # ----------------------------------------------------------------------------------
+
     show_heading('Required Properties II')
     sum_bits = sum_points = sum_ranges = sum_max_ranges = 0
     for property in cast(tuple[BinaryProperty | Property, ...], (
@@ -176,6 +189,20 @@ def show_statistics(
     )):
         show_counts(property)
     show_total()
+
+    # ----------------------------------------------------------------------------------
+
+    print(renderer.hint('                               Code points with'))
+    print(renderer.hint('    InCB       OCB     Count  overlapping properties'))
+
+    print()
+    for incb, ocb in overlap.keys():
+        left = '⋯' if incb is None else incb.name
+        right = '⋯' if ocb is None else ocb.name
+        print(f'{"":<2}  {left:<9}  {right:<6}  {overlap[(incb, ocb)]:5,d}')
+    print('\n')
+
+    # ----------------------------------------------------------------------------------
 
     print(renderer.hint(
         'https://github.com/apparebit/demicode/blob/boss/docs/props.md'

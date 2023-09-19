@@ -129,9 +129,12 @@ The output of the last command should look something like the first screenshot.
 
 ## Versions
 
-  - **v1.0.0** (2023/09/??): `--stats` now tabulates its counts in more than one
-        way. The internal interface for UCD data has been updated for generic
-        access to properties.
+  - **v1.0.0** (2023/09/??):
+      - Support grapheme cluster segmentation according to Unicode 15.1 and 15.0.
+      - Tabulate bit size of Unicode properties, alternative groups of required
+        properties for `--stats`.
+      - Update internal interface for UCD data to favor generic access to
+        properties.
   - **v1.0.0b1** (2023/09/12):
       - In interactive mode, render every page from scratch, taking terminal
         size into account. This enables paging forward *and* backward. On Linux

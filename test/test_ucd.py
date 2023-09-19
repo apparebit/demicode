@@ -1,3 +1,5 @@
+from dataclasses import dataclass
+from itertools import chain
 from pathlib import Path
 import unittest
 
@@ -7,6 +9,7 @@ from demicode.model import (
     CharacterData,
     EastAsianWidth,
     GeneralCategory,
+    GraphemeClusterBreak,
     IndicSyllabicCategory,
     KNOWN_UCD_VERSIONS,
     Property,
@@ -15,24 +18,41 @@ from demicode.model import (
 )
 from demicode.ucd import UnicodeCharacterDatabase
 
-from test.grapheme_clusters import GRAPHEME_CLUSTER_BREAKS_15_0
+from test.grapheme_clusters import GRAPHEME_CLUSTER_BREAKS
 
 
 UCD_PATH = Path(__file__).parents[1] / 'ucd'
 
 PROPERTY_COUNTS = {
-    BinaryProperty.Emoji: (1_424, 404, 151),
-    BinaryProperty.Emoji_Component: (146, 10, 10),
-    BinaryProperty.Emoji_Modifier: (5, 1, 1),
-    BinaryProperty.Emoji_Modifier_Base: (134, 50, 40),
-    BinaryProperty.Emoji_Presentation: (1_205, 282, 81),
-    BinaryProperty.Extended_Pictographic: (3_537, 511, 78),
-    Property.Canonical_Combining_Class: (286_719, 2_374, 1_196),
-    Property.East_Asian_Width: (349_871, 2_575, 1_169),
-    Property.General_Category: (288_767, 3_300, 3_300),
-    Property.Grapheme_Cluster_Break: (18_003, 1_391, 1_371),
-    Property.Indic_Syllabic_Category: (4_639, 922, 775),
-    Property.Script: (149_251, 2_191, 952),
+    '15.0': {
+        BinaryProperty.Emoji: (1_424, 404, 151),
+        BinaryProperty.Emoji_Component: (146, 10, 10),
+        BinaryProperty.Emoji_Modifier: (5, 1, 1),
+        BinaryProperty.Emoji_Modifier_Base: (134, 50, 40),
+        BinaryProperty.Emoji_Presentation: (1_205, 282, 81),
+        BinaryProperty.Extended_Pictographic: (3_537, 511, 78),
+        Property.Canonical_Combining_Class: (286_719, 2_374, 1_196),
+        Property.East_Asian_Width: (349_871, 2_575, 1_169),
+        Property.General_Category: (288_767, 3_300, 3_300),
+        Property.Grapheme_Cluster_Break: (18_003, 1_391, 1_371),
+        Property.Indic_Syllabic_Category: (4_639, 922, 775),
+        Property.Script: (149_251, 2_191, 952),
+    },
+    '15.1': {
+        BinaryProperty.Emoji: (1_424, 404, 151),
+        BinaryProperty.Emoji_Component: (146, 10, 10),
+        BinaryProperty.Emoji_Modifier: (5, 1, 1),
+        BinaryProperty.Emoji_Modifier_Base: (134, 50, 40),
+        BinaryProperty.Emoji_Presentation: (1_205, 282, 81),
+        BinaryProperty.Extended_Pictographic: (3_537, 511, 78),
+        Property.Canonical_Combining_Class: (287_346, 2_376, 1_196),
+        Property.East_Asian_Width: (349_876, 2_578, 1_169),
+        Property.General_Category: (289_394, 3_302, 3_302),
+        Property.Grapheme_Cluster_Break: (18_003, 1_391, 1_371),
+        Property.Indic_Conjunct_Break: (1_130, 202, 201),
+        Property.Indic_Syllabic_Category: (4_639, 922, 775),
+        Property.Script: (149_878, 2_193, 953),
+    },
 }
 
 CHARACTER_DATA = (
@@ -75,10 +95,41 @@ CHARACTER_DATA = (
     ),
 )
 
+
+@dataclass
+class ClusterBreakVisualizer:
+    """Helper class to visualize grapheme cluster breaking failures."""
+    ucd: UnicodeCharacterDatabase
+    codepoints: tuple[int,...]
+    actual: tuple[int,...]
+    expected: tuple[int,...]
+
+    def __str__(self) -> str:
+        def ref(cp: CodePoint) -> GraphemeClusterBreak:
+            return self.ucd.grapheme_cluster(cp)
+
+        # Format code points and grapheme cluster properties, with space in between.
+        codepoints = [*chain.from_iterable(
+            ['', f'U+{cp:04X}/{ref(cp)}'] for cp in self.codepoints)
+        ]
+        codepoints.append('')
+
+        # Add markers for actual and expected breaks
+        for index in self.actual:
+            index *= 2
+            codepoints[index] = 'a'
+        for index in self.expected:
+            index *= 2
+            codepoints[index] = codepoints[index] + 'e'
+
+        # Return as string
+        return ' '.join(codepoints)
+
+
 class TestProperty(unittest.TestCase):
 
     def test_known_versions(self):
-        for raw_version in KNOWN_UCD_VERSIONS[:-1]:
+        for raw_version in KNOWN_UCD_VERSIONS:
             version = Version(*raw_version)
             with self.subTest(version=version):
                 ucd = UnicodeCharacterDatabase(UCD_PATH, version).prepare()
@@ -115,39 +166,50 @@ class TestProperty(unittest.TestCase):
 
     def check_property_value_counts(
         self,
+        expected_counts: dict[BinaryProperty | Property, tuple[int, int, int]],
         ucd: UnicodeCharacterDatabase,
     ) -> dict[BinaryProperty | Property, int]:
         property_value_counts: dict[BinaryProperty | Property, int] = {}
 
-        for property, counts in PROPERTY_COUNTS.items():
-            expected_cp_count, range_count, min_range_count = counts
-            actual_count, actual_range_count = ucd.count_values(property)
-            expected_range_count = min_range_count if ucd.is_optimized else range_count
+        for property, (expected_points, ranges, max_ranges) in expected_counts.items():
+            actual_points, actual_ranges = ucd.count_values(property)
+            expected_ranges = max_ranges if ucd.is_optimized else ranges
 
-            self.assertEqual(actual_count, expected_cp_count)
-            self.assertEqual(actual_range_count, expected_range_count)
+            self.assertEqual(actual_points, expected_points)
+            self.assertEqual(actual_ranges, expected_ranges)
 
-            property_value_counts[property] = actual_count
+            property_value_counts[property] = actual_points
 
         return property_value_counts
 
     def test_counts(self) -> None:
-        ucd = UnicodeCharacterDatabase(UCD_PATH, '15.0').prepare().validate()
-        counts1 = self.check_property_value_counts(ucd)
+        for version in ('15.0', '15.1'):
+            with self.subTest(version=version):
+                ucd = UnicodeCharacterDatabase(UCD_PATH, version).prepare().validate()
+                expected_counts = PROPERTY_COUNTS[version]
+                points1 = self.check_property_value_counts(expected_counts, ucd)
 
-        ucd.optimize().validate()
-        counts2 = self.check_property_value_counts(ucd)
+                ucd.optimize().validate()
+                points2 = self.check_property_value_counts(expected_counts, ucd)
 
-        self.assertDictEqual(counts1, counts2)
+                self.assertDictEqual(points1, points2)
 
-    def test_unicode_properties(self) ->  None:
+    def test_character_data(self) ->  None:
         ucd = UnicodeCharacterDatabase(UCD_PATH, '15.0').prepare()
 
         for expected_data in CHARACTER_DATA:
             actual_data = ucd.lookup(expected_data.codepoint)
             self.assertEqual(actual_data, expected_data)
 
-        for codepoints, expected in GRAPHEME_CLUSTER_BREAKS_15_0.items():
-            sequence = CodePointSequence.of(*codepoints)
-            actual = tuple(ucd.grapheme_cluster_breaks(sequence))
-            self.assertTupleEqual(actual, expected)
+    def test_grapheme_cluster_breaks(self) -> None:
+        for version in ('15.0', '15.1'):
+            with self.subTest(version=version):
+                ucd = UnicodeCharacterDatabase(UCD_PATH, version).prepare()
+                for codepoints, expected in GRAPHEME_CLUSTER_BREAKS[version].items():
+                    sequence = CodePointSequence.of(*codepoints)
+                    actual = tuple(ucd.grapheme_cluster_breaks(sequence))
+                    self.assertTupleEqual(
+                        actual,
+                        expected,
+                        ClusterBreakVisualizer(ucd, codepoints, actual, expected)
+                    )

@@ -67,32 +67,22 @@ read_key_action: None | Callable[[Renderer], Action] = None
 
 if sys.platform in ('linux', 'darwin'):
 
-    import termios
-    import tty
-
     def read_key_action(renderer: Renderer, /) -> Action:
         """Read next action using raw standard input."""
-        sys.stdout.write(renderer.hint(pick_hint(_KEY_HINTS)))
-        sys.stdout.flush()
-
-        old_settings = termios.tcgetattr(sys.stdin)
-        tty.setcbreak(sys.stdin.fileno())
-        try:
-            nib = os.read(sys.stdin.fileno(), 3).decode()
-            # print(' '.join(f'U+{ord(c):04X}' for c in nib))
-        except KeyboardInterrupt:
-            return Action.TERMINATE
-        finally:
-            termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_settings)
+        renderer.print(renderer.hint(pick_hint(_KEY_HINTS)))
+        with renderer.reader() as reader:
+            try:
+                nib = reader.read()
+            except KeyboardInterrupt:
+                return Action.TERMINATE
 
         # Terminate line with key hint after all.
-        sys.stdout.write('\n')
-        sys.stdout.flush()
+        renderer.println()
 
         # Turn key into action. Nibs of 3 characters start with 0x1B 0x5B.
         nib_length = len(nib)
         if nib_length == 3:
-            key = ord(nib[2])
+            key = nib[2]
             if key == 0x44: # Cursor left
                 return Action.BACKWARD
             if key == 0x43: # Cursor right
@@ -100,7 +90,7 @@ if sys.platform in ('linux', 'darwin'):
             if key == 0x5A: # Shift-Tab
                 return Action.BACKWARD
         elif nib_length == 1:
-            key = ord(nib[0])
+            key = nib[0]
             # B/b for backward, P/p for previous, <delete>
             if key in (0x42, 0x62, 0x50, 0x70, 0x7F):
                 return Action.BACKWARD

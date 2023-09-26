@@ -137,6 +137,7 @@ TASTE_OF_EMOJI = tuple(_prep(text) for text in (
     '\u200D',                             # ZERO-WIDTH JOINER
     '\U0001F1E9',                         # REGIONAL INDICATOR SYMBOL LETTER D
     '\U0001F468',
+    '\U0001F3FF',
     '\U0001F468\U0001F3FF',
     '\u2764\u0080',                       # PAD: no expansion with variation selectors!
     '\u2764\uFE0F',

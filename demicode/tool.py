@@ -237,6 +237,12 @@ def configure_parser() -> argparse.ArgumentParser:
 
     out_group = parser.add_argument_group(b('control output'))
     out_group.add_argument(
+        '--incrementally', '-i',
+        action='store_true',
+        help='display blots incrementally, which is much slower\n'
+        'but enables blot size measurement'
+    )
+    out_group.add_argument(
         '--in-grid', '-g',
         action='store_true',
         help='display as grid without further UCD information'
@@ -319,12 +325,12 @@ def run(arguments: Sequence[str]) -> int:
     try:
         return process(options, renderer)
     except UserError as x:
-        renderer.println(renderer.error(x.args[0]))
+        renderer.println(renderer.format_error(x.args[0]))
         if x.__context__:
             renderer.println(f'In particular: {x.__context__.args[0]}')
         return 1
     except Exception as x:
-        renderer.println(renderer.error(
+        renderer.println(renderer.format_error(
             'Demicode encountered an unexpected error. For details, please see the\n'
             'exception trace below. If you can exclude your system as cause, please\n'
             'file an issue at https://github.com/apparebit/demicode/issues.\n'
@@ -437,6 +443,7 @@ def process(options: argparse.Namespace, renderer: Renderer) -> int:
         itertools.chain.from_iterable(codepoints),
         renderer,
         ucd,
+        incrementally=options.incrementally,
         in_grid=options.in_grid,
         read_action=read_action,
     )

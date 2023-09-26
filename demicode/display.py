@@ -72,12 +72,13 @@ def make_presentable(
 
 
 LEGEND_BLOT = ' 123   123  '
-LEGEND_PROPS = 'Code Pt  VS Ct Wd Other Properties            Age'
+LEGEND_PROPS = 'Sz Code Pt  VS Ct Wd Other Properties            Age'
 LEGEND_NAME = 'Name'
 LEGEND = f'{LEGEND_BLOT} {LEGEND_PROPS} {LEGEND_NAME}'
 
 BLOT_WIDTH = len(LEGEND_BLOT)
 PROPS_WIDTH = len(LEGEND_PROPS)
+SIZE_WIDTH = 3
 AGE_WIDTH = 5
 LEGEND_MIN_WIDTH = len(LEGEND)
 FIXED_WIDTH = BLOT_WIDTH + 1 + PROPS_WIDTH + 1
@@ -93,7 +94,7 @@ def format_legend(renderer: Renderer) -> str:
     """Format the per-page legend."""
     if not renderer.has_style:
         return LEGEND[6:]
-    return renderer.legend(LEGEND.ljust(renderer.width))
+    return renderer.format_legend(LEGEND.ljust(renderer.width))
 
 
 def format_heading(heading: str, renderer: Renderer) -> str:
@@ -117,7 +118,7 @@ def format_heading(heading: str, renderer: Renderer) -> str:
     else:
         heading = f'{heading} {"─" * right}'
 
-    return renderer.heading(heading)
+    return renderer.format_heading(heading)
 
 
 def format_blot(
@@ -158,10 +159,10 @@ def format_blot(
 
     # Render Character Blots
     yield renderer.adjust_column(start_column + 1)
-    yield renderer.blot(display, Padding.BACKGROUND, 3 - width)
+    yield renderer.format_blot(display, Padding.BACKGROUND, 3 - width)
     yield ' '
     yield renderer.adjust_column(start_column + 7)
-    yield renderer.blot(display, Padding.FOREGROUND, 3 - width)
+    yield renderer.format_blot(display, Padding.FOREGROUND, 3 - width)
     yield ' ' if renderer.has_style else '   '
 
 
@@ -170,11 +171,12 @@ def format_info(
     renderer: Renderer,
     ucd: UnicodeCharacterDatabase,
     *,
-    start_column: int = 1,
+    size: int = -1,
     presentation: Presentation = Presentation.NONE,
 ) -> Iterator[str]:
     """Format information about the code points."""
-    yield renderer.adjust_column(start_column + 13)
+    yield renderer.adjust_column(len(LEGEND_BLOT) + 1 + 1)
+    yield '   ' if size == -1 else f'{size: 2d} '
 
     # For code points, if they have implicit presentation, switch to single code
     # point and presentation instead. Otherwise, display the code points, plus
@@ -182,7 +184,7 @@ def format_info(
     presentation, codepoints = presentation.normalize(codepoints)
     if not codepoints.is_singleton():
         yield renderer.fit(
-            repr(codepoints), width=PROPS_WIDTH - AGE_WIDTH - 1, fill=True)
+            repr(codepoints), width=PROPS_WIDTH - SIZE_WIDTH - AGE_WIDTH - 1, fill=True)
 
         # Account for non-grapheme-clusters and emoji sequences.
         name = age = None
@@ -192,7 +194,7 @@ def format_info(
                 width=_name_width(renderer.width)
             )
             yield ' ' * (AGE_WIDTH + 1)
-            yield f' {renderer.hint(name)}'
+            yield f' {renderer.faint(name)}'
             return
 
         name, age = ucd.emoji_sequence_data(codepoints)
@@ -229,7 +231,7 @@ def format_info(
             f'Unassigned in UCD {ucd.version.in_short_format()}',
             width=_name_width(renderer.width)
         )
-        yield renderer.hint(name)
+        yield renderer.faint(name)
         return
 
     name = name or unidata.name or ''
@@ -308,11 +310,81 @@ def format_grid_lines(
 # --------------------------------------------------------------------------------------
 
 
+def display_page_incr(
+    stream: Iterable[str | CodePoint | CodePointSequence],
+    renderer: Renderer,
+    ucd: UnicodeCharacterDatabase,
+    *,
+    legend: None | str,
+    body_height: int,
+) -> None:
+    if legend is not None:
+        renderer.println(legend)
+
+    lines_printed = 0
+    for presentation, codepoints in stream:
+        if presentation.is_heading:
+            renderer.println(format_heading(cast(str, codepoints), renderer))
+        else:
+            renderer.print(''.join(format_blot(
+                cast(CodePoint | CodePointSequence, codepoints),
+                renderer,
+                ucd,
+                presentation=presentation,
+            )))
+            position = renderer.get_cursor()
+            renderer.println(''.join(format_info(
+                cast(CodePoint | CodePointSequence, codepoints),
+                renderer,
+                ucd,
+                size=position[1] - 9,
+                presentation=presentation,
+            )))
+        lines_printed += 1
+
+    if lines_printed < body_height:
+        for _ in range(body_height - lines_printed):
+            renderer.println()
+
+
+def display_page(
+    stream: Iterable[str | CodePoint | CodePointSequence],
+    renderer: Renderer,
+    ucd: UnicodeCharacterDatabase,
+    *,
+    legend: None | str,
+    column_count: int,
+    body_height: int,
+    in_grid: bool,
+) -> None:
+    if in_grid:
+        body = [*format_grid_lines(
+            cast(
+                Iterable[tuple[Presentation, CodePoint | CodePointSequence]],
+                stream,
+            ),
+            column_count,
+            renderer,
+            ucd,
+        )]
+    else:
+        body = [*format_lines(stream, renderer, ucd)]
+
+    if renderer.is_interactive:
+        actual_body_height = len(body)
+        if actual_body_height < body_height:
+            body.extend([''] * (body_height - actual_body_height))
+
+    page = '\n'.join(itertools.chain([] if legend is None else [legend], body))
+    renderer.println(page)
+
+
 def display(
     stream: Iterable[str | CodePoint | CodePointSequence],
     renderer: Renderer,
     ucd: UnicodeCharacterDatabase,
     *,
+    incrementally: bool = False,
     in_grid: bool = False,
     read_action: Callable[[Renderer], Action] = read_line_action,
 ) -> None:
@@ -347,26 +419,24 @@ def display(
             renderer.set_window_title('')
             return
 
-        if in_grid:
-            body = [*format_grid_lines(
-                cast(
-                    Iterable[tuple[Presentation, CodePoint | CodePointSequence]],
-                    data[start:stop],
-                ),
-                column_count,
+        if incrementally:
+            display_page_incr(
+                data[start:stop],
                 renderer,
                 ucd,
-            )]
+                legend=legend,
+                body_height=body_height,
+            )
         else:
-            body = [*format_lines(data[start:stop], renderer, ucd)]
-
-        if renderer.is_interactive:
-            actual_body_height = len(body)
-            if actual_body_height < body_height:
-                body.extend([''] * (body_height - actual_body_height))
-
-        page = '\n'.join(itertools.chain([] if legend is None else [legend], body))
-        renderer.println(page)
+            display_page(
+                data[start:stop],
+                renderer,
+                ucd,
+                legend=legend,
+                column_count=column_count,
+                body_height=body_height,
+                in_grid=in_grid,
+            )
 
         if renderer.is_interactive:
             action = read_action(renderer)

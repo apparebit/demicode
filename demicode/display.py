@@ -16,6 +16,7 @@ from .control import Action, read_line_action
 from .model import GeneralCategory, Presentation, Property
 from .render import Padding, Renderer
 from .ucd import UnicodeCharacterDatabase, Version
+from demicode import __version__
 
 
 # --------------------------------------------------------------------------------------
@@ -156,10 +157,10 @@ def format_blot(
         display = str(CodePoint.REPLACEMENT_CHARACTER)
 
     # Render Character Blots
-    yield renderer.column(start_column + 1)
+    yield renderer.adjust_column(start_column + 1)
     yield renderer.blot(display, Padding.BACKGROUND, 3 - width)
     yield ' '
-    yield renderer.column(start_column + 7)
+    yield renderer.adjust_column(start_column + 7)
     yield renderer.blot(display, Padding.FOREGROUND, 3 - width)
     yield ' ' if renderer.has_style else '   '
 
@@ -173,7 +174,7 @@ def format_info(
     presentation: Presentation = Presentation.NONE,
 ) -> Iterator[str]:
     """Format information about the code points."""
-    yield renderer.column(start_column + 13)
+    yield renderer.adjust_column(start_column + 13)
 
     # For code points, if they have implicit presentation, switch to single code
     # point and presentation instead. Otherwise, display the code points, plus
@@ -320,7 +321,9 @@ def display(
     start = stop = -1
     action = Action.FORWARD
 
-    renderer.set_window_title(f'⸺ Demicode • UCD {ucd.version.in_short_format()} ⸺')
+    renderer.set_window_title(
+        f'[ Demicode {__version__} • Unicode {ucd.version.in_short_format()} ]'
+    )
 
     while True:
         renderer.refresh()

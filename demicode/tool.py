@@ -13,7 +13,6 @@ import sys
 from textwrap import dedent
 import traceback
 from types import TracebackType
-from typing import cast
 
 from .codegen import generate_code
 from .codepoint import CodePoint, CodePointSequence
@@ -21,7 +20,7 @@ from .control import read_key_action, read_line_action
 from .darkmode import is_darkmode
 from .display import display
 from .mirror import local_cache_directory
-from .render import Mode, Renderer, StyledRenderer, Styles
+from .render import Mode, Renderer, StyledRenderer, Style
 from .selection import *
 from .statistics import collect_statistics, show_statistics
 from .ucd import UnicodeCharacterDatabase
@@ -92,8 +91,14 @@ def width_limited_formatter(prog: str) -> argparse.HelpFormatter:
 
 
 def configure_parser() -> argparse.ArgumentParser:
-    b = Styles.bold if sys.__stdout__.isatty() else lambda s: s
-    i = Styles.italic if sys.__stdout__.isatty() else lambda s: s
+    if sys.__stdout__.isatty():
+        a = lambda text: Style.link(text)
+        b = Style.bold
+        i = Style.italic
+    else:
+        a = lambda text: text
+        b = lambda text: text
+        i = lambda text: text
 
     tagline = i("It's not just Unicode, it's hemi-semi-demicode!")
     parser = argparse.ArgumentParser(
@@ -125,7 +130,7 @@ def configure_parser() -> argparse.ArgumentParser:
             {b("ANSI escape codes")} including 256 colors. Demicode is © 2023 Robert
             Grimm, licensed as open source under Apache 2.0.
 
-                      <https://github.com/apparebit/demicode>
+                      <{a("https://github.com/apparebit/demicode")}>
              ​
         """),
         formatter_class=width_limited_formatter,
@@ -303,8 +308,9 @@ def run(arguments: Sequence[str]) -> int:
     if options.in_dark_mode is None:
         options.in_dark_mode = is_darkmode()
 
-    new_renderer = Renderer if options.in_plain_text else StyledRenderer
-    renderer = new_renderer(
+    make_renderer = Renderer if options.in_plain_text else StyledRenderer
+    renderer = make_renderer(
+        sys.stdin,
         sys.stdout,
         Mode.DARK if options.in_dark_mode else Mode.LIGHT,
         options.in_more_color
@@ -313,24 +319,24 @@ def run(arguments: Sequence[str]) -> int:
     try:
         return process(options, renderer)
     except UserError as x:
-        print(renderer.error(x.args[0]))
+        renderer.println(renderer.error(x.args[0]))
         if x.__context__:
-            print(f'In particular: {x.__context__.args[0]}')
+            renderer.println(f'In particular: {x.__context__.args[0]}')
         return 1
     except Exception as x:
-        print(renderer.error(
+        renderer.println(renderer.error(
             'Demicode encountered an unexpected error. For details, please see the\n'
             'exception trace below. If you can exclude your system as cause, please\n'
             'file an issue at https://github.com/apparebit/demicode/issues.\n'
         ))
-        print('\n'.join(traceback.format_exception(x)))
+        renderer.println('\n'.join(traceback.format_exception(x)))
         return 1
 
 
 def process(options: argparse.Namespace, renderer: Renderer) -> int:
     # ------------------------------------------------------------ Handle version
     if options.version:
-        print(renderer.very_strong(f' demicode {__version__} '))
+        renderer.println(renderer.strong(f' demicode {__version__} '))
         return 0
 
     # --------------------------------------------------------------- Prepare UCD
@@ -346,6 +352,7 @@ def process(options: argparse.Namespace, renderer: Renderer) -> int:
             ValueError, '"{}" is not a valid UCD version ', options.ucd_version
         ):
             ucd.use_version(options.ucd_version)
+
     ucd.prepare()
 
     if options.ucd_optimize:

@@ -88,14 +88,16 @@ def show_statistics(
     overlap: OverlapCounter,
     renderer: Renderer,
 ) -> None:
-    print()
+    renderer.println()
     v = version.in_short_format()
-    print(renderer.strong(f'UCD {v} Properties (Before / After Range Optimization)'))
-    print()
+    renderer.println(renderer.strong(
+        f'UCD {v} Properties (Before / After Range Optimization)'
+    ))
+    renderer.println()
 
     def show_heading(text: str) -> None:
-        print(renderer.hint(f' {text:<25}  Bt     Points  Ranges  MinRng'))
-        print()
+        renderer.println(renderer.hint(f' {text:<25}  Bt     Points  Ranges  MinRng'))
+        renderer.println()
 
     sum_bits = sum_points = sum_ranges = sum_max_ranges = 0
 
@@ -108,19 +110,21 @@ def show_statistics(
         sum_ranges += ranges
         sum_max_ranges += max_ranges
 
-        print(
+        renderer.println(
             f' {property.name:<25}  {bits:2,d}  {points:9,d}  '
             f'{ranges:6,d}  {max_ranges:6,d}'
         )
 
     def show_total() -> None:
-        print(f' {" " * 25}  {renderer.hint("–" * (2 + 2 + 9 + 2 + 6 + 2 + 6))}' )
+        renderer.println(
+            f' {" " * 25}  {renderer.hint("–" * (2 + 2 + 9 + 2 + 6 + 2 + 6))}'
+        )
         heading = renderer.hint(f'{"Subtotal":<25}')
-        print(
+        renderer.println(
             f' {heading}  {sum_bits:2,d}  {sum_points:9,d}  '
             f'{sum_ranges:6,d}  {sum_max_ranges:6,d}'
         )
-        print('\n')
+        renderer.println('\n')
 
     # ----------------------------------------------------------------------------------
 
@@ -154,7 +158,7 @@ def show_statistics(
 
     show_heading('Sequence Data')
     show_counts(Property.Emoji_Sequence)
-    print('\n')
+    renderer.println('\n')
 
     # ----------------------------------------------------------------------------------
 
@@ -190,18 +194,20 @@ def show_statistics(
 
     # ----------------------------------------------------------------------------------
 
-    print(renderer.hint('    InCB       GCB     Count  (Properties of code points)'))
+    renderer.println(renderer.hint(
+        '    InCB       GCB     Count  (Properties of code points)'
+    ))
 
-    print()
+    renderer.println()
     for incb, ocb in overlap.keys():
         left = '⋯' if incb is None else incb.name
         right = '⋯' if ocb is None else ocb.name
-        print(f'{"":<2}  {left:<9}  {right:<6}  {overlap[(incb, ocb)]:5,d}')
-    print('\n')
+        renderer.println(f'{"":<2}  {left:<9}  {right:<6}  {overlap[(incb, ocb)]:5,d}')
+    renderer.println('\n')
 
     # ----------------------------------------------------------------------------------
 
-    print(renderer.hint(
+    renderer.println(renderer.link(
         'https://github.com/apparebit/demicode/blob/boss/docs/props.md'
     ))
-    print()
+    renderer.println()

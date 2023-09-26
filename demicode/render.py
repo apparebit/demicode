@@ -59,7 +59,7 @@ class Theme:
     heading: str
     blot_highlight: str
     blot_obstruction: str
-    hint: str
+    faint: str
     error: str
 
     @classmethod
@@ -69,7 +69,7 @@ class Theme:
         heading: str,
         blot_highlight: str,
         blot_obstruction: str,
-        hint: str,
+        faint: str,
         error: str,
     ) -> 'Theme':
         return cls(
@@ -77,7 +77,7 @@ class Theme:
             _SGR(heading),
             _SGR(blot_highlight),
             _SGR(blot_obstruction),
-            _SGR(hint),
+            _SGR(faint),
             _SGR(error),
         )
 
@@ -260,8 +260,25 @@ class Renderer:
     def reader(self) -> Iterator[KeyPressReader]:
         raise NotImplementedError('Renderer.reader()')
 
+    def query(self, text: str) -> bytes:
+        """
+        Query the terminal. This method prints the given escape sequence and
+        returns the result. It raises an exception if the text is not an escape
+        sequence or reading from the terminal is not supported.
+        """
+        if not text.startswith('\x1B'):
+            raise ValueError(f'query {text} is not an escape sequence')
+        with self.reader() as reader:
+            self.print(text)
+            return reader.read_escape()
+
     def get_cursor(self) -> None | tuple[int, int]:
-        return None
+        """Get the row and column of the cursor. This method requires a reader."""
+        response = self.query(f'{_CSI}6n')
+        if not response.startswith(b'\x1B[') or not response.endswith(b'R'):
+            return None
+        row, _, column = response[2:-1].partition(b';')
+        return int(row), int(column)
 
     # ----------------------------------------------------------------------------------
     # Update Terminal
@@ -282,19 +299,22 @@ class Renderer:
     def adjust_column(self, column: int) -> str:
         return ''
 
-    def legend(self, text: str) -> str:
+    def format_error(self, text: str) -> str:
         return text
 
-    def heading(self, text: str) -> str:
+    def format_legend(self, text: str) -> str:
         return text
 
-    def blot(self, text: str, padding: Padding, width: int) -> str:
+    def format_heading(self, text: str) -> str:
+        return text
+
+    def format_blot(self, text: str, padding: Padding, width: int) -> str:
         if padding is Padding.BACKGROUND:
             return ''
         else:
             return text + (padding.value * width)
 
-    def hint(self, text:str) -> str:
+    def faint(self, text:str) -> str:
         return text
 
     def em(self, text: str) -> str:
@@ -306,19 +326,18 @@ class Renderer:
     def link(self, href: str, text: None | str = None) -> str:
         return href if text is None else text
 
-    def error(self, text: str) -> str:
-        return text
-
     # ----------------------------------------------------------------------------------
     # Print Formatted Text
 
-    def print(self, text: str) -> None:
-        self._output.write(text)
+    def print(self, text: str = '') -> None:
+        # Sneakily exposing flush()
+        if text:
+            self._output.write(str(text))
         self._output.flush()
 
     def println(self, text: str = '') -> None:
         if text:
-            self._output.write(text)
+            self._output.write(str(text))
         self._output.write('\n')
         self._output.flush()
 
@@ -343,15 +362,6 @@ class StyledRenderer(Renderer):
             finally:
                 termios.tcsetattr(fileno, termios.TCSADRAIN, settings)
 
-        def get_cursor(self) -> None | tuple[int, int]:
-            with self.reader() as reader:
-                self.print(f'{_CSI}6n')
-                response = reader.read_escape()
-            if not response.startswith(b'\x1B[') or not response.endswith(b'R'):
-                return None
-            w, _, h = response[2:-1].partition(b';')
-            return int(w), int(h)
-
     def set_window_title(self, text: str) -> None:
         if self.is_interactive:
             self.print(f'{_OSC}0;{text}{_ST}')
@@ -359,13 +369,13 @@ class StyledRenderer(Renderer):
     def adjust_column(self, column: int) -> str:
         return _CHA(column)
 
-    def legend(self, text: str) -> str:
+    def format_legend(self, text: str) -> str:
         return f'{self._theme.legend}{text}{Style.RESET}'
 
-    def heading(self, text: str) -> str:
+    def format_heading(self, text: str) -> str:
         return f'{self._theme.heading}{text}{Style.RESET}'
 
-    def blot(self, text: str, padding: Padding, width: int) -> str:
+    def format_blot(self, text: str, padding: Padding, width: int) -> str:
         if padding is Padding.BACKGROUND:
             return (
                 text
@@ -381,8 +391,8 @@ class StyledRenderer(Renderer):
                 + Style.RESET
             )
 
-    def hint(self, text:str) -> str:
-        return f'{self._theme.hint}{text}{Style.RESET}'
+    def faint(self, text:str) -> str:
+        return f'{self._theme.faint}{text}{Style.RESET}'
 
     def em(self, text: str) -> str:
         return Style.italic(text)
@@ -393,5 +403,5 @@ class StyledRenderer(Renderer):
     def link(self, href: str, text: None | str = None) -> str:
         return Style.link(href, text)
 
-    def error(self, text: str) -> str:
+    def format_error(self, text: str) -> str:
         return f'{self._theme.error}{text}{Style.RESET}'

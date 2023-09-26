@@ -69,7 +69,7 @@ if sys.platform in ('linux', 'darwin'):
 
     def read_key_action(renderer: Renderer, /) -> Action:
         """Read next action using raw standard input."""
-        renderer.print(renderer.hint(pick_hint(_KEY_HINTS)))
+        renderer.print(renderer.faint(pick_hint(_KEY_HINTS)))
         with renderer.reader() as reader:
             try:
                 nib = reader.read()
@@ -107,7 +107,7 @@ if sys.platform in ('linux', 'darwin'):
 def read_line_action(renderer: Renderer, /) -> Action:
     """Read next action using Python's line-oriented input() builtin."""
     try:
-        s = input(renderer.hint(pick_hint(_LINE_HINTS))).lower()
+        s = input(renderer.faint(pick_hint(_LINE_HINTS))).lower()
     except KeyboardInterrupt:
         return Action.TERMINATE
     if s in ('q', 'quit', 'x', 'exit'):

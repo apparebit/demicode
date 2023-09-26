@@ -96,7 +96,7 @@ def show_statistics(
     renderer.println()
 
     def show_heading(text: str) -> None:
-        renderer.println(renderer.hint(f' {text:<25}  Bt     Points  Ranges  MinRng'))
+        renderer.println(renderer.faint(f' {text:<25}  Bt     Points  Ranges  MinRng'))
         renderer.println()
 
     sum_bits = sum_points = sum_ranges = sum_max_ranges = 0
@@ -117,9 +117,9 @@ def show_statistics(
 
     def show_total() -> None:
         renderer.println(
-            f' {" " * 25}  {renderer.hint("–" * (2 + 2 + 9 + 2 + 6 + 2 + 6))}'
+            f' {" " * 25}  {renderer.faint("–" * (2 + 2 + 9 + 2 + 6 + 2 + 6))}'
         )
-        heading = renderer.hint(f'{"Subtotal":<25}')
+        heading = renderer.faint(f'{"Subtotal":<25}')
         renderer.println(
             f' {heading}  {sum_bits:2,d}  {sum_points:9,d}  '
             f'{sum_ranges:6,d}  {sum_max_ranges:6,d}'
@@ -194,7 +194,7 @@ def show_statistics(
 
     # ----------------------------------------------------------------------------------
 
-    renderer.println(renderer.hint(
+    renderer.println(renderer.faint(
         '    InCB       GCB     Count  (Properties of code points)'
     ))
 

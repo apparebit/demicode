@@ -311,7 +311,7 @@ def format_grid_lines(
 
 
 def display_page_incr(
-    stream: Iterable[str | CodePoint | CodePointSequence],
+    stream: Iterable[tuple[Presentation, str | CodePoint | CodePointSequence]],
     renderer: Renderer,
     ucd: UnicodeCharacterDatabase,
     *,
@@ -333,11 +333,12 @@ def display_page_incr(
                 presentation=presentation,
             )))
             position = renderer.get_cursor()
+            size = -1 if position is None else position[1] - 9
             renderer.println(''.join(format_info(
                 cast(CodePoint | CodePointSequence, codepoints),
                 renderer,
                 ucd,
-                size=position[1] - 9,
+                size=size,
                 presentation=presentation,
             )))
         lines_printed += 1
@@ -348,7 +349,7 @@ def display_page_incr(
 
 
 def display_page(
-    stream: Iterable[str | CodePoint | CodePointSequence],
+    stream: Iterable[tuple[Presentation, str | CodePoint | CodePointSequence]],
     renderer: Renderer,
     ucd: UnicodeCharacterDatabase,
     *,

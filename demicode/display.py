@@ -332,7 +332,7 @@ def display_page_incr(
                 ucd,
                 presentation=presentation,
             )))
-            position = renderer.get_cursor()
+            position = renderer.get_position()
             size = -1 if position is None else position[1] - 9
             renderer.println(''.join(format_info(
                 cast(CodePoint | CodePointSequence, codepoints),
@@ -417,7 +417,7 @@ def display(
             done = stop <= 0
 
         if done:
-            renderer.set_window_title('')
+            renderer.restore_window_title()
             return
 
         if incrementally:
@@ -442,5 +442,5 @@ def display(
         if renderer.is_interactive:
             action = read_action(renderer)
             if action.terminate:
-                renderer.set_window_title('')
+                renderer.restore_window_title()
                 return

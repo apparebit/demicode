@@ -123,13 +123,15 @@ class Padding(StrEnum):
     FOREGROUND = str(CodePoint.FULL_BLOCK)
 
 
+class MalformedEscape(Exception):
+    pass
+
+
 if sys.platform in ('linux', 'darwin'):
 
+    import select
     import termios
     import tty
-
-    class MalformedEscape(Exception):
-        pass
 
     class KeyPressReader(Iterator[bytes]):
         """
@@ -145,25 +147,37 @@ if sys.platform in ('linux', 'darwin'):
         def __next__(self) -> bytes:
             return self.read()
 
-        def read(self) -> bytes:
+        def read(self, timeout: float = 0) -> bytes:
             """
             Read the next pressed key or key combination. If the key or key
-            combination corresponds to an ASCII character, this method returns
-            a one-byte sequence with that character. For all other keys and
-            key combinations, it returns a multibyte sequence.
+            combination corresponds to an ASCII character, this method returns a
+            one-byte sequence with that character. For all other keys and key
+            combinations, it returns a multibyte sequence. If the `timeout` is
+            positive, this method waits as long for a key press and then raises
+            a `TimeoutError`.
             """
+            if timeout > 0:
+                ready, _, _ = select.select([self._fileno], [], [], timeout)
+                if not ready:
+                    raise TimeoutError()
             return os.read(self._fileno, 3)
+
+        ESCAPE_TIMEOUT: float = 0.2
 
         def read_escape(self) -> bytes:
             """
             Read a complete escape sequence from input. This method recognizes
             the different escape sequence patterns and accumulates all bytes
-            belonging to such a sequence. It raises an exception on malformed
-            escape sequences.
+            belonging to such a sequence. This method raises a `TimeoutError` if
+            a character read times out. It raises a `MalformedEscape` if the
+            escape sequence is syntactically invalid.
             """
             buffer = bytearray()
 
-            def next_byte() -> int:
+            def next_byte(timeout: float = self.ESCAPE_TIMEOUT) -> int:
+                ready, _, _ = select.select([self._fileno], [], [], timeout)
+                if not ready:
+                    raise TimeoutError()
                 b = os.read(self._fileno, 1)[0]
                 buffer.append(b)
                 return b

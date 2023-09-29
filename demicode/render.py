@@ -13,6 +13,7 @@ just before emitting a page. In other words, size updates require polling with
 the `Renderer.refresh()` method.
 """
 
+from abc import ABCMeta, abstractmethod
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -23,6 +24,10 @@ from typing import Never, TextIO
 
 
 from .codepoint import CodePoint
+
+
+# --------------------------------------------------------------------------------------
+# Basic Support for Styling Output
 
 
 _CSI = '\x1b['
@@ -123,8 +128,94 @@ class Padding(StrEnum):
     FOREGROUND = str(CodePoint.FULL_BLOCK)
 
 
+# --------------------------------------------------------------------------------------
+# Reading Key Presses
+
+
 class MalformedEscape(Exception):
     pass
+
+
+class KeyPressReader(Iterator[bytes], metaclass=ABCMeta):
+    """
+    The abstract base class for reading key presses from a file descriptor
+    without waiting for a newline. The file descriptor must identify a TTY in
+    cbreak mode.
+    """
+
+    __slots__ = ('_input',)
+
+    def __init__(self, input: TextIO) -> None:
+        self._input = input
+
+    def __next__(self) -> bytes:
+        return self.read()
+
+    @abstractmethod
+    def read(self, *, timeout: float = 0, length: int = 3) -> bytes:
+        """
+        Read the next pressed key or key combination. If the key or key
+        combination corresponds to an ASCII character, this method returns a
+        one-byte sequence with that character. For all other keys and key
+        combinations, it returns a multibyte sequence. If the `timeout` is
+        positive, this method waits as long for a key press and then raises a
+        `TimeoutError`. The length is exposed for `read_escape()`, which
+        consumes the input byte by byte.
+        """
+
+    ESCAPE_TIMEOUT = 0.2
+
+    def read_escape(self) -> bytes:
+        """
+        Read a complete escape sequence from input. This method recognizes
+        the different escape sequence patterns and accumulates all bytes
+        belonging to such a sequence. This method raises a `TimeoutError` if
+        a character read times out. It raises a `MalformedEscape` if the
+        escape sequence is syntactically invalid.
+        """
+        buffer = bytearray()
+
+        def next_byte() -> int:
+            b = self.read(timeout=self.ESCAPE_TIMEOUT, length=1)[0]
+            buffer.append(b)
+            return b
+
+        def bad_byte(b: int) -> Never:
+            raise MalformedEscape(f'unexpected key code 0x{b:02X}')
+
+        b = next_byte()
+        if b != 0x1B:
+            bad_byte(b)
+
+        b = next_byte()
+        if b == 0x5B:  # [
+            # CSI has structure
+            b = next_byte()
+            while 0x30 <= b <= 0x3F:
+                b = next_byte()
+            while 0x20 <= b <= 0x2F:
+                b = next_byte()
+            if 0x40 <= b <= 0x7E:
+                return bytes(buffer)
+            bad_byte(b)
+
+        if b in (0x50, 0x58, 0x5D, 0x5E, 0x5F):  # P,X,],^,_
+            # DCS, SOS, OSC, PM, and APC end with ST only
+            b = next_byte()
+            while b not in (0x07, 0x1B):
+                b = next_byte()
+            if b == 0x07:
+                return bytes(buffer)
+            b = next_byte()
+            if b == 0x5C:  # \\
+                return bytes(buffer)
+            bad_byte(b)
+
+        while 0x20 <= b <= 0x2F:
+            b = next_byte()
+        if 0x30 <= b <= 0x7E:
+            return bytes(buffer)
+        bad_byte(b)
 
 
 if sys.platform in ('linux', 'darwin'):
@@ -133,91 +224,21 @@ if sys.platform in ('linux', 'darwin'):
     import termios
     import tty
 
-    class KeyPressReader(Iterator[bytes]):
-        """
-        A class to read key presses without waiting for a newline. The file
-        descriptor must be associated with a TTY in cbreak mode.
-        """
+    class UnixKeyPressReader(KeyPressReader):
 
-        __slots__ = ('_fileno',)
+        __slots__ = ()
 
-        def __init__(self, fileno: int) -> None:
-            self._fileno = fileno
-
-        def __next__(self) -> bytes:
-            return self.read()
-
-        def read(self, timeout: float = 0) -> bytes:
-            """
-            Read the next pressed key or key combination. If the key or key
-            combination corresponds to an ASCII character, this method returns a
-            one-byte sequence with that character. For all other keys and key
-            combinations, it returns a multibyte sequence. If the `timeout` is
-            positive, this method waits as long for a key press and then raises
-            a `TimeoutError`.
-            """
+        def read(self, *, timeout: float = 0, length: int = 3) -> bytes:
+            fileno = self._input.fileno()
             if timeout > 0:
-                ready, _, _ = select.select([self._fileno], [], [], timeout)
+                ready, _, _ = select.select([fileno], [], [], timeout)
                 if not ready:
                     raise TimeoutError()
-            return os.read(self._fileno, 3)
+            return os.read(fileno, length)
 
-        ESCAPE_TIMEOUT: float = 0.2
 
-        def read_escape(self) -> bytes:
-            """
-            Read a complete escape sequence from input. This method recognizes
-            the different escape sequence patterns and accumulates all bytes
-            belonging to such a sequence. This method raises a `TimeoutError` if
-            a character read times out. It raises a `MalformedEscape` if the
-            escape sequence is syntactically invalid.
-            """
-            buffer = bytearray()
-
-            def next_byte(timeout: float = self.ESCAPE_TIMEOUT) -> int:
-                ready, _, _ = select.select([self._fileno], [], [], timeout)
-                if not ready:
-                    raise TimeoutError()
-                b = os.read(self._fileno, 1)[0]
-                buffer.append(b)
-                return b
-
-            def bad_byte(b: int) -> Never:
-                raise MalformedEscape(f'unexpected key code 0x{b:02X}')
-
-            b = next_byte()
-            if b != 0x1B:
-                bad_byte(b)
-
-            b = next_byte()
-            if b == 0x5B:  # [
-                # CSI has structure
-                b = next_byte()
-                while 0x30 <= b <= 0x3F:
-                    b = next_byte()
-                while 0x20 <= b <= 0x2F:
-                    b = next_byte()
-                if 0x40 <= b <= 0x7E:
-                    return bytes(buffer)
-                bad_byte(b)
-
-            if b in (0x50, 0x58, 0x5D, 0x5E, 0x5F):  # P,X,],^,_
-                # DCS, SOS, OSC, PM, and APC end with ST only
-                b = next_byte()
-                while b not in (0x07, 0x1B):
-                    b = next_byte()
-                if b == 0x07:
-                    return bytes(buffer)
-                b = next_byte()
-                if b == 0x5C:  # \\
-                    return bytes(buffer)
-                bad_byte(b)
-
-            while 0x20 <= b <= 0x2F:
-                b = next_byte()
-            if 0x30 <= b <= 0x7E:
-                return bytes(buffer)
-            bad_byte(b)
+# --------------------------------------------------------------------------------------
+# Highlevel I/O
 
 
 class Renderer:
@@ -234,14 +255,27 @@ class Renderer:
         self.refresh()
 
     # ----------------------------------------------------------------------------------
-    # Read Terminal Properties
+    # Window Title
+
+    def set_window_title(self, text: str) -> None:
+        """Save window title and then update it."""
+        pass
+
+    def restore_window_title(self) -> None:
+        """Restore window title saved before setting it."""
+        pass
+
+    # ----------------------------------------------------------------------------------
+    # Terminal Properties Including Size
 
     @property
     def is_interactive(self) -> bool:
+        """Determine whether interactive input is supported."""
         return self._interactive
 
     @property
     def has_style(self) -> bool:
+        """Determine whether escape sequences are supported."""
         return False
 
     def refresh(self) -> None:
@@ -266,39 +300,37 @@ class Renderer:
         return self._width
 
     # ----------------------------------------------------------------------------------
-    # Read from Terminal
+    # Input
 
-    has_reader = False
+    if sys.platform in ('linux', 'darwin'):
+        has_reader = True
 
-    @contextmanager
-    def reader(self) -> Iterator[KeyPressReader]:
-        raise NotImplementedError('Renderer.reader()')
+        @contextmanager
+        def reader(self) -> Iterator[KeyPressReader]:
+            input = self._input
+            fileno = input.fileno()
+            settings = termios.tcgetattr(fileno)
+            tty.setcbreak(fileno)
+            try:
+                yield UnixKeyPressReader(input)
+            finally:
+                termios.tcsetattr(fileno, termios.TCSADRAIN, settings)
 
-    def query(self, text: str) -> bytes:
-        """
-        Query the terminal. This method prints the given escape sequence and
-        returns the result. It raises an exception if the text is not an escape
-        sequence or reading from the terminal is not supported.
-        """
-        if not text.startswith('\x1B'):
-            raise ValueError(f'query {text} is not an escape sequence')
-        with self.reader() as reader:
-            self.print(text)
-            return reader.read_escape()
+    else:
+        has_reader = False
 
-    def get_cursor(self) -> None | tuple[int, int]:
-        """Get the row and column of the cursor. This method requires a reader."""
-        response = self.query(f'{_CSI}6n')
-        if not response.startswith(b'\x1B[') or not response.endswith(b'R'):
-            return None
-        row, _, column = response[2:-1].partition(b';')
-        return int(row), int(column)
+        @contextmanager
+        def reader(self) -> Iterator[KeyPressReader]:
+            raise NotImplementedError('Renderer.reader()')
 
     # ----------------------------------------------------------------------------------
-    # Update Terminal
+    # Querying the Terminal
 
-    def set_window_title(self, text: str) -> None:
-        pass
+    def query(self, text: str) -> bytes:
+        raise NotImplementedError()
+
+    def get_position(self) -> None | tuple[int, int]:
+        raise NotImplementedError()
 
     # ----------------------------------------------------------------------------------
     # Format Text
@@ -341,7 +373,7 @@ class Renderer:
         return href if text is None else text
 
     # ----------------------------------------------------------------------------------
-    # Print Formatted Text
+    # Output
 
     def print(self, text: str = '') -> None:
         # Sneakily exposing flush()
@@ -363,22 +395,27 @@ class StyledRenderer(Renderer):
     def has_style(self) -> bool:
         return True
 
-    if sys.platform in ('linux', 'darwin'):
-        has_reader = True
-
-        @contextmanager
-        def reader(self) -> Iterator[KeyPressReader]:
-            fileno = self._input.fileno()
-            settings = termios.tcgetattr(fileno)
-            tty.setcbreak(fileno)
-            try:
-                yield KeyPressReader(fileno)
-            finally:
-                termios.tcsetattr(fileno, termios.TCSADRAIN, settings)
-
     def set_window_title(self, text: str) -> None:
         if self.is_interactive:
-            self.print(f'{_OSC}0;{text}{_ST}')
+            self.print(f'{_CSI}22;0t{_OSC}0;{text}{_ST}')
+
+    def restore_window_title(self) -> None:
+        if self.is_interactive:
+            self.print(f'{_OSC}0;{_ST}{_CSI}23;0t')
+
+    def query(self, text: str) -> bytes:
+        if not text.startswith('\x1B'):
+            raise ValueError(f'query {text} is not an escape sequence')
+        with self.reader() as reader:
+            self.print(text)
+            return reader.read_escape()
+
+    def get_position(self) -> None | tuple[int, int]:
+        response = self.query(f'{_CSI}6n')
+        if not response.startswith(b'\x1B[') or not response.endswith(b'R'):
+            return None
+        row, _, column = response[2:-1].partition(b';')
+        return int(row), int(column)
 
     def adjust_column(self, column: int) -> str:
         return _CHA(column)

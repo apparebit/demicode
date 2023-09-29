@@ -7,8 +7,8 @@ from demicode.darkmode import is_darkmode
 from demicode.render import MalformedEscape, Mode, StyledRenderer
 
 def help() -> None:
-    print('Usage: ./qtty.py csi|esc|osc <arguments>')
-    print('    For csi, you need to include the final character in the arguments')
+    print('Usage: ./qtty.py csi|esc|osc <argument-string>')
+    print('    For csi, include the final character in the argument string')
     print('    For osc, the terminating `ESC \\` are automatically appended')
     sys.exit(1)
 
@@ -40,7 +40,7 @@ def main() -> None:
         query += '\x1b\\'
 
     try:
-        response = renderer.query(query)
+        response = str(renderer.query(query))[2:-1].replace('\\x1b', '<ESC>')
         print(f'Response: {response}')
     except TimeoutError:
         print('Query timed out')

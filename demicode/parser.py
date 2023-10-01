@@ -1,5 +1,5 @@
-from collections.abc import Iterable, Iterator, Sequence
-from pathlib import Path
+from collections.abc import Iterable, Iterator
+import re
 from typing import Callable, cast, Literal, TypeAlias, TypeVar
 
 from .codepoint import (
@@ -114,7 +114,19 @@ def parse(
 
 
 # --------------------------------------------------------------------------------------
-# Helpful Callbacks (for parse(), sorted(), ...)
+# Helpful Functions (for parse(), sorted(), ...)
+
+
+_FIXABLE = re.compile(r'[- ][a-z]?')
+
+def to_property_value(value: str) -> str:
+    """
+    Normalize a property value. This function replaces any space or dash with an
+    underscore and capitalizes the `a` in `and`.
+    """
+    return _FIXABLE.sub(
+        lambda m: '_' + t[1].upper() if len(t := m[0]) == 2 else '_', value
+    )
 
 
 def to_range_and_string(

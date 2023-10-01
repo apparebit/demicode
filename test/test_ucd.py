@@ -5,9 +5,12 @@ import unittest
 
 from demicode.codepoint import CodePoint, CodePointSequence
 from demicode.model import (
+    Age,
+    Block,
     BinaryProperty,
     CharacterData,
     EastAsianWidth,
+    FIRST_SUPPORTED_VERSION,
     GeneralCategory,
     GraphemeClusterBreak,
     IndicSyllabicCategory,
@@ -31,6 +34,8 @@ PROPERTY_COUNTS = {
         BinaryProperty.Emoji_Modifier_Base: (134, 50, 40),
         BinaryProperty.Emoji_Presentation: (1_205, 282, 81),
         BinaryProperty.Extended_Pictographic: (3_537, 511, 78),
+        Property.Age: (288_833, 1_718, 1_718),
+        Property.Block: (293_168, 327, 327),
         Property.Canonical_Combining_Class: (286_719, 2_374, 1_196),
         Property.East_Asian_Width: (349_871, 2_575, 1_169),
         Property.General_Category: (288_767, 3_300, 3_300),
@@ -45,6 +50,8 @@ PROPERTY_COUNTS = {
         BinaryProperty.Emoji_Modifier_Base: (134, 50, 40),
         BinaryProperty.Emoji_Presentation: (1_205, 282, 81),
         BinaryProperty.Extended_Pictographic: (3_537, 511, 78),
+        Property.Age: (289_460, 1_721, 1_721),
+        Property.Block: (293_792, 328, 328),
         Property.Canonical_Combining_Class: (287_346, 2_376, 1_196),
         Property.East_Asian_Width: (349_876, 2_578, 1_169),
         Property.General_Category: (289_394, 3_302, 3_302),
@@ -60,18 +67,18 @@ CHARACTER_DATA = (
         codepoint=CodePoint.of(0x0023),
         category=GeneralCategory.Other_Punctuation,
         east_asian_width=EastAsianWidth.Narrow,
-        age='1.1',
+        age=Age.V1_1,
         name='NUMBER SIGN',
-        block='Basic Latin',
+        block=Block.Basic_Latin,
         flags=frozenset([BinaryProperty.Emoji, BinaryProperty.Emoji_Component])
     ),
     CharacterData(
         codepoint=CodePoint.of(0x26A1),
         category=GeneralCategory.Other_Symbol,
         east_asian_width=EastAsianWidth.Wide,
-        age='4.0',
+        age=Age.V4_0,
         name='HIGH VOLTAGE SIGN',
-        block='Miscellaneous Symbols',
+        block=Block.Miscellaneous_Symbols,
         flags=frozenset([BinaryProperty.Emoji, BinaryProperty.Emoji_Presentation,
                          BinaryProperty.Extended_Pictographic])
     ),
@@ -79,18 +86,18 @@ CHARACTER_DATA = (
         codepoint=CodePoint.of(0x2763),
         category=GeneralCategory.Other_Symbol,
         east_asian_width=EastAsianWidth.Neutral,
-        age='1.1',
+        age=Age.V1_1,
         name='HEAVY HEART EXCLAMATION MARK ORNAMENT',
-        block='Dingbats',
+        block=Block.Dingbats,
         flags=frozenset([BinaryProperty.Emoji, BinaryProperty.Extended_Pictographic])
     ),
     CharacterData(  # An unassigned code point that is an extended pictograph
         codepoint=CodePoint.of(0x1F2FF),
         category=GeneralCategory.Unassigned,
         east_asian_width=EastAsianWidth.Neutral,
-        age=None,
+        age=Age.Unassigned,
         name=None,
-        block='Enclosed Ideographic Supplement',
+        block=Block.Enclosed_Ideographic_Supplement,
         flags=frozenset([BinaryProperty.Extended_Pictographic])
     ),
 )
@@ -130,6 +137,9 @@ class TestProperty(unittest.TestCase):
 
     def test_known_versions(self):
         for raw_version in KNOWN_UCD_VERSIONS:
+            if raw_version < FIRST_SUPPORTED_VERSION:
+                continue
+
             version = Version(*raw_version)
             with self.subTest(version=version):
                 ucd = UnicodeCharacterDatabase(UCD_PATH, version).prepare()
@@ -139,9 +149,9 @@ class TestProperty(unittest.TestCase):
                 data = ucd.lookup(CodePoint.FULL_BLOCK)
                 self.assertEqual(data.category, GeneralCategory.Other_Symbol)
                 self.assertEqual(data.east_asian_width, EastAsianWidth.Ambiguous)
-                self.assertEqual(data.age, '1.1')
+                self.assertEqual(data.age, Age.V1_1)
                 self.assertEqual(data.name, 'FULL BLOCK')
-                self.assertEqual(data.block, 'Block Elements')
+                self.assertEqual(data.block, Block.Block_Elements)
 
                 self.assertEqual(
                     ucd.resolve(
@@ -172,7 +182,7 @@ class TestProperty(unittest.TestCase):
         property_value_counts: dict[BinaryProperty | Property, int] = {}
 
         for property, (expected_points, ranges, max_ranges) in expected_counts.items():
-            actual_points, actual_ranges = ucd.count_values(property)
+            actual_points, actual_ranges = ucd.count_nondefault_values(property)
             expected_ranges = max_ranges if ucd.is_optimized else ranges
 
             self.assertEqual(actual_points, expected_points)

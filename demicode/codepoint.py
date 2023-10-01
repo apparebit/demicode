@@ -152,6 +152,26 @@ class CodePoint(int):
     def to_sequence_head(self) -> 'CodePoint':
         return self
 
+    def next(self) -> 'CodePoint':
+        if self == self.MAX:
+            raise ValueError('U+10FFFF has no successor')
+        return CodePoint(self + 1)
+
+    def previous(self) -> 'CodePoint':
+        if self == self.MIN:
+            raise ValueError('U+0000 has no predecessor')
+        return CodePoint(self - 1)
+
+    def upto(self, other: 'CodePoint') -> 'Iterator[CodePoint]':
+        """
+        Create an iterator from this code point up to and including the other
+        code point. If this code point is larger than the other one, this method
+        returns an empty iterator.
+        """
+        while self <= other:
+            yield self
+            self = self.next()
+
     def codepoints(self) -> 'Iterator[CodePoint]':
         yield self
 
@@ -250,11 +270,7 @@ class CodePointRange:
         raise TypeError(f'Unable to treat range {self!r} as sequence')
 
     def codepoints(self) -> Iterator[CodePoint]:
-        cursor = self.start
-        yield cursor
-        while cursor < self.stop:
-            cursor = CodePoint(cursor + 1)
-            yield cursor
+        return self.start.upto(self.stop)
 
     def __repr__(self) -> str:
         return f'{self.start!r}..{self.stop!r}'

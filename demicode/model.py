@@ -22,7 +22,17 @@ class VersioningError(Exception):
     pass
 
 
+FIRST_SUPPORTED_VERSION = (4, 1, 0)
+
+
 KNOWN_UCD_VERSIONS = tuple(v + (0,) for v in (
+    (1, 1),
+    (2, 0),
+    (2, 1),
+    (3, 0),
+    (3, 1),
+    (3, 2),
+    (4, 0),
     (4, 1),
     (5, 0),
     (5, 1),
@@ -110,6 +120,12 @@ class Version(NamedTuple):
         if self.is_ucd():
             return self
         raise ValueError(f'version {self} is not a valid UCD version')
+
+    def to_supported_ucd(self) -> 'Version':
+        """Validate this version as a supported UCD version."""
+        if self.is_ucd() and self >= FIRST_SUPPORTED_VERSION:
+            return self
+        raise ValueError(f'version {self} is not a valid and supported UCD version')
 
     def is_emoji(self) -> bool:
         """
@@ -213,21 +229,21 @@ class GraphemeClusterBreak(StrEnum):
 # https://unicode.org/reports/tr29/#Regex_Definitions
 GRAPHEME_CLUSTER_PATTERN = re.compile(
     r"""
-            rn                                        # GB3, GB4, GB5
+            rn                                         # GB3, GB4, GB5
         |   r
         |   n
         |   C
-        |   P*                                        # GB9b
+        |   P*                                         # GB9b
             (?:
-                    (?:  L* (?: V+ | vV* | t ) T*  )  # GB6, GB7, GB8
+                    (?:  L* (?: V+ | v V* | t ) T*  )  # GB6, GB7, GB8
                 |   L+
                 |   T+
-                |   RR                                # GB12, GB13
-                |   X (?: [Eελ]* Z X )*               # GB11
-                |   (?: κ (?: [ελZ]* λ [ελZ]* κ )+ )  # GB9c  Rewrite: ([εZ]*λ[εZλ]*κ)
+                |   RR                                 # GB12, GB13
+                |   X (?: [Eελ]* Z X )*                # GB11
+                |   (?: κ (?: [ελZ]* λ [ελZ]* κ )+ )   # GB9c  Rewrite: ([εZ]*λ[εZλ]*κ)
                 |   [^Cnr]
             )
-            [EελZS]*                                  # GB9, GB9a
+            [EελZS]*                                   # GB9, GB9a
     """,
     re.VERBOSE,
 )
@@ -263,6 +279,8 @@ class Property(StrEnum):
     enumerations are machine-generated from Unicode data. The enumeration for
     binary Unicode properties is separate for now.
     """
+    Age = 'age'
+    Block = 'blk'
     Canonical_Combining_Class = 'ccc'
     East_Asian_Width = 'ea'
     Emoji_Sequence = 'Emoji_Sequence'
@@ -302,8 +320,11 @@ class BinaryProperty(StrEnum):
 
 
 PropertyValueTypes: TypeAlias = (
-      bool
+      None
+    | bool
     | int
+    | Age
+    | Block
     | EastAsianWidth
     | EmojiSequence
     | GeneralCategory
@@ -418,7 +439,7 @@ class CharacterData:
     codepoint: CodePoint
     category: GeneralCategory
     east_asian_width: EastAsianWidth
-    age: None | str
+    age: Age
     name: None | str
-    block: None | str
+    block: None | Block
     flags: frozenset[BinaryProperty]

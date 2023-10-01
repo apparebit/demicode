@@ -67,7 +67,7 @@ def generate_code(root: Path) -> None:
 
 def retrieve_property_values(
     root: Path, version: Version
-) -> dict[str, list[tuple[str, str]]]:
+) -> dict[str, list[tuple[str, str, None | str]]]:
     properties_of_interest = set()
     for complex_property in Property:
         if not complex_property.is_manually_generated():
@@ -76,21 +76,25 @@ def retrieve_property_values(
     result = defaultdict(list)
     with mirrored_data('PropertyValueAliases.txt', version, root) as lines:
         records = parse(lines, lambda _, p: p, with_codepoints=False)
-        for property, short_name, name, *_ in records:
-            if property not in properties_of_interest:
+        for property_name, *entry in records:
+            if property_name not in properties_of_interest:
                 continue
-            result[property].append((name, short_name))
+            if property_name == 'ccc':
+                number, short_name, name = entry
+            else:
+                number, (short_name, name, *_) = None, entry
+            result[property_name].append((name, short_name, number))
 
     # Patch provisional property value Consonant_Repha back in.
     values = result[Property.Indic_Syllabic_Category.value]
-    values.append(('Consonant_Repha', 'Consonant_Repha'))
+    values.append(('Consonant_Repha', 'Consonant_Repha', None))
     values.sort()
 
     return result
 
 
 def generate_property_values(
-    property_values: dict[str, list[tuple[str, str]]]
+    property_values: dict[str, list[tuple[str, str, None | str]]]
 ) -> Iterator[str]:
     yield '# This module is machine-generated. Do not edit by hand.'
     yield ''
@@ -111,9 +115,15 @@ def generate_property_values(
         ccc = property is Property.Canonical_Combining_Class
         parent = 'IntEnum' if ccc else 'StrEnum'
         yield f'class {property.name.replace("_", "")}({parent}):'
-        for name, short_name in property_values[property.value]:
-            value = str(short_name) if ccc else f'"{short_name}"'
-            yield f'    {"None_" if name == "None" else name} = {value}'
+        for name, short_name, number in property_values[property.value]:
+            if ccc:
+                yield f'    {name} = {number}'
+                if short_name != name:
+                    yield f'    {short_name} = {number}'
+            else:
+                if name == 'None':
+                    name = 'None_'
+                yield f'    {"None_" if name == "None" else name} = "{short_name}"'
 
 
 # --------------------------------------------------------------------------------------

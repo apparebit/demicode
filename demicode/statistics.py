@@ -5,6 +5,8 @@ from typing import cast, NamedTuple
 import demicode.model as model
 from .model import (
     BinaryProperty,
+    GraphemeClusterBreak,
+    IndicConjunctBreak,
     Property,
     Version,
 )
@@ -20,6 +22,8 @@ _PROPERTIES: tuple[BinaryProperty | Property, ...] = (
     BinaryProperty.Emoji_Presentation,
     BinaryProperty.Extended_Pictographic,
     Property.Emoji_Sequence,
+    Property.Age,
+    Property.Block,
     Property.Canonical_Combining_Class,
     Property.East_Asian_Width,
     Property.General_Category,
@@ -52,7 +56,7 @@ def collect_statistics(
         raise AssertionError('UCD claims to be optimized without call to optimize()')
     counts: list[tuple[int, int]] = []
     for property in _PROPERTIES:
-        counts.append(ucd.count_values(property))
+        counts.append(ucd.count_nondefault_values(property))
 
     ucd.optimize().validate()
     if not getattr(ucd, 'is_optimized'):  # Work around mypy bug
@@ -70,7 +74,7 @@ def collect_statistics(
             values = getattr(model, property.name.replace('_', ''))
             bits = math.ceil(math.log2(len(values)))
 
-        points2, max_ranges = ucd.count_values(property)
+        points2, max_ranges = ucd.count_nondefault_values(property)
         if points != points2:
             raise AssertionError(
                 f'Property {property.name} has {points} != {points2} '
@@ -145,6 +149,8 @@ def show_statistics(
     show_heading('Complex Properties')
     sum_bits = sum_points = sum_ranges = sum_max_ranges = 0
     for property in (
+        Property.Age,
+        Property.Block,
         Property.Canonical_Combining_Class,
         Property.East_Asian_Width,
         Property.General_Category,
@@ -199,7 +205,14 @@ def show_statistics(
     ))
 
     renderer.println()
-    for incb, ocb in overlap.keys():
+    assert len(overlap) == 5
+    for incb, ocb in (
+        (IndicConjunctBreak.Extend, GraphemeClusterBreak.ZWJ),
+        (IndicConjunctBreak.Extend, GraphemeClusterBreak.Extend),
+        (IndicConjunctBreak.Linker, GraphemeClusterBreak.Extend),
+        (None, GraphemeClusterBreak.Extend),
+        (IndicConjunctBreak.Consonant, None),
+    ):
         left = '⋯' if incb is None else incb.name
         right = '⋯' if ocb is None else ocb.name
         renderer.println(f'{"":<2}  {left:<9}  {right:<6}  {overlap[(incb, ocb)]:5,d}')

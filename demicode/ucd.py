@@ -15,8 +15,8 @@ from typing import (
     Self,
     TypeAlias,
     TypeVar,
-    TypeVarTuple,
 )
+
 
 from .codepoint import (
     CodePoint,
@@ -24,20 +24,15 @@ from .codepoint import (
     CodePointSequence,
 )
 
-from .parser import (
-    get_range,
-    no_range,
-    parse,
-    simplify_range_data,
-    simplify_only_ranges,
-    to_range_and_string,
-)
 from .mirror import (
     mirror_cldr_annotations,
     mirrored_data,
     retrieve_latest_ucd_version,
 )
+
 from .model import (
+    Age,
+    Block,
     BinaryProperty,
     GeneralCategory,
     CharacterData,
@@ -51,6 +46,17 @@ from .model import (
     Script,
     Version,
 )
+
+from .parser import (
+    get_range,
+    no_range,
+    parse,
+    simplify_range_data,
+    simplify_only_ranges,
+    to_property_value,
+    to_range_and_string,
+)
+
 from demicode import __version__
 
 
@@ -63,8 +69,6 @@ OverlapCounter: TypeAlias = Counter[
 
 
 _T = TypeVar('_T')
-_Ts = TypeVarTuple('_Ts')
-_U = TypeVar('_U')
 
 
 # --------------------------------------------------------------------------------------
@@ -243,7 +247,7 @@ class UnicodeCharacterDatabase:
         """
         if self._is_prepared:
             raise ValueError('trying to update UCD version after UCD has been ingested')
-        self._version = Version.of(version).to_ucd()
+        self._version = Version.of(version).to_supported_ucd()
 
     # ----------------------------------------------------------------------------------
     # Prepare, Optimize, Validate
@@ -262,9 +266,13 @@ class UnicodeCharacterDatabase:
         logger.info('using UCD version %s', version)
 
         with mirrored_data('DerivedAge.txt', version, path) as lines:
-            self._age = sorted(parse(lines, to_range_and_string), key=get_range)
+            self._age = sorted(parse(
+                lines, lambda cp, p: (cp.to_range(), Age(p[0]))
+            ), key=get_range)
         with mirrored_data('Blocks.txt', version, path) as lines:
-            self._block = [*parse(lines, to_range_and_string)]
+            self._block = [*parse(
+                lines, lambda cp, p: (cp.to_range(), Block[to_property_value(p[0])])
+            )]
         with mirrored_data('DerivedCombiningClass.txt', version, path) as lines:
             self._combining_class = sorted(parse(
                 lines, lambda cp, p: (cp.to_range(), int(p[0]))
@@ -469,9 +477,9 @@ class UnicodeCharacterDatabase:
             codepoint=codepoint,
             category=self.resolve(codepoint, Property.General_Category),
             east_asian_width=self.resolve(codepoint, Property.East_Asian_Width),
-            age=self._resolve(codepoint, self._age, None),
+            age=self.resolve(codepoint, Property.Age),
             name=self._name.get(codepoint),
-            block=self._resolve(codepoint, self._block, None),
+            block=self.resolve(codepoint, Property.Block),
             flags=frozenset(p for p in BinaryProperty if self.test(codepoint, p)),
         )
 
@@ -492,18 +500,21 @@ class UnicodeCharacterDatabase:
         )
 
     def count_break_overlap(self) -> OverlapCounter:
-        counters: OverlapCounter = Counter()
+        counts: OverlapCounter = Counter()
+        icb: None | IndicConjunctBreak
         for range, icb in self._indic_conjunct_break:
             # All code points in range have Indic_Conjunct_Break other than None
             for codepoint in range.codepoints():
                 gcb = self._resolve(codepoint, self._grapheme_break, None)
-                counters[(icb, gcb)] += 1
+                counts[(icb, gcb)] += 1
         for range, gcb in self._grapheme_break:
             if gcb is not GraphemeClusterBreak.Extend:
                 continue
-            counters[(None, gcb)] += len(range)
-
-        return counters
+            for codepoint in range.codepoints():
+                icb = self._resolve(codepoint, self._indic_conjunct_break, None)
+                if icb is None:
+                    counts[(None, gcb)] += 1
+        return counts
 
     # ----------------------------------------------------------------------------------
     # Grapheme Clusters and Their Breaks
@@ -567,6 +578,10 @@ class UnicodeCharacterDatabase:
     ) -> tuple[list[tuple[CodePointRange, Any]], Any]:
         self.prepare()
         match property:
+            case Property.Age:
+                return self._age, Age.Unassigned
+            case Property.Block:
+                return self._block, None
             case Property.Canonical_Combining_Class:
                 return self._combining_class, 0
             case Property.East_Asian_Width:
@@ -597,6 +612,16 @@ class UnicodeCharacterDatabase:
         record = ranges[index]
         return record[1] if codepoint in record[0] else default
 
+    @overload
+    def resolve(
+        self, codepoint: CodePoint, property: Literal[Property.Age]
+    ) -> Age:
+        ...
+    @overload
+    def resolve(
+        self, codepoint: CodePoint, property: Literal[Property.Block]
+    ) -> None | Block:
+        ...
     @overload
     def resolve(
         self, codepoint: CodePoint, property: Literal[Property.Canonical_Combining_Class]
@@ -652,6 +677,42 @@ class UnicodeCharacterDatabase:
         else:
             ranges, default = self._ranges_default(property)
             return self._resolve(codepoint, ranges, default)
+
+    def count(self, property: Property, selection: object) -> int:
+        ranges, default = self._ranges_default(property)
+        result = 0
+
+        if selection == default:
+            next = CodePoint.MIN
+            for range, _ in ranges:
+                previous = range.start.previous()
+                if next <= previous:
+                    result += previous - next + 1
+                next = range.stop.next()
+        else:
+            for range, range_value in ranges:
+                if selection == range_value:
+                    result += len(range)
+
+        return result
+
+    def materialize(
+        self, property: Property, selection: object
+    ) -> set[CodePoint]:
+        ranges, default = self._ranges_default(property)
+        result = set()
+
+        if selection == default:
+            next = CodePoint.MIN
+            for range, _ in ranges:
+                result |= {cp for cp in next.upto(range.start.previous())}
+                next = range.stop.next()
+        else:
+            for range, range_value in ranges:
+                if selection == range_value:
+                    result |= {cp for cp in range.codepoints()}
+
+        return result
 
     def combine(
         self, *properties: BinaryProperty | Property
@@ -714,7 +775,7 @@ class UnicodeCharacterDatabase:
 
         return by_range
 
-    def count_values(
+    def count_nondefault_values(
         self,
         property: BinaryProperty | Property,
     ) -> tuple[int, int]:

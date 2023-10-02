@@ -149,7 +149,7 @@ def no_range(codepoints: CodePoints) -> CodePointOrSequence:
     raise TypeError(f'code point range {codepoints!r} where none expected')
 
 
-def get_range(record: tuple[CodePointRange, T]) -> CodePointRange:
+def get_range(record: tuple[CodePointRange, object]) -> CodePointRange:
     """Retrieve the range from a parsed record"""
     return record[0]
 

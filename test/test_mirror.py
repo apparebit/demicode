@@ -28,8 +28,8 @@ class TestMirror(unittest.TestCase):
         )
 
         self.assertEqual(
-            ucd_url_of('IndicSyllabicCategory.txt', Version(6, 0, 0)),
-            'https://www.unicode.org/Public/6.0.0/ucd/IndicSyllabicCategory.txt'
+            ucd_url_of('Indic_Syllabic_Category.txt', Version(6, 0, 0)),
+            'https://www.unicode.org/Public/6.0.0/ucd/Indic_Syllabic_Category.txt'
         )
 
         self.assertEqual(

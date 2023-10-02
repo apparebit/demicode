@@ -31,7 +31,7 @@ def _is_darkmode_windows() -> bool:
     with winreg.OpenKey(  # type: ignore[attr-defined]
         winreg.HKEY_CURRENT_USER,  # type: ignore[attr-defined]
         "Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize"
-    ) as key:
+    ) as key:  # type: ignore
         return not winreg.QueryValueEx(  # type: ignore[attr-defined]
             key,
             "AppsUseLightTheme"

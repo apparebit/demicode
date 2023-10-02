@@ -2,7 +2,6 @@ import importlib.util
 import pathlib
 import unittest
 
-__all__ = []
 
 # It would have been easier to add necessary imports manually,
 # but this can serve as recipe for future projects, too!
@@ -31,5 +30,4 @@ for direntry in pathlib.Path(__file__).parent.iterdir():
             continue
 
         # ... make the value available in this module, too.
-        __all__.append(name)
         globals()[name] = value

@@ -143,7 +143,7 @@ def ucd_url_of(file: str, version: None | Version = None) -> str:
 
 
 _VERSION_PATTERN = (
-    re.compile('Version (?P<version>\d+[.]\d+[.]\d+) of the Unicode Standard')
+    re.compile(r'Version (?P<version>\d+[.]\d+[.]\d+) of the Unicode Standard')
 )
 
 _ONE_WEEK = 7 * 24 * 60 * 60
@@ -298,15 +298,14 @@ def mirror_cldr_annotations(root: Path) -> tuple[Path, Path]:
 
     local_version = None
     if annotations1.exists() and annotations2.exists():
-        if (
-            stamp_path.is_file()
-            and stamp_path.stat().st_mtime + _ONE_WEEK > time.time()
-        ):
+        if stamp_path.is_file():
             try:
                 local_version = Version.of(stamp_path.read_text('utf8'))
-                return annotations1, annotations2
             except:
                 pass
+
+        if local_version and stamp_path.stat().st_mtime + _ONE_WEEK > time.time():
+            return annotations1, annotations2
 
     metadata = _load_cldr_metadata(_CLDR_URL1)
     latest_version = Version.of(metadata['dist-tags']['latest'])

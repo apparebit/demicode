@@ -13,6 +13,7 @@ import sys
 from textwrap import dedent
 import traceback
 from types import TracebackType
+from typing import Callable
 
 from .codegen import generate_code
 from .codepoint import CodePoint, CodePointSequence
@@ -20,7 +21,7 @@ from .control import read_key_action, read_line_action
 from .darkmode import is_darkmode
 from .display import display
 from .mirror import local_cache_directory
-from .render import Mode, Renderer, StyledRenderer, Style
+from .render import KeyPressReader, Mode, Renderer, StyledRenderer, Style
 from .selection import *
 from .statistics import collect_statistics, show_statistics
 from .ucd import UnicodeCharacterDatabase
@@ -50,7 +51,7 @@ class UserError(Exception):
     """
 
 
-class user_error(AbstractContextManager):
+class user_error(AbstractContextManager['user_error']):
     """
     A context manager to turn one or more exceptions into a user error. If the
     context manager tries to exit with one of the listed exception types, it
@@ -92,9 +93,9 @@ def width_limited_formatter(prog: str) -> argparse.HelpFormatter:
 
 def configure_parser() -> argparse.ArgumentParser:
     if sys.__stdout__.isatty():
-        a = lambda text: Style.link(text)
-        b = Style.bold
-        i = Style.italic
+        a: Callable[[str], str] = lambda text: Style.link(text)
+        b: Callable[[str], str] = Style.bold
+        i: Callable[[str], str] = Style.italic
     else:
         a = lambda text: text
         b = lambda text: text
@@ -436,7 +437,7 @@ def process(options: argparse.Namespace, renderer: Renderer) -> int:
 
     # ------------------------------------------------------- Display code points
     read_action = read_line_action
-    if read_key_action is not None and not options.use_line_input:
+    if KeyPressReader.PLATFORM_SUPPORTED and not options.use_line_input:
         read_action = read_key_action
 
     display(

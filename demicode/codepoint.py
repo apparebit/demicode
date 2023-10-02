@@ -53,7 +53,7 @@ ranges (or sequences for that matter), iterate over the code point objects and
 replace every object that `is_singleton()` with the result of `to_singleton()`.
 """
 
-from collections.abc import Iterator
+from collections.abc import Iterator, Iterable
 from dataclasses import dataclass
 from types import NotImplementedType
 from typing import Any, ClassVar, Self, SupportsInt, SupportsIndex, TypeAlias
@@ -286,7 +286,7 @@ class CodePointSequence(tuple[CodePoint,...]):
 
     __slots__ = ()
 
-    def __init__(self, *args, **kwargs) -> None:
+    def __init__(self, __iterable: Iterable[CodePoint] = (), /) -> None:
         if len(self) == 0:
             raise ValueError('a code point sequence must not be empty')
 

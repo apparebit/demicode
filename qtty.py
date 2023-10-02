@@ -2,11 +2,12 @@
 
 import sys
 import traceback
+from typing import Never
 
 from demicode.darkmode import is_darkmode
 from demicode.render import MalformedEscape, Mode, StyledRenderer
 
-def help() -> None:
+def help() -> Never:
     print('Usage: ./qtty.py csi|esc|osc <argument-string>')
     print('    For csi, include the final character in the argument string')
     print('    For osc, the terminating `ESC \\` are automatically appended')

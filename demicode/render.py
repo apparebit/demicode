@@ -45,11 +45,6 @@ def _CHA(column: int | str) -> str:
     return f'{_CSI}{column}G'
 
 
-def _HPA(column: int | str) -> str:
-    """Format Horizontal Position Absolute (a format effector)."""
-    return f'{_CSI}{column}`'
-
-
 def _bg(color: int | str) -> str:
     return f'48;5;{color}'
 
@@ -143,6 +138,8 @@ class KeyPressReader(Iterator[bytes], metaclass=ABCMeta):
     cbreak mode.
     """
 
+    PLATFORM_SUPPORTED = sys.platform in ('darwin', 'linux')
+
     __slots__ = ('_input',)
 
     def __init__(self, input: TextIO) -> None:
@@ -218,7 +215,7 @@ class KeyPressReader(Iterator[bytes], metaclass=ABCMeta):
         bad_byte(b)
 
 
-if sys.platform in ('linux', 'darwin'):
+if KeyPressReader.PLATFORM_SUPPORTED:
 
     import select
     import termios
@@ -302,8 +299,7 @@ class Renderer:
     # ----------------------------------------------------------------------------------
     # Input
 
-    if sys.platform in ('linux', 'darwin'):
-        has_reader = True
+    if KeyPressReader.PLATFORM_SUPPORTED:
 
         @contextmanager
         def reader(self) -> Iterator[KeyPressReader]:
@@ -317,7 +313,6 @@ class Renderer:
                 termios.tcsetattr(fileno, termios.TCSADRAIN, settings)
 
     else:
-        has_reader = False
 
         @contextmanager
         def reader(self) -> Iterator[KeyPressReader]:
@@ -345,9 +340,6 @@ class Renderer:
     def adjust_column(self, column: int) -> str:
         return ''
 
-    def format_error(self, text: str) -> str:
-        return text
-
     def format_legend(self, text: str) -> str:
         return text
 
@@ -372,8 +364,14 @@ class Renderer:
     def link(self, href: str, text: None | str = None) -> str:
         return href if text is None else text
 
+    def format_error(self, text: str) -> str:
+        return text
+
     # ----------------------------------------------------------------------------------
     # Output
+
+    def beep(self) -> None:
+        pass
 
     def print(self, text: str = '') -> None:
         # Sneakily exposing flush()
@@ -456,3 +454,6 @@ class StyledRenderer(Renderer):
 
     def format_error(self, text: str) -> str:
         return f'{self._theme.error}{text}{Style.RESET}'
+
+    def beep(self) -> None:
+        print('\a')

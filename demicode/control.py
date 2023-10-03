@@ -1,15 +1,12 @@
 from enum import Enum
-import os
-import sys
 import time
-from typing import Callable
 
-from .render import Renderer
+from .render import KeyPressReader, Renderer
 
 
 __all__ = (
     'Action',
-    'read_keypress_action',
+    'read_key_action',
     'read_line_action'
 )
 
@@ -20,22 +17,6 @@ class Action(Enum):
     TERMINATE = 0
     FORWARD = 1
 
-    @property
-    def error(self) -> bool:
-        return self is Action.ERROR
-
-    @property
-    def backward(self) -> bool:
-        return self is Action.BACKWARD
-
-    @property
-    def terminate(self) -> bool:
-        return self is Action.TERMINATE
-
-    @property
-    def forward(self) -> bool:
-        return self is Action.FORWARD
-
 
 _KEY_HINTS: tuple[str,...] = (
     ' \u2B05 | ‹q›uit | \u2B95  ',
@@ -43,6 +24,7 @@ _KEY_HINTS: tuple[str,...] = (
     ' \u2B05 | ‹escape› | \u2B95  ',
     ' \u2B05 | ‹control-c› | \u2B95  ',
 )
+
 
 _LINE_HINTS: tuple[str,...] = (
     ' [ ‹p›revious | ‹q›uit | ‹n›ext ] ‹return› ',
@@ -56,32 +38,18 @@ _LINE_HINTS: tuple[str,...] = (
 )
 
 
-def pick_hint(hints: tuple[str,...]) -> str:
+def _pick_hint(hints: tuple[str,...]) -> str:
     """Live a little! 🤪"""
     return hints[int(time.time()) % len(hints)]
 
 
-# Make function safe to name on all operating systems.
-read_key_action: None | Callable[[Renderer], Action] = None
+if KeyPressReader.PLATFORM_SUPPORTED:
 
-
-if sys.platform in ('linux', 'darwin'):
-
-    def read_key_action(renderer: Renderer, /) -> Action:
-        """Read next action using raw standard input."""
-        renderer.print(renderer.faint(pick_hint(_KEY_HINTS)))
-        with renderer.reader() as reader:
-            try:
-                nib = reader.read()
-            except KeyboardInterrupt:
-                return Action.TERMINATE
-
-        # Terminate line with key hint after all.
-        renderer.println()
-
-        # Turn key into action. Nibs of 3 characters start with 0x1B 0x5B.
+    def _to_action(nib: bytes) -> Action:
+        """Turn key data into action."""
         nib_length = len(nib)
         if nib_length == 3:
+            # For cursor keys leading two bytes are 0x1B 0x5B
             key = nib[2]
             if key == 0x44: # Cursor left
                 return Action.BACKWARD
@@ -103,11 +71,33 @@ if sys.platform in ('linux', 'darwin'):
 
         return Action.ERROR
 
+    def read_key_action(renderer: Renderer, /) -> Action:
+        """Read next action using raw standard input."""
+        renderer.print(renderer.faint(_pick_hint(_KEY_HINTS)))
+        with renderer.reader() as reader:
+            try:
+                while True:
+                    action = _to_action(reader.read())
+                    if action is not Action.ERROR:
+                        break
+                    renderer.beep()
+            except KeyboardInterrupt:
+                return Action.TERMINATE
+
+        # Terminate line with key hint after all. Return error-free action.
+        renderer.println()
+        return action
+
+else:
+
+    def read_key_action(renderer: Renderer, /) -> Action:
+        raise NotImplementedError()
+
 
 def read_line_action(renderer: Renderer, /) -> Action:
     """Read next action using Python's line-oriented input() builtin."""
     try:
-        s = input(renderer.faint(pick_hint(_LINE_HINTS))).lower()
+        s = input(renderer.faint(_pick_hint(_LINE_HINTS))).lower()
     except KeyboardInterrupt:
         return Action.TERMINATE
     if s in ('q', 'quit', 'x', 'exit'):

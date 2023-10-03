@@ -14,7 +14,6 @@ from .model import (
     Grapheme_Cluster_Break,
     Indic_Conjunct_Break,
     Indic_Syllabic_Category,
-    Property,
     PropertyId,
     Script,
     to_property_name,

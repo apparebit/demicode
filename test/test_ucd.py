@@ -17,7 +17,6 @@ from demicode.model import (
     Indic_Conjunct_Break,
     Indic_Syllabic_Category,
     KNOWN_UCD_VERSIONS,
-    Property,
     PropertyId,
     Script,
     Version,

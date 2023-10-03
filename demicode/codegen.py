@@ -26,7 +26,13 @@ import re
 from textwrap import dedent
 
 from .mirror import mirrored_data, retrieve_latest_ucd_version
-from .model import Property, Version
+from .model import (
+    Canonical_Combining_Class,
+    NO_CODEGEN,
+    PROPERTIES,
+    to_property_name,
+    Version,
+)
 from .parser import parse
 
 
@@ -68,12 +74,12 @@ def generate_code(root: Path) -> None:
 def retrieve_property_values(
     root: Path, version: Version
 ) -> dict[str, list[tuple[str, str, None | str]]]:
-    properties_of_interest = set()
-    for complex_property in Property:
-        if not complex_property.is_manually_generated():
-            properties_of_interest.add(complex_property.value)
+    properties_of_interest: set[str] = set()
+    for complex_property, short_name in PROPERTIES.items():
+        if complex_property not in NO_CODEGEN:
+            properties_of_interest.add(short_name)
 
-    result = defaultdict(list)
+    result: dict[str, list[tuple[str, str, None | str]]] = defaultdict(list)
     with mirrored_data('PropertyValueAliases.txt', version, root) as lines:
         records = parse(lines, lambda _, p: p, with_codepoints=False)
         for property_name, *entry in records:
@@ -86,7 +92,7 @@ def retrieve_property_values(
             result[property_name].append((name, short_name, number))
 
     # Patch provisional property value Consonant_Repha back in.
-    values = result[Property.Indic_Syllabic_Category.value]
+    values = result['InSC']
     values.append(('Consonant_Repha', 'Consonant_Repha', None))
     values.sort()
 
@@ -102,20 +108,25 @@ def generate_property_values(
     yield ''
     yield ''
 
-    properties = [p for p in Property if not p.is_manually_generated()]
-
     yield '__all__ = ('
-    for property in properties:
-        yield f'    "{property.name.replace("_", "")}",'
+    yield '    "PropertyValue",'
+    for property in PROPERTIES:
+        if property not in NO_CODEGEN:
+            yield f'    "{to_property_name(property)}",'
     yield ')'
 
-    for property in properties:
+    yield ''
+    yield ''
+    yield 'class PropertyValue:'
+    yield '    pass'
+
+    for property, short_name in PROPERTIES.items():
         yield ''
         yield ''
-        ccc = property is Property.Canonical_Combining_Class
+        ccc = property is Canonical_Combining_Class
         parent = 'IntEnum' if ccc else 'StrEnum'
-        yield f'class {property.name.replace("_", "")}({parent}):'
-        for name, short_name, number in property_values[property.value]:
+        yield f'class {to_property_name(property)}(PropertyValue, {parent}):'
+        for name, short_name, number in property_values[short_name]:
             if ccc:
                 yield f'    {name} = {number}'
                 if short_name != name:

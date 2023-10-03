@@ -4,33 +4,43 @@ from typing import cast, NamedTuple
 
 import demicode.model as model
 from .model import (
+    Age,
     BinaryProperty,
-    GraphemeClusterBreak,
-    IndicConjunctBreak,
+    Block,
+    Canonical_Combining_Class,
+    East_Asian_Width,
+    Emoji_Sequence,
+    General_Category,
+    Grapheme_Cluster_Break,
+    Indic_Conjunct_Break,
+    Indic_Syllabic_Category,
     Property,
+    PropertyId,
+    Script,
+    to_property_name,
     Version,
 )
 from .render import Renderer
 from .ucd import OverlapCounter, UnicodeCharacterDatabase
 
 
-_PROPERTIES: tuple[BinaryProperty | Property, ...] = (
+_PROPERTIES: tuple[PropertyId, ...] = (
     BinaryProperty.Emoji,
     BinaryProperty.Emoji_Component,
     BinaryProperty.Emoji_Modifier,
     BinaryProperty.Emoji_Modifier_Base,
     BinaryProperty.Emoji_Presentation,
     BinaryProperty.Extended_Pictographic,
-    Property.Emoji_Sequence,
-    Property.Age,
-    Property.Block,
-    Property.Canonical_Combining_Class,
-    Property.East_Asian_Width,
-    Property.General_Category,
-    Property.Grapheme_Cluster_Break,
-    Property.Indic_Conjunct_Break,
-    Property.Indic_Syllabic_Category,
-    Property.Script,
+    Emoji_Sequence,
+    Age,
+    Block,
+    Canonical_Combining_Class,
+    East_Asian_Width,
+    General_Category,
+    Grapheme_Cluster_Break,
+    Indic_Conjunct_Break,
+    Indic_Syllabic_Category,
+    Script,
 )
 
 
@@ -41,9 +51,7 @@ class PropertyInfo(NamedTuple):
     max_ranges: int  # The number of code point ranges after combining adjacent ones
 
 
-def collect_statistics(
-    root: Path, version: Version
-) -> dict[BinaryProperty | Property, PropertyInfo]:
+def collect_statistics(root: Path, version: Version) -> dict[PropertyId, PropertyInfo]:
     """
     For the UCD version cached at the given path and for each of several Unicode
     properties, collect the number of distinct values for the Unicode property,
@@ -62,22 +70,22 @@ def collect_statistics(
     if not getattr(ucd, 'is_optimized'):  # Work around mypy bug
         raise AssertionError('UCD claims not to be optimized after call to optimize()')
 
-    stats: dict[BinaryProperty | Property, PropertyInfo] = {}
+    stats: dict[PropertyId, PropertyInfo] = {}
     for property, (points, ranges) in zip(_PROPERTIES, counts):
         if isinstance(property, BinaryProperty):
             bits = 1
-        elif property is Property.Canonical_Combining_Class:
+        elif property is Canonical_Combining_Class:
             # The enumeration defines constants only for some values, but the
             # values are drawn from 0-240. Hence we need 8 bits.
             bits = 8
         else:
-            values = getattr(model, property.name.replace('_', ''))
+            values = getattr(model, property.__name__)
             bits = math.ceil(math.log2(len(values)))
 
         points2, max_ranges = ucd.count_nondefault_values(property)
         if points != points2:
             raise AssertionError(
-                f'Property {property.name} has {points} != {points2} '
+                f'Property {to_property_name(property)} has {points} != {points2} '
                 'non-default codepoints'
             )
 
@@ -88,7 +96,7 @@ def collect_statistics(
 
 def show_statistics(
     version: Version,
-    prop_counts: dict[BinaryProperty | Property, PropertyInfo],
+    prop_counts: dict[PropertyId, PropertyInfo],
     overlap: OverlapCounter,
     renderer: Renderer,
 ) -> None:
@@ -105,7 +113,7 @@ def show_statistics(
 
     sum_bits = sum_points = sum_ranges = sum_max_ranges = 0
 
-    def show_counts(property: BinaryProperty | Property) -> None:
+    def show_counts(property: PropertyId) -> None:
         nonlocal sum_bits, sum_points, sum_ranges, sum_max_ranges
 
         bits, points, ranges, max_ranges = prop_counts[property]
@@ -115,7 +123,7 @@ def show_statistics(
         sum_max_ranges += max_ranges
 
         renderer.println(
-            f' {property.name:<25}  {bits:2,d}  {points:9,d}  '
+            f' {to_property_name(property):<25}  {bits:2,d}  {points:9,d}  '
             f'{ranges:6,d}  {max_ranges:6,d}'
         )
 
@@ -132,7 +140,7 @@ def show_statistics(
 
     # ----------------------------------------------------------------------------------
 
-    property: BinaryProperty | Property
+    property: PropertyId
 
     show_heading('Binary Properties')
     for property in (
@@ -149,36 +157,36 @@ def show_statistics(
     show_heading('Complex Properties')
     sum_bits = sum_points = sum_ranges = sum_max_ranges = 0
     for property in (
-        Property.Age,
-        Property.Block,
-        Property.Canonical_Combining_Class,
-        Property.East_Asian_Width,
-        Property.General_Category,
-        Property.Grapheme_Cluster_Break,
-        Property.Indic_Conjunct_Break,
-        Property.Indic_Syllabic_Category,
-        Property.Script,
+        Age,
+        Block,
+        Canonical_Combining_Class,
+        East_Asian_Width,
+        General_Category,
+        Grapheme_Cluster_Break,
+        Indic_Conjunct_Break,
+        Indic_Syllabic_Category,
+        Script,
     ):
         show_counts(property)
     show_total()
 
     show_heading('Sequence Data')
-    show_counts(Property.Emoji_Sequence)
+    show_counts(Emoji_Sequence)
     renderer.println('\n')
 
     # ----------------------------------------------------------------------------------
 
     show_heading('Required Properties I')
     sum_bits = sum_points = sum_ranges = sum_max_ranges = 0
-    for property in cast(tuple[BinaryProperty | Property, ...], (
+    for property in cast(tuple[PropertyId, ...], (
         BinaryProperty.Emoji_Presentation,
         BinaryProperty.Extended_Pictographic,
-        Property.Canonical_Combining_Class,
-        Property.East_Asian_Width,
-        Property.General_Category,
-        Property.Grapheme_Cluster_Break,
-        Property.Indic_Syllabic_Category,
-        Property.Script,
+        Canonical_Combining_Class,
+        East_Asian_Width,
+        General_Category,
+        Grapheme_Cluster_Break,
+        Indic_Syllabic_Category,
+        Script,
     )):
         show_counts(property)
     show_total()
@@ -187,13 +195,13 @@ def show_statistics(
 
     show_heading('Required Properties II')
     sum_bits = sum_points = sum_ranges = sum_max_ranges = 0
-    for property in cast(tuple[BinaryProperty | Property, ...], (
+    for property in cast(tuple[PropertyId, ...], (
         BinaryProperty.Emoji_Presentation,
         BinaryProperty.Extended_Pictographic,
-        Property.East_Asian_Width,
-        Property.General_Category,
-        Property.Grapheme_Cluster_Break,
-        Property.Indic_Conjunct_Break,
+        East_Asian_Width,
+        General_Category,
+        Grapheme_Cluster_Break,
+        Indic_Conjunct_Break,
     )):
         show_counts(property)
     show_total()
@@ -207,11 +215,11 @@ def show_statistics(
     renderer.println()
     assert len(overlap) == 5
     for incb, ocb in (
-        (IndicConjunctBreak.Extend, GraphemeClusterBreak.ZWJ),
-        (IndicConjunctBreak.Extend, GraphemeClusterBreak.Extend),
-        (IndicConjunctBreak.Linker, GraphemeClusterBreak.Extend),
-        (None, GraphemeClusterBreak.Extend),
-        (IndicConjunctBreak.Consonant, None),
+        (Indic_Conjunct_Break.Extend, Grapheme_Cluster_Break.ZWJ),
+        (Indic_Conjunct_Break.Extend, Grapheme_Cluster_Break.Extend),
+        (Indic_Conjunct_Break.Linker, Grapheme_Cluster_Break.Extend),
+        (None, Grapheme_Cluster_Break.Extend),
+        (Indic_Conjunct_Break.Consonant, None),
     ):
         left = '⋯' if incb is None else incb.name
         right = '⋯' if ocb is None else ocb.name

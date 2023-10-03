@@ -8,14 +8,17 @@ from demicode.model import (
     Age,
     Block,
     BinaryProperty,
+    Canonical_Combining_Class,
     CharacterData,
-    EastAsianWidth,
+    East_Asian_Width,
     FIRST_SUPPORTED_VERSION,
-    GeneralCategory,
-    GraphemeClusterBreak,
-    IndicSyllabicCategory,
+    General_Category,
+    Grapheme_Cluster_Break,
+    Indic_Conjunct_Break,
+    Indic_Syllabic_Category,
     KNOWN_UCD_VERSIONS,
     Property,
+    PropertyId,
     Script,
     Version,
 )
@@ -26,7 +29,7 @@ from test.grapheme_clusters import GRAPHEME_CLUSTER_BREAKS
 
 UCD_PATH = Path(__file__).parents[1] / 'ucd'
 
-PROPERTY_COUNTS = {
+PROPERTY_COUNTS: dict[str, dict[PropertyId, tuple[int, int, int]]] = {
     '15.0': {
         BinaryProperty.Emoji: (1_424, 404, 151),
         BinaryProperty.Emoji_Component: (146, 10, 10),
@@ -34,14 +37,14 @@ PROPERTY_COUNTS = {
         BinaryProperty.Emoji_Modifier_Base: (134, 50, 40),
         BinaryProperty.Emoji_Presentation: (1_205, 282, 81),
         BinaryProperty.Extended_Pictographic: (3_537, 511, 78),
-        Property.Age: (288_833, 1_718, 1_718),
-        Property.Block: (293_168, 327, 327),
-        Property.Canonical_Combining_Class: (286_719, 2_374, 1_196),
-        Property.East_Asian_Width: (349_871, 2_575, 1_169),
-        Property.General_Category: (288_767, 3_300, 3_300),
-        Property.Grapheme_Cluster_Break: (18_003, 1_391, 1_371),
-        Property.Indic_Syllabic_Category: (4_639, 922, 775),
-        Property.Script: (149_251, 2_191, 952),
+        Age: (288_833, 1_718, 1_718),
+        Block: (293_168, 327, 327),
+        Canonical_Combining_Class: (286_719, 2_374, 1_196),
+        East_Asian_Width: (349_871, 2_575, 1_169),
+        General_Category: (288_767, 3_300, 3_300),
+        Grapheme_Cluster_Break: (18_003, 1_391, 1_371),
+        Indic_Syllabic_Category: (4_639, 922, 775),
+        Script: (149_251, 2_191, 952),
     },
     '15.1': {
         BinaryProperty.Emoji: (1_424, 404, 151),
@@ -50,23 +53,23 @@ PROPERTY_COUNTS = {
         BinaryProperty.Emoji_Modifier_Base: (134, 50, 40),
         BinaryProperty.Emoji_Presentation: (1_205, 282, 81),
         BinaryProperty.Extended_Pictographic: (3_537, 511, 78),
-        Property.Age: (289_460, 1_721, 1_721),
-        Property.Block: (293_792, 328, 328),
-        Property.Canonical_Combining_Class: (287_346, 2_376, 1_196),
-        Property.East_Asian_Width: (349_876, 2_578, 1_169),
-        Property.General_Category: (289_394, 3_302, 3_302),
-        Property.Grapheme_Cluster_Break: (18_003, 1_391, 1_371),
-        Property.Indic_Conjunct_Break: (1_130, 202, 201),
-        Property.Indic_Syllabic_Category: (4_639, 922, 775),
-        Property.Script: (149_878, 2_193, 953),
+        Age: (289_460, 1_721, 1_721),
+        Block: (293_792, 328, 328),
+        Canonical_Combining_Class: (287_346, 2_376, 1_196),
+        East_Asian_Width: (349_876, 2_578, 1_169),
+        General_Category: (289_394, 3_302, 3_302),
+        Grapheme_Cluster_Break: (18_003, 1_391, 1_371),
+        Indic_Conjunct_Break: (1_130, 202, 201),
+        Indic_Syllabic_Category: (4_639, 922, 775),
+        Script: (149_878, 2_193, 953),
     },
 }
 
 CHARACTER_DATA = (
     CharacterData(
         codepoint=CodePoint.of(0x0023),
-        category=GeneralCategory.Other_Punctuation,
-        east_asian_width=EastAsianWidth.Narrow,
+        category=General_Category.Other_Punctuation,
+        east_asian_width=East_Asian_Width.Narrow,
         age=Age.V1_1,
         name='NUMBER SIGN',
         block=Block.Basic_Latin,
@@ -74,8 +77,8 @@ CHARACTER_DATA = (
     ),
     CharacterData(
         codepoint=CodePoint.of(0x26A1),
-        category=GeneralCategory.Other_Symbol,
-        east_asian_width=EastAsianWidth.Wide,
+        category=General_Category.Other_Symbol,
+        east_asian_width=East_Asian_Width.Wide,
         age=Age.V4_0,
         name='HIGH VOLTAGE SIGN',
         block=Block.Miscellaneous_Symbols,
@@ -84,8 +87,8 @@ CHARACTER_DATA = (
     ),
     CharacterData(
         codepoint=CodePoint.of(0x2763),
-        category=GeneralCategory.Other_Symbol,
-        east_asian_width=EastAsianWidth.Neutral,
+        category=General_Category.Other_Symbol,
+        east_asian_width=East_Asian_Width.Neutral,
         age=Age.V1_1,
         name='HEAVY HEART EXCLAMATION MARK ORNAMENT',
         block=Block.Dingbats,
@@ -93,8 +96,8 @@ CHARACTER_DATA = (
     ),
     CharacterData(  # An unassigned code point that is an extended pictograph
         codepoint=CodePoint.of(0x1F2FF),
-        category=GeneralCategory.Unassigned,
-        east_asian_width=EastAsianWidth.Neutral,
+        category=General_Category.Unassigned,
+        east_asian_width=East_Asian_Width.Neutral,
         age=Age.Unassigned,
         name=None,
         block=Block.Enclosed_Ideographic_Supplement,
@@ -112,8 +115,8 @@ class ClusterBreakVisualizer:
     expected: tuple[int,...]
 
     def __str__(self) -> str:
-        def ref(cp: CodePoint) -> GraphemeClusterBreak:
-            return self.ucd.grapheme_cluster(cp)
+        def ref(cp: int) -> Grapheme_Cluster_Break:
+            return self.ucd.grapheme_cluster(CodePoint(cp))
 
         # Format code points and grapheme cluster properties, with space in between.
         codepoints = [*chain.from_iterable(
@@ -147,39 +150,30 @@ class TestProperty(unittest.TestCase):
 
                 # Check that data is usable by looking up properties.
                 data = ucd.lookup(CodePoint.FULL_BLOCK)
-                self.assertEqual(data.category, GeneralCategory.Other_Symbol)
-                self.assertEqual(data.east_asian_width, EastAsianWidth.Ambiguous)
+                self.assertEqual(data.category, General_Category.Other_Symbol)
+                self.assertEqual(data.east_asian_width, East_Asian_Width.Ambiguous)
                 self.assertEqual(data.age, Age.V1_1)
                 self.assertEqual(data.name, 'FULL BLOCK')
                 self.assertEqual(data.block, Block.Block_Elements)
 
                 self.assertEqual(
-                    ucd.resolve(
-                        CodePoint.FULL_BLOCK,
-                        Property.Canonical_Combining_Class,
-                    ),
+                    ucd.resolve(CodePoint.FULL_BLOCK, Canonical_Combining_Class),
                     0)
                 self.assertEqual(
-                    ucd.resolve(
-                        CodePoint.FULL_BLOCK,
-                        Property.Indic_Syllabic_Category,
-                    ),
-                    IndicSyllabicCategory.Other,
+                    ucd.resolve(CodePoint.FULL_BLOCK, Indic_Syllabic_Category),
+                    Indic_Syllabic_Category.Other,
                 )
                 self.assertEqual(
-                    ucd.resolve(
-                        CodePoint.FULL_BLOCK,
-                        Property.Script,
-                    ),
+                    ucd.resolve(CodePoint.FULL_BLOCK, Script),
                     Script.Common
                 )
 
     def check_property_value_counts(
         self,
-        expected_counts: dict[BinaryProperty | Property, tuple[int, int, int]],
+        expected_counts: dict[PropertyId, tuple[int, int, int]],
         ucd: UnicodeCharacterDatabase,
-    ) -> dict[BinaryProperty | Property, int]:
-        property_value_counts: dict[BinaryProperty | Property, int] = {}
+    ) -> dict[PropertyId, int]:
+        property_value_counts: dict[PropertyId, int] = {}
 
         for property, (expected_points, ranges, max_ranges) in expected_counts.items():
             actual_points, actual_ranges = ucd.count_nondefault_values(property)

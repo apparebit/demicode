@@ -22,37 +22,37 @@ class VersioningError(Exception):
     pass
 
 
-FIRST_SUPPORTED_VERSION = (4, 1, 0)
+FIRST_SUPPORTED_VERSION: tuple[int, int, int] = (4, 1, 0)
 
 
-KNOWN_UCD_VERSIONS = tuple(v + (0,) for v in (
-    (1, 1),
-    (2, 0),
-    (2, 1),
-    (3, 0),
-    (3, 1),
-    (3, 2),
-    (4, 0),
-    (4, 1),
-    (5, 0),
-    (5, 1),
-    (5, 2),
-    (6, 0),
-    (6, 1),
-    (6, 2),
-    (6, 3),
-    (7, 0),
-    (8, 0),
-    (9, 0),
-    (10, 0),
-    (11, 0),
-    (12, 0),
-    (12, 1),
-    (13, 0),
-    (14, 0),
-    (15, 0),
-    (15, 1),
-))
+KNOWN_UCD_VERSIONS: tuple[tuple[int, int, int], ...] = tuple([
+    (1, 1, 0),
+    (2, 0, 0),
+    (2, 1, 0),
+    (3, 0, 0),
+    (3, 1, 0),
+    (3, 2, 0),
+    (4, 0, 0),
+    (4, 1, 0),
+    (5, 0, 0),
+    (5, 1, 0),
+    (5, 2, 0),
+    (6, 0, 0),
+    (6, 1, 0),
+    (6, 2, 0),
+    (6, 3, 0),
+    (7, 0, 0),
+    (8, 0, 0),
+    (9, 0, 0),
+    (10, 0, 0),
+    (11, 0, 0),
+    (12, 0, 0),
+    (12, 1, 0),
+    (13, 0, 0),
+    (14, 0, 0),
+    (15, 0, 0),
+    (15, 1, 0),
+])
 
 KNOWN_EMOJI_VERSIONS = tuple(v + (0,) for v in (
     (0, 0),
@@ -178,7 +178,7 @@ class Version(NamedTuple):
 # Property Values (see _property module for machine-generated ones)
 
 
-class GraphemeClusterBreak(StrEnum):
+class Grapheme_Cluster_Break(Property, StrEnum):
     """
     Enumeration over the different code points that contribute to grapheme
     clusters. Note that, unlike for other enumerations in this module,
@@ -249,7 +249,7 @@ GRAPHEME_CLUSTER_PATTERN = re.compile(
 )
 
 
-class EmojiSequence(StrEnum):
+class Emoji_Sequence(Property, StrEnum):
     """The different kinds of emoji sequences."""
     Basic_Emoji = 'Basic_Emoji'
     Emoji_Keycap_Sequence = 'Emoji_Keycap_Sequence'
@@ -270,34 +270,20 @@ class EmojiSequence(StrEnum):
 # Unicode Properties
 
 
-class Property(StrEnum):
-    """
-    An enumeration of supported Unicode properties. For each included property,
-    this module exports an enumeration with the same name sans underscores. The
-    enumeration's constants represent the domain of named values for the
-    property, with each constant's value providing a shorter alias. Most
-    enumerations are machine-generated from Unicode data. The enumeration for
-    binary Unicode properties is separate for now.
-    """
-    Age = 'age'
-    Block = 'blk'
-    Canonical_Combining_Class = 'ccc'
-    East_Asian_Width = 'ea'
-    Emoji_Sequence = 'Emoji_Sequence'
-    General_Category = 'gc'
-    Grapheme_Cluster_Break = 'GCB'
-    Indic_Conjunct_Break = 'InCB'
-    Indic_Syllabic_Category = 'InSC'
-    Script = 'sc'
+PROPERTIES: dict[type[Property], str] = {
+    Age: 'age',
+    Block: 'blk',
+    Canonical_Combining_Class: 'ccc',
+    East_Asian_Width: 'ea',
+    Emoji_Sequence: 'Emoji_Sequence',
+    General_Category: 'gc',
+    Grapheme_Cluster_Break: 'GCB',
+    Indic_Conjunct_Break: 'InCB',
+    Indic_Syllabic_Category: 'InSC',
+    Script: 'sc',
+}
 
-    def is_manually_generated(self) -> bool:
-        return self in (
-            Property.Emoji_Sequence,
-            Property.Grapheme_Cluster_Break,
-        )
-
-    def is_binary(self) -> bool:
-        return False  # For now
+NO_CODEGEN = frozenset([Emoji_Sequence, Grapheme_Cluster_Break])
 
 
 class BinaryProperty(StrEnum):
@@ -319,18 +305,24 @@ class BinaryProperty(StrEnum):
         return self is not BinaryProperty.Default_Ignorable_Code_Point
 
 
+PropertyId: TypeAlias = BinaryProperty | type[Property]
+
+
+def to_property_name(property: PropertyId) -> str:
+    return property.name if isinstance(property, BinaryProperty) else property.__name__
+
+
 PropertyValueTypes: TypeAlias = (
-      None
-    | bool
+      bool
     | int
     | Age
     | Block
-    | EastAsianWidth
-    | EmojiSequence
-    | GeneralCategory
-    | GraphemeClusterBreak
-    | IndicConjunctBreak
-    | IndicSyllabicCategory
+    | East_Asian_Width
+    | Emoji_Sequence
+    | General_Category
+    | Grapheme_Cluster_Break
+    | Indic_Conjunct_Break
+    | Indic_Syllabic_Category
     | Script
 )
 
@@ -437,8 +429,8 @@ class CharacterData:
     """A Unicode code point and its properties."""
 
     codepoint: CodePoint
-    category: GeneralCategory
-    east_asian_width: EastAsianWidth
+    category: General_Category
+    east_asian_width: East_Asian_Width
     age: Age
     name: None | str
     block: None | Block

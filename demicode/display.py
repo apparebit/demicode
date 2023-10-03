@@ -13,9 +13,9 @@ from typing import Callable, cast
 
 from .codepoint import CodePoint, CodePointSequence
 from .control import Action, read_line_action
-from .model import GeneralCategory, Presentation, Property
+from .model import Age, General_Category, Presentation
 from .render import Padding, Renderer
-from .ucd import UnicodeCharacterDatabase, Version
+from .ucd import UnicodeCharacterDatabase
 from demicode import __version__
 
 
@@ -140,8 +140,8 @@ def format_blot(
     elif codepoints.is_singleton():
         codepoint = codepoints.to_singleton()
         if (
-            ucd.resolve(codepoint, Property.General_Category)
-            is GeneralCategory.Unassigned
+            ucd.resolve(codepoint, General_Category)
+            is General_Category.Unassigned
         ):
             display = '···'
             width = 3
@@ -199,7 +199,7 @@ def format_info(
 
         name, age = ucd.emoji_sequence_data(codepoints)
         if age:
-            yield f' {cast(Version, age).in_emoji_format():>{AGE_WIDTH}}'
+            yield f' {age.in_emoji_format():>{AGE_WIDTH}}'
         elif name:
             yield ' ' * (AGE_WIDTH + 1)
         if name:
@@ -222,11 +222,11 @@ def format_info(
     if presentation is not Presentation.TEXT:
         name, age = ucd.emoji_sequence_data(presentation.apply(codepoint))
 
-    age_display = '' if unidata.age is None else str(unidata.age)
+    age_display = '' if unidata.age is Age.Unassigned else str(unidata.age)
     age_display = age.in_emoji_format() if age else age_display
     yield f' {age_display:>{AGE_WIDTH}} '
 
-    if unidata.category is GeneralCategory.Unassigned:
+    if unidata.category is General_Category.Unassigned:
         name = renderer.fit(
             f'Unassigned in UCD {ucd.version.in_short_format()}',
             width=_name_width(renderer.width)
@@ -407,14 +407,17 @@ def display(
         column_count = (renderer.width - 2) // GRID_COLUMN_WIDTH if in_grid else 1
         display_count = body_height * column_count
 
-        if action.forward:
+        if action is Action.FORWARD:
             start = stop + 1
             stop = min(start + display_count, total_count)
             done = start >= total_count
-        elif action.backward:
+        elif action is Action.BACKWARD:
             stop = start - 1
             start = max(0, stop - display_count)
             done = stop <= 0
+        else:
+            stop = min(start + display_count, total_count)
+            done = start >= total_count
 
         if done:
             renderer.restore_window_title()
@@ -441,6 +444,6 @@ def display(
 
         if renderer.is_interactive:
             action = read_action(renderer)
-            if action.terminate:
+            if action is Action.TERMINATE:
                 renderer.restore_window_title()
                 return

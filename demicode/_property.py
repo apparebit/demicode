@@ -4,18 +4,23 @@ from enum import IntEnum, StrEnum
 
 
 __all__ = (
+    "Property",
     "Age",
     "Block",
-    "CanonicalCombiningClass",
-    "EastAsianWidth",
-    "GeneralCategory",
-    "IndicConjunctBreak",
-    "IndicSyllabicCategory",
+    "Canonical_Combining_Class",
+    "East_Asian_Width",
+    "General_Category",
+    "Indic_Conjunct_Break",
+    "Indic_Syllabic_Category",
     "Script",
 )
 
 
-class Age(StrEnum):
+class Property:
+    pass
+
+
+class Age(Property, StrEnum):
     V1_1 = "1.1"
     V2_0 = "2.0"
     V2_1 = "2.1"
@@ -45,7 +50,7 @@ class Age(StrEnum):
     Unassigned = "NA"
 
 
-class Block(StrEnum):
+class Block(Property, StrEnum):
     Adlam = "Adlam"
     Aegean_Numbers = "Aegean_Numbers"
     Ahom = "Ahom"
@@ -377,7 +382,7 @@ class Block(StrEnum):
     Znamenny_Musical_Notation = "Znamenny_Music"
 
 
-class CanonicalCombiningClass(IntEnum):
+class Canonical_Combining_Class(Property, IntEnum):
     Not_Reordered = 0
     NR = 0
     Overlay = 1
@@ -459,7 +464,7 @@ class CanonicalCombiningClass(IntEnum):
     IS = 240
 
 
-class EastAsianWidth(StrEnum):
+class East_Asian_Width(Property, StrEnum):
     Ambiguous = "A"
     Fullwidth = "F"
     Halfwidth = "H"
@@ -468,7 +473,7 @@ class EastAsianWidth(StrEnum):
     Wide = "W"
 
 
-class GeneralCategory(StrEnum):
+class General_Category(Property, StrEnum):
     Other = "C"
     Control = "Cc"
     Format = "Cf"
@@ -509,14 +514,14 @@ class GeneralCategory(StrEnum):
     Space_Separator = "Zs"
 
 
-class IndicConjunctBreak(StrEnum):
+class Indic_Conjunct_Break(Property, StrEnum):
     Consonant = "Consonant"
     Extend = "Extend"
     Linker = "Linker"
     None_ = "None"
 
 
-class IndicSyllabicCategory(StrEnum):
+class Indic_Syllabic_Category(Property, StrEnum):
     Avagraha = "Avagraha"
     Bindu = "Bindu"
     Brahmi_Joining_Number = "Brahmi_Joining_Number"
@@ -556,7 +561,7 @@ class IndicSyllabicCategory(StrEnum):
     Vowel_Independent = "Vowel_Independent"
 
 
-class Script(StrEnum):
+class Script(Property, StrEnum):
     Adlam = "Adlm"
     Caucasian_Albanian = "Aghb"
     Ahom = "Ahom"

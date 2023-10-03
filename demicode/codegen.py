@@ -26,14 +26,20 @@ import re
 from textwrap import dedent
 
 from .mirror import mirrored_data, retrieve_latest_ucd_version
-from .model import (
-    Canonical_Combining_Class,
-    NO_CODEGEN,
-    PROPERTIES,
-    to_property_name,
-    Version,
-)
 from .parser import parse
+from ._version import Version
+
+
+_PROPERTIES: dict[str, str] = {
+    'Age': 'age',
+    'Block': 'blk',
+    'Canonical_Combining_Class': 'ccc',
+    'East_Asian_Width': 'ea',
+    'General_Category': 'gc',
+    'Indic_Conjunct_Break': 'InCB',
+    'Indic_Syllabic_Category': 'InSC',
+    'Script': 'sc',
+}
 
 
 def generate_code(root: Path) -> None:
@@ -67,6 +73,7 @@ def generate_code(root: Path) -> None:
             }
         """), file=file)
 
+
 # --------------------------------------------------------------------------------------
 # Property Values
 
@@ -74,22 +81,19 @@ def generate_code(root: Path) -> None:
 def retrieve_property_values(
     root: Path, version: Version
 ) -> dict[str, list[tuple[str, str, None | str]]]:
-    properties_of_interest: set[str] = set()
-    for complex_property, short_name in PROPERTIES.items():
-        if complex_property not in NO_CODEGEN:
-            properties_of_interest.add(short_name)
+    properties_of_interest = _PROPERTIES.values()
 
     result: dict[str, list[tuple[str, str, None | str]]] = defaultdict(list)
     with mirrored_data('PropertyValueAliases.txt', version, root) as lines:
         records = parse(lines, lambda _, p: p, with_codepoints=False)
-        for property_name, *entry in records:
-            if property_name not in properties_of_interest:
+        for short_property, *entry in records:
+            if short_property not in properties_of_interest:
                 continue
-            if property_name == 'ccc':
-                number, short_name, name = entry
+            if short_property == 'ccc':
+                number, short_value, value = entry
             else:
-                number, (short_name, name, *_) = None, entry
-            result[property_name].append((name, short_name, number))
+                number, (short_value, value, *_) = None, entry
+            result[short_property].append((value, short_value, number))
 
     # Patch provisional property value Consonant_Repha back in.
     values = result['InSC']
@@ -109,39 +113,38 @@ def generate_property_values(
     yield ''
 
     yield '__all__ = ('
-    yield '    "PropertyValue",'
-    for property in PROPERTIES:
-        if property not in NO_CODEGEN:
-            yield f'    "{to_property_name(property)}",'
+    yield '    "Property",'
+    for value in _PROPERTIES:
+        yield f'    "{value}",'
     yield ')'
 
     yield ''
     yield ''
-    yield 'class PropertyValue:'
+    yield 'class Property:'
+    yield '    """Marker class for enumerations representing Unicode properties."""'
     yield '    pass'
 
-    for property, short_name in PROPERTIES.items():
+    for property, short_property in _PROPERTIES.items():
         yield ''
         yield ''
-        ccc = property is Canonical_Combining_Class
+        ccc = property == 'Canonical_Combining_Class'
         parent = 'IntEnum' if ccc else 'StrEnum'
-        yield f'class {to_property_name(property)}(PropertyValue, {parent}):'
-        for name, short_name, number in property_values[short_name]:
+        yield f'class {property}(Property, {parent}):'
+        for value, short_value, number in property_values[short_property]:
             if ccc:
-                yield f'    {name} = {number}'
-                if short_name != name:
-                    yield f'    {short_name} = {number}'
+                yield f'    {value} = {number}'
+                if short_value != value:
+                    yield f'    {short_value} = {number}'
             else:
-                if name == 'None':
-                    name = 'None_'
-                yield f'    {"None_" if name == "None" else name} = "{short_name}"'
+                value = 'None_' if value == 'None' else value
+                yield f'    {value} = "{short_value}"'
 
 
 # --------------------------------------------------------------------------------------
 # Grapheme Cluster Breaks
 
 
-MARK = re.compile(r'[÷×]')
+_MARK = re.compile(r'[÷×]')
 
 def grapheme_cluster_breaks(lines: Iterator[str], version: Version) -> Iterator[str]:
     # Convert into dictionary entries, ready for testing.
@@ -149,9 +152,9 @@ def grapheme_cluster_breaks(lines: Iterator[str], version: Version) -> Iterator[
     yield f'_GRAPHEME_CLUSTER_BREAKS_{version.major}_{version.minor} = {{'
 
     for spec in parse(lines, lambda _, p: p[0].replace(' ', ''), with_codepoints=False):
-        codepoints = ', '.join(f'0x{cp}' for cp in MARK.split(spec) if cp)
+        codepoints = ', '.join(f'0x{cp}' for cp in _MARK.split(spec) if cp)
         breaks = ', '.join(
-            str(idx) for idx, mark in enumerate(MARK.findall(spec)) if mark == '÷'
+            str(idx) for idx, mark in enumerate(_MARK.findall(spec)) if mark == '÷'
         )
         yield f'    ({codepoints}): ({breaks}),'
 

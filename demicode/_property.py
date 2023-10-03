@@ -17,6 +17,7 @@ __all__ = (
 
 
 class Property:
+    """Marker class for enumerations representing Unicode properties."""
     pass
 
 

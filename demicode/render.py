@@ -24,6 +24,7 @@ from typing import Never, TextIO
 
 
 from .codepoint import CodePoint
+from .darkmode import is_darkmode
 
 
 # --------------------------------------------------------------------------------------
@@ -111,11 +112,6 @@ class Style:
     def link(cls, href: str, text: None | str = None) -> str:
         text = href if text is None else text
         return f'{_OSC}8;;{href}{_ST}{text}{_OSC}8;;{_ST}'
-
-
-class Mode(StrEnum):
-    LIGHT = 'LIGHT'
-    DARK = 'DARK'
 
 
 class Padding(StrEnum):
@@ -242,14 +238,42 @@ class Renderer:
 
     MAX_WIDTH = 140
 
-    def __init__(
-        self, input: TextIO, output: TextIO, mode: Mode, intensity: int
-    ) -> None:
+    def __init__(self, input: TextIO, output: TextIO, theme: Theme) -> None:
         self._input = input
         self._output = output
         self._interactive = input.isatty() and output.isatty()
-        self._theme = getattr(Style, mode.value)[min(2, max(0, intensity))]
+        self._theme = theme
         self.refresh()
+
+    @staticmethod
+    def new(
+        *,
+        input: None | TextIO = None,
+        output: None | TextIO = None,
+        styled:  None | bool = None,
+        dark: None | bool = None,
+        intensity: None | int = None,
+    ) -> 'Renderer':
+        """
+        Create a new renderer. By default, the renderer uses standard input and
+        output. It styles the output if `output` is a TTY, and it uses a theme
+        consistent with dark mode if it can be detected and with minimum color
+        intensity.
+        """
+        if input is None:
+            input = sys.stdin
+        if output is None:
+            output = sys.stdout
+        if styled is None:
+            styled = output.isatty()
+        if dark is None:
+            dark = is_darkmode()
+        if intensity is None:
+            intensity = 0
+
+        constructor = StyledRenderer if styled else Renderer
+        theme = getattr(Style, 'DARK' if dark else 'LIGHT')[min(2, max(0, intensity))]
+        return constructor(input, output, theme)
 
     # ----------------------------------------------------------------------------------
     # Window Title
@@ -264,6 +288,14 @@ class Renderer:
 
     # ----------------------------------------------------------------------------------
     # Terminal Properties Including Size
+
+    @property
+    def input(self) -> TextIO:
+        return self._input
+
+    @property
+    def output(self) -> TextIO:
+        return self._output
 
     @property
     def is_interactive(self) -> bool:
@@ -298,6 +330,8 @@ class Renderer:
 
     # ----------------------------------------------------------------------------------
     # Input
+
+    READER_SUPPORTED: bool = KeyPressReader.PLATFORM_SUPPORTED
 
     if KeyPressReader.PLATFORM_SUPPORTED:
 

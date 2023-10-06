@@ -4,8 +4,7 @@ import sys
 import traceback
 from typing import Never
 
-from demicode.darkmode import is_darkmode
-from demicode.render import MalformedEscape, Mode, StyledRenderer
+from demicode.render import MalformedEscape, Renderer
 
 def help() -> Never:
     print('Usage: ./qtty.py csi|esc|osc <argument-string>')
@@ -17,12 +16,7 @@ def main() -> None:
     if len(sys.argv) != 3:
         help()
 
-    renderer = StyledRenderer(
-        sys.stdin,
-        sys.stdout,
-        Mode.DARK if is_darkmode() else Mode.LIGHT,
-        0,
-    )
+    renderer = Renderer.new()
 
     _, fn, params = sys.argv
 

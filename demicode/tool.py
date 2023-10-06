@@ -18,10 +18,9 @@ from typing import Callable
 from .codegen import generate_code
 from .codepoint import CodePoint, CodePointSequence
 from .control import read_key_action, read_line_action
-from .darkmode import is_darkmode
 from .display import display
 from .mirror import local_cache_directory
-from .render import KeyPressReader, Mode, Renderer, StyledRenderer, Style
+from .render import KeyPressReader, Renderer, Style
 from .selection import *
 from .statistics import collect_statistics, show_statistics
 from .ucd import UnicodeCharacterDatabase
@@ -264,12 +263,21 @@ def configure_parser() -> argparse.ArgumentParser:
         '--in-more-color', '-c',
         default=0,
         action='count',
+        dest='in_color_intensity',
         help='use brighter colors in output; may be used twice'
     )
     out_group.add_argument(
         '--in-plain-text', '-p',
+        default=None,
+        action='store_false',
+        dest='in_style',
+        help='emit plain text without ANSI escape codes'
+    )
+    out_group.add_argument(
+        '--in-style',
+        default=None,
         action='store_true',
-        help='display plain text without ANSI escape codes'
+        help='style output with ANSI escapes',
     )
     out_group.add_argument(
         '--in-verbose', '-v',
@@ -312,15 +320,10 @@ def run(arguments: Sequence[str]) -> int:
         level=logging.INFO if options.in_verbose else logging.WARNING,
     )
 
-    if options.in_dark_mode is None:
-        options.in_dark_mode = is_darkmode()
-
-    make_renderer = Renderer if options.in_plain_text else StyledRenderer
-    renderer = make_renderer(
-        sys.stdin,
-        sys.stdout,
-        Mode.DARK if options.in_dark_mode else Mode.LIGHT,
-        options.in_more_color
+    renderer = Renderer.new(
+        styled=options.in_style,
+        dark=options.in_dark_mode,
+        intensity=options.in_color_intensity,
     )
 
     try:

@@ -297,7 +297,7 @@ def mirror_cldr_annotations(root: Path) -> tuple[Path, Path]:
     stamp_path = root / 'latest-cldr-version.txt'
 
     local_version = None
-    if annotations1.exists() and annotations2.exists():
+    if annotations1.is_file() and annotations2.is_file():
         if stamp_path.is_file():
             try:
                 local_version = Version.of(stamp_path.read_text('utf8'))
@@ -310,12 +310,12 @@ def mirror_cldr_annotations(root: Path) -> tuple[Path, Path]:
     metadata = _load_cldr_metadata(_CLDR_URL1)
     latest_version = Version.of(metadata['dist-tags']['latest'])
     if (
-        annotations1.exists()
-        and annotations2.exists()
+        annotations1.is_file()
+        and annotations2.is_file()
         and local_version == latest_version
     ):
         stamp_path.write_text(str(latest_version), encoding='utf8')
-        return annotations1, annotations1
+        return annotations1, annotations2
 
     member = 'package/annotations/en/annotations.json'
     _load_cldr_annotations(root, metadata, latest_version, member, annotations1)

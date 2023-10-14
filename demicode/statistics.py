@@ -24,12 +24,14 @@ from .ucd import OverlapCounter, UnicodeCharacterDatabase
 
 
 _PROPERTIES: tuple[PropertyId, ...] = (
+    BinaryProperty.Default_Ignorable_Code_Point,
     BinaryProperty.Emoji,
     BinaryProperty.Emoji_Component,
     BinaryProperty.Emoji_Modifier,
     BinaryProperty.Emoji_Modifier_Base,
     BinaryProperty.Emoji_Presentation,
     BinaryProperty.Extended_Pictographic,
+    BinaryProperty.White_Space,
     Emoji_Sequence,
     Age,
     Block,
@@ -107,7 +109,7 @@ def show_statistics(
     renderer.println()
 
     def show_heading(text: str) -> None:
-        renderer.println(renderer.faint(f' {text:<25}  Bt     Points  Ranges  MinRng'))
+        renderer.println(renderer.faint(f' {text:<28}  Bt     Points  Ranges  MinRng'))
         renderer.println()
 
     sum_bits = sum_points = sum_ranges = sum_max_ranges = 0
@@ -122,15 +124,15 @@ def show_statistics(
         sum_max_ranges += max_ranges
 
         renderer.println(
-            f' {to_property_name(property):<25}  {bits:2,d}  {points:9,d}  '
+            f' {to_property_name(property):<28}  {bits:2,d}  {points:9,d}  '
             f'{ranges:6,d}  {max_ranges:6,d}'
         )
 
     def show_total() -> None:
         renderer.println(
-            f' {" " * 25}  {renderer.faint("–" * (2 + 2 + 9 + 2 + 6 + 2 + 6))}'
+            f' {" " * 28}  {renderer.faint("–" * (2 + 2 + 9 + 2 + 6 + 2 + 6))}'
         )
-        heading = renderer.faint(f'{"Subtotal":<25}')
+        heading = renderer.faint(f'{"Subtotal":<28}')
         renderer.println(
             f' {heading}  {sum_bits:2,d}  {sum_points:9,d}  '
             f'{sum_ranges:6,d}  {sum_max_ranges:6,d}'
@@ -143,12 +145,14 @@ def show_statistics(
 
     show_heading('Binary Properties')
     for property in (
+        BinaryProperty.Default_Ignorable_Code_Point,
         BinaryProperty.Emoji,
         BinaryProperty.Emoji_Component,
         BinaryProperty.Emoji_Modifier,
         BinaryProperty.Emoji_Modifier_Base,
         BinaryProperty.Emoji_Presentation,
         BinaryProperty.Extended_Pictographic,
+        BinaryProperty.White_Space,
     ):
         show_counts(property)
     show_total()

@@ -157,6 +157,7 @@ class BinaryProperty(StrEnum):
     Emoji_Modifier_Base = 'EBase'
     Emoji_Presentation = 'EPres'
     Extended_Pictographic = 'ExtPict'
+    White_Space = 'WSpace'
 
     @property
     def label(self) -> str:
@@ -168,7 +169,10 @@ class BinaryProperty(StrEnum):
         Determine whether the property relates to emoji, i.e., is `Emoji`,
         is prefixed with `Emoji_`, or is `Extended_Pictographic`.
         """
-        return self is not BinaryProperty.Default_Ignorable_Code_Point
+        return self not in (
+            BinaryProperty.Default_Ignorable_Code_Point,
+            BinaryProperty.White_Space,
+        )
 
 
 PropertyValue: TypeAlias = BinaryProperty | Property

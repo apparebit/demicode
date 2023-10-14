@@ -30,12 +30,14 @@ UCD_PATH = Path(__file__).parents[1] / 'ucd'
 
 PROPERTY_COUNTS: dict[str, dict[PropertyId, tuple[int, int, int]]] = {
     '15.0': {
+        BinaryProperty.Default_Ignorable_Code_Point: (4_174, 27, 17),
         BinaryProperty.Emoji: (1_424, 404, 151),
         BinaryProperty.Emoji_Component: (146, 10, 10),
         BinaryProperty.Emoji_Modifier: (5, 1, 1),
         BinaryProperty.Emoji_Modifier_Base: (134, 50, 40),
         BinaryProperty.Emoji_Presentation: (1_205, 282, 81),
         BinaryProperty.Extended_Pictographic: (3_537, 511, 78),
+        BinaryProperty.White_Space: (25, 11, 10),
         Age: (288_833, 1_718, 1_718),
         Block: (293_168, 327, 327),
         Canonical_Combining_Class: (286_719, 2_374, 1_196),
@@ -46,12 +48,14 @@ PROPERTY_COUNTS: dict[str, dict[PropertyId, tuple[int, int, int]]] = {
         Script: (149_251, 2_191, 952),
     },
     '15.1': {
+        BinaryProperty.Default_Ignorable_Code_Point: (4_174, 27, 17),
         BinaryProperty.Emoji: (1_424, 404, 151),
         BinaryProperty.Emoji_Component: (146, 10, 10),
         BinaryProperty.Emoji_Modifier: (5, 1, 1),
         BinaryProperty.Emoji_Modifier_Base: (134, 50, 40),
         BinaryProperty.Emoji_Presentation: (1_205, 282, 81),
         BinaryProperty.Extended_Pictographic: (3_537, 511, 78),
+        BinaryProperty.White_Space: (25, 11, 10),
         Age: (289_460, 1_721, 1_721),
         Block: (293_792, 328, 328),
         Canonical_Combining_Class: (287_346, 2_376, 1_196),

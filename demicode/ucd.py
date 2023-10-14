@@ -305,7 +305,7 @@ class UnicodeCharacterDatabase:
                     self._emoji_data[label].append(range)
         else:
             # Make sure that look-ups don't fail.
-            self._emoji_data = { p.name: [] for p in BinaryProperty }
+            self._emoji_data = { p.name: [] for p in BinaryProperty if p.is_emoji }
         with mirrored_data('emoji-variation-sequences.txt', version, path) as lines:
             self._emoji_variations = frozenset(dict.fromkeys(parse(
                 lines, lambda cp, _: cp.to_sequence_head()
@@ -339,6 +339,12 @@ class UnicodeCharacterDatabase:
             self._script = sorted(parse(
                 lines, lambda cp, p: (cp.to_range(), Script[p[0]])
             ), key=get_range)
+        with mirrored_data('PropList.txt', version, path) as lines:
+            self._white_space = [*parse(lines, lambda cp, p: (
+                cp.to_range()
+                if p[0] == BinaryProperty.White_Space.name
+                else None
+            ))]
 
         # Load list of emoji sequences. UCD 8.0 / E1.0 has no emoji sequence
         # files, but `emoji-data.txt` is so different it is more suitable as a
@@ -392,6 +398,7 @@ class UnicodeCharacterDatabase:
         self._indic_conjunct_break = [*simplify_range_data(self._indic_conjunct_break)]
         self._indic_syllabic = [*simplify_range_data(self._indic_syllabic)]
         self._script = [*simplify_range_data(self._script)]
+        self._white_space = simplify_only_ranges(self._white_space)
         self._is_optimized = True
         return self
 
@@ -585,6 +592,8 @@ class UnicodeCharacterDatabase:
         self.prepare()
         if property is BinaryProperty.Default_Ignorable_Code_Point:
             return _is_in_range(codepoint, self._default_ignorable)
+        elif property is BinaryProperty.White_Space:
+            return _is_in_range(codepoint, self._white_space)
         return _is_in_range(codepoint, self._emoji_data[property.name])
 
     def _resolve(
@@ -640,6 +649,8 @@ class UnicodeCharacterDatabase:
         if isinstance(selection, BinaryProperty):
             if selection is BinaryProperty.Default_Ignorable_Code_Point:
                 ranges = self._default_ignorable
+            elif selection is BinaryProperty.White_Space:
+                ranges = self._white_space
             else:
                 ranges = self._emoji_data[selection.name]
 
@@ -738,15 +749,18 @@ class UnicodeCharacterDatabase:
         """
         self.prepare()
         if isinstance(property, BinaryProperty):
-            if property is BinaryProperty.Default_Ignorable_Code_Point:
+            if property.is_emoji:
                 return (
-                    sum(len(r) for r in self._default_ignorable),
-                    len(self._default_ignorable),
+                    sum(len(r) for r in self._emoji_data[property.name]),
+                    len(self._emoji_data[property.name]),
                 )
-            return (
-                sum(len(r) for r in self._emoji_data[property.name]),
-                len(self._emoji_data[property.name]),
-            )
+            if property is BinaryProperty.Default_Ignorable_Code_Point:
+                ranges = self._default_ignorable
+            elif property is BinaryProperty.White_Space:
+                ranges = self._white_space
+            else:
+                assert False
+            return sum(len(r) for r in ranges), len(ranges)
 
         if property is Emoji_Sequence:
             count = len(self._emoji_sequences)

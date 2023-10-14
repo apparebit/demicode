@@ -168,8 +168,12 @@ class CodePoint(int):
         code point. If this code point is larger than the other one, this method
         returns an empty iterator.
         """
-        while self <= other:
+        if self > other:
+            return
+        while True:
             yield self
+            if self >= other:
+                return
             self = self.next()
 
     def codepoints(self) -> 'Iterator[CodePoint]':
@@ -328,6 +332,43 @@ class CodePointSequence(tuple[CodePoint,...]):
 
 
 # --------------------------------------------------------------------------------------
+
+
+def codepoints_to_ranges(codepoints: Iterator[CodePoint]) -> Iterator[CodePointRange]:
+    """
+    Convert an iterator over *ordered* code points into an iterator over code
+    point ranges. This generator raises an assertion error if the code points
+    are not sorted.
+    """
+
+    try:
+        start = previous = next(codepoints)
+    except StopIteration:
+        return
+
+    while True:
+        while True:
+            current = None
+            try:
+                current = next(codepoints)
+            except StopIteration:
+                break
+
+            assert previous < current,\
+                f'code points {previous} and {current} are not sorted'
+            if previous.next() != current:
+                break
+
+            previous = current
+
+        yield CodePointRange(start, previous)
+        if current is None:
+            return
+        start = previous = current
+
+
+# --------------------------------------------------------------------------------------
+
 
 CodePoint.MIN = CodePoint(0)
 CodePoint.MAX = CodePoint(0x10_FFFF)

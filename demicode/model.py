@@ -147,6 +147,10 @@ class BinaryProperty(StrEnum):
     Extended_Pictographic = 'ExtPict'
 
     @property
+    def label(self) -> str:
+        return self.name
+
+    @property
     def is_emoji(self) -> bool:
         """
         Determine whether the property relates to emoji, i.e., is `Emoji`,

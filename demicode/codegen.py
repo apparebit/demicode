@@ -122,7 +122,9 @@ def generate_property_values(
     yield ''
     yield 'class Property:'
     yield '    """Marker class for enumerations representing Unicode properties."""'
-    yield '    pass'
+    yield '    @property'
+    yield '    def label(self) -> str:'
+    yield '        return getattr(self, "name")'
 
     for property, short_property in _PROPERTIES.items():
         yield ''

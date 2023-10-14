@@ -18,7 +18,9 @@ __all__ = (
 
 class Property:
     """Marker class for enumerations representing Unicode properties."""
-    pass
+    @property
+    def label(self) -> str:
+        return getattr(self, "name")
 
 
 class Age(Property, StrEnum):

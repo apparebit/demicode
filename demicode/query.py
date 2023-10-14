@@ -23,7 +23,7 @@ import enum
 import functools
 import itertools
 import operator
-from typing import Callable, Self
+from typing import Callable, ClassVar, Self
 
 
 from .codepoint import CodePoint, CodePointRange
@@ -72,6 +72,12 @@ class Operator(enum.Enum):
 
 
 class Composable:
+
+    def is_bottom(self) -> bool:
+        return False
+
+    def is_top(self) -> bool:
+        return False
 
     def is_prop(self) -> bool:
         return False
@@ -122,13 +128,51 @@ class Composable:
         raise NotImplementedError()
 
 
+@dataclass(frozen=True, slots=True)
+class Void(Composable):
+
+    NONE: 'ClassVar[Void]'
+
+    def is_bottom(self) -> bool:
+        return True
+
+    def simplify(self) -> Self:
+        return self
+
+    def materialize(self, ucd: UnicodeCharacterDatabase) -> set[CodePoint]:
+        return set()
+
+    def __repr__(self) -> str:
+        return '⊥'
+
+    def __str__(self) -> str:
+        return '⊥'
+
+Void.NONE = Void()
+
+
+@dataclass(frozen=True, slots=True)
 class Universe(Composable):
+
+    ALL: 'ClassVar[Universe]'
+
+    def is_top(self) -> bool:
+        return True
 
     def simplify(self) -> Self:
         return self
 
     def materialize(self, ucd: UnicodeCharacterDatabase) -> set[CodePoint]:
         return set(CodePoint(cp) for cp in CodePointRange.ALL.codepoints())
+
+    def __repr__(self) -> str:
+        return '⊤'
+
+    def __str__(self) -> str:
+        return '⊤'
+
+
+Universe.ALL = Universe()
 
 
 @dataclass(frozen=True, slots=True)
@@ -188,15 +232,28 @@ class App(Composable):
                 if arg.applies(Operator.INVERT):
                     return arg.to_app().only_arg.simplify()
                 return App(Operator.INVERT, self.only_arg.simplify())
-            case Operator.AND | Operator.OR:
+            case Operator.AND:
                 args = list(dict.fromkeys(itertools.chain.from_iterable(
                     a.to_app().args if a.applies(self.op) else (a,)
                     for a in (a.simplify() for a in self.args)
                 )))
                 if len(args) == 1:
                     return args[0]
-                else:
-                    return App(self.op, *args)
+                args = [a for a in args if not a.is_top()]
+                if len(args) == 0:
+                    return Universe.ALL
+                return App(self.op, *args)
+            case Operator.OR:
+                args = list(dict.fromkeys(itertools.chain.from_iterable(
+                    a.to_app().args if a.applies(self.op) else (a,)
+                    for a in (a.simplify() for a in self.args)
+                )))
+                if len(args) == 1:
+                    return args[0]
+                args = [a for a in args if not a.is_bottom()]
+                if len(args) == 0:
+                    return Void.NONE
+                return App(self.op, *args)
             case _:
                 return App(self.op, *(a.simplify() for a in self.args))
 

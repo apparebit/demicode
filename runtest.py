@@ -8,9 +8,6 @@ import unittest
 from test.runtime import ResultAdapter, StyledStream
 
 
-HEADING_WIDTH = 40
-
-
 if __name__ == '__main__':
     successful = False
     stream = sys.stdout
@@ -23,11 +20,11 @@ if __name__ == '__main__':
         stream.flush()
 
     try:
-        println(styled.heading('§1  Type Checking'.ljust(HEADING_WIDTH)))
+        println(styled.heading(styled.pad('§1  Type Checking')))
         subprocess.run('./node_modules/.bin/pyright', check=True)
         println()
 
-        println(styled.heading('§2  Unit Testing'.ljust(HEADING_WIDTH)))
+        println(styled.heading(styled.pad('§2  Unit Testing')))
         runner = unittest.main(
             module='test',
             exit=False,
@@ -44,6 +41,6 @@ if __name__ == '__main__':
     except Exception as x:
         trace = traceback.format_exception(x)
         println(''.join(trace[:-1]))
-        println(styled.red(trace[-1]))
+        println(styled.err(trace[-1]))
 
     sys.exit(not successful)

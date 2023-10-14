@@ -91,6 +91,9 @@ class testunit:
         )
 
 
+TIGHT_WIDTH = 40
+
+
 class StyledStream:
 
     def __init__(self, stream: TextIO) -> None:
@@ -98,11 +101,15 @@ class StyledStream:
         self.isatty = stream.isatty()
         self.width, self.height = os.get_terminal_size()
 
+    @property
+    def tight_width(self) -> int:
+        return min(self.width, TIGHT_WIDTH)
+
     def sgr(self, ps: str, text: str) -> str:
         return f'\x1b[{ps}m{text}\x1b[0m' if self.isatty else text
 
     def pad(self, text: str) -> str:
-        return text.ljust(self.width) if self.isatty else text
+        return text.ljust(self.tight_width) if self.isatty else text
 
     def heading(self, text: str) -> str:
         return self.sgr('1;48;5;153', text)
@@ -113,7 +120,7 @@ class StyledStream:
     def light(self, text: str) -> str:
         return self.sgr('38;5;243', text)
 
-    def red(self, text: str) -> str:
+    def err(self, text: str) -> str:
         return self.sgr('38;5;88', text)
 
     def failure(self, text: str) -> str:
@@ -129,14 +136,25 @@ ResultPrinter: TypeAlias = Callable[[int, list[BrokenTest], list[BrokenTest]], N
 
 
 def track_progress(stream: TextIO) -> ProgressTracker:
+    columns = 0
+
     def track_progress(test: testunit, err: None | OptExcInfo) -> None:
+        nonlocal columns
+
         if test.is_success(err):
             stream.write('⋅' if test.is_subtest else '•')
         elif test.is_failure(err):
             stream.write('f' if test.is_subtest else 'F')
         else:
             stream.write('e' if test.is_subtest else 'E')
+
+        columns += 1
+        if columns >= TIGHT_WIDTH:
+            stream.write('\n')
+            columns = 0
+
         stream.flush()
+
     return track_progress
 
 
@@ -148,7 +166,7 @@ def print_summary(stream: TextIO) -> ResultPrinter:
         stream.write(styled.strong(f'{label}: {test.source_file}: {test.invocation}'))
         stream.write('\n')
         stream.write(styled.light('\n'.join(f'    {l}' for l in lines[:-1])))
-        stream.write(f'\n    {styled.red(lines[-1])}\n\n')
+        stream.write(f'\n    {styled.err(lines[-1])}\n\n')
 
     def print_summary(
         tests: int,

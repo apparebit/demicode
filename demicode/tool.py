@@ -24,7 +24,7 @@ from .render import KeyPressReader, Renderer, Style
 from .selection import *
 from .statistics import collect_statistics, show_statistics
 from .ucd import UnicodeCharacterDatabase
-from ..demicode import __version__
+from . import __version__
 
 
 # The regular expression is more permissive than CodePoint.of()

@@ -56,7 +56,7 @@ from .parser import (
     to_range_and_string,
 )
 
-from ..demicode import __version__
+from . import __version__
 
 
 logger = logging.getLogger(__name__)

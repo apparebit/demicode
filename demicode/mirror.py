@@ -46,7 +46,7 @@ from urllib.request import Request, urlopen
 
 
 from .model import Version, VersioningError
-from ..demicode import __version__
+from . import __version__
 
 
 logger = logging.getLogger(__name__)

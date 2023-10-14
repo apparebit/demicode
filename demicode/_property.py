@@ -27,7 +27,7 @@ class Property:
     """Marker class for enumerations representing Unicode properties."""
     @property
     def label(self) -> str:
-        return getattr(self, "name")
+        return self.name # type: ignore
 
 
 class Age(Property, StrEnum):

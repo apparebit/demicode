@@ -7,19 +7,19 @@ __all__ = (
     "Property",
     "Age",
     "Block",
-    "blk",
+    "BLK",
     "Canonical_Combining_Class",
-    "ccc",
+    "CCC",
     "East_Asian_Width",
-    "ea",
+    "EA",
     "General_Category",
-    "gc",
+    "GC",
     "Indic_Conjunct_Break",
     "InCB",
     "Indic_Syllabic_Category",
     "InSC",
     "Script",
-    "sc",
+    "SC",
 )
 
 
@@ -391,7 +391,7 @@ class Block(Property, StrEnum):
     Zanabazar_Square = "Zanabazar_Square"
     Znamenny_Musical_Notation = "Znamenny_Music"
 
-blk = Block
+BLK = Block
 
 
 class Canonical_Combining_Class(Property, IntEnum):
@@ -475,7 +475,7 @@ class Canonical_Combining_Class(Property, IntEnum):
     Iota_Subscript = 240
     IS = 240
 
-ccc = Canonical_Combining_Class
+CCC = Canonical_Combining_Class
 
 
 class East_Asian_Width(Property, StrEnum):
@@ -486,7 +486,7 @@ class East_Asian_Width(Property, StrEnum):
     Narrow = "Na"
     Wide = "W"
 
-ea = East_Asian_Width
+EA = East_Asian_Width
 
 
 class General_Category(Property, StrEnum):
@@ -529,7 +529,7 @@ class General_Category(Property, StrEnum):
     Paragraph_Separator = "Zp"
     Space_Separator = "Zs"
 
-gc = General_Category
+GC = General_Category
 
 
 class Indic_Conjunct_Break(Property, StrEnum):
@@ -750,4 +750,4 @@ class Script(Property, StrEnum):
     Common = "Zyyy"
     Unknown = "Zzzz"
 
-sc = Script
+SC = Script

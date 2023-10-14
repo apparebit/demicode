@@ -19,22 +19,31 @@ from ._version import (
 __all__ = (
     'Age',
     'Block',
-    'BinaryProperty',
+    'BLK',
     'Canonical_Combining_Class',
-    'CharacterData',
+    'CCC',
     'East_Asian_Width',
+    'EA',
+    'General_Category',
+    'GC',
+    'Indic_Conjunct_Break',
+    'InCB',
+    'Indic_Syllabic_Category',
+    'InSC',
+    'Script',
+    'SC',
+
+    'BinaryProperty',
+    'CharacterData',
     'Emoji_Sequence',
     'FIRST_SUPPORTED_VERSION',
-    'General_Category',
     'Grapheme_Cluster_Break',
+    'GCB',
     'GRAPHEME_CLUSTER_PATTERN',
-    'Indic_Conjunct_Break',
-    'Indic_Syllabic_Category',
     'KNOWN_UCD_VERSIONS',
     'Presentation',
     'Property',
     'PropertyId',
-    'Script',
     'Version',
     'VersioningError',
 )
@@ -90,6 +99,9 @@ class Grapheme_Cluster_Break(Property, StrEnum):
     E_Modifier = '\U00010301'
     Glue_After_Zwj = '\U00010302'
     E_Base_GAZ = '\U00010303'
+
+
+GCB = Grapheme_Cluster_Break
 
 
 # https://unicode.org/reports/tr29/#Regex_Definitions
@@ -159,6 +171,7 @@ class BinaryProperty(StrEnum):
         return self is not BinaryProperty.Default_Ignorable_Code_Point
 
 
+PropertyValue: TypeAlias = BinaryProperty | Property
 PropertyId: TypeAlias = BinaryProperty | type[Property]
 
 

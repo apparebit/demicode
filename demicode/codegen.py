@@ -103,6 +103,13 @@ def retrieve_property_values(
     return result
 
 
+def to_property_alias(property: str) -> str:
+    if property.lower() != property:
+        return property
+    else:
+        return property.upper()
+
+
 def generate_property_values(
     property_values: dict[str, list[tuple[str, str, None | str]]]
 ) -> Iterator[str]:
@@ -117,7 +124,7 @@ def generate_property_values(
     for property, short_property in _PROPERTIES.items():
         yield f'    "{property}",'
         if property.lower() != short_property.lower():
-            yield f'    "{short_property}",'
+            yield f'    "{to_property_alias(short_property)}",'
     yield ')'
 
     yield ''
@@ -144,7 +151,7 @@ def generate_property_values(
                 yield f'    {value} = "{short_value}"'
         if property.lower() != short_property.lower():
             yield ''
-            yield f'{short_property} = {property}'
+            yield f'{to_property_alias(short_property)} = {property}'
 
 
 # --------------------------------------------------------------------------------------

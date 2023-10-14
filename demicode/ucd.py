@@ -511,6 +511,8 @@ class UnicodeCharacterDatabase:
         )
 
     def count_break_overlap(self) -> OverlapCounter:
+        self.prepare()
+
         counts: OverlapCounter = Counter()
         icb: None | Indic_Conjunct_Break
         for range, icb in self._indic_conjunct_break:
@@ -545,6 +547,7 @@ class UnicodeCharacterDatabase:
         cluster property values. Thereafter, it uses a regular expression for
         iterating over the grapheme cluster breaks.
         """
+        self.prepare()
         grapheme_cluster_props = self._to_grapheme_cluster_string(text)
         length = len(text)
 
@@ -794,6 +797,7 @@ class UnicodeCharacterDatabase:
         have emoji presentation and are followed by the emoji variation
         selector.
         """
+        self.prepare()
         return self._to_emoji_info(self._to_codepoints(codepoints)) is not None
 
     def emoji_sequence_data(
@@ -805,6 +809,7 @@ class UnicodeCharacterDatabase:
         have emoji presentation and are followed by the emoji variation
         selector.
         """
+        self.prepare()
         return self._to_emoji_info(self._to_codepoints(codepoints)) or (None, None)
 
     def extended_pictographic_ranges(self) -> Iterator[CodePointRange]:
@@ -812,6 +817,7 @@ class UnicodeCharacterDatabase:
         Create an iterator over code point ranges that are extended
         pictographic.
         """
+        self.prepare()
         for range in self._emoji_data[BinaryProperty.Extended_Pictographic.name]:
             yield range.to_range()
 

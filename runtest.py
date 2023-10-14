@@ -8,6 +8,9 @@ import unittest
 from test.runtime import ResultAdapter, StyledStream
 
 
+HEADING_WIDTH = 40
+
+
 if __name__ == '__main__':
     successful = False
     stream = sys.stdout
@@ -20,11 +23,11 @@ if __name__ == '__main__':
         stream.flush()
 
     try:
-        println(styled.heading(styled.pad('§1  Type Checking')))
+        println(styled.heading('§1  Type Checking'.ljust(HEADING_WIDTH)))
         subprocess.run('./node_modules/.bin/pyright', check=True)
         println()
 
-        println(styled.heading(styled.pad('§2  Unit Testing')))
+        println(styled.heading('§2  Unit Testing'.ljust(HEADING_WIDTH)))
         runner = unittest.main(
             module='test',
             exit=False,
@@ -36,7 +39,7 @@ if __name__ == '__main__':
         successful = runner.result.wasSuccessful()
 
     except subprocess.CalledProcessError:
-        println(styled.red('demicode failed to type check!'))
+        println(styled.failure('demicode failed to type check!'))
         exit(1)
     except Exception as x:
         trace = traceback.format_exception(x)

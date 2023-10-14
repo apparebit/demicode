@@ -114,8 +114,10 @@ def generate_property_values(
 
     yield '__all__ = ('
     yield '    "Property",'
-    for value in _PROPERTIES:
-        yield f'    "{value}",'
+    for property, short_property in _PROPERTIES.items():
+        yield f'    "{property}",'
+        if property.lower() != short_property.lower():
+            yield f'    "{short_property}",'
     yield ')'
 
     yield ''
@@ -140,6 +142,9 @@ def generate_property_values(
             else:
                 value = 'None_' if value == 'None' else value
                 yield f'    {value} = "{short_value}"'
+        if property.lower() != short_property.lower():
+            yield ''
+            yield f'{short_property} = {property}'
 
 
 # --------------------------------------------------------------------------------------

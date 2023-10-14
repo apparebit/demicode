@@ -7,12 +7,19 @@ __all__ = (
     "Property",
     "Age",
     "Block",
+    "blk",
     "Canonical_Combining_Class",
+    "ccc",
     "East_Asian_Width",
+    "ea",
     "General_Category",
+    "gc",
     "Indic_Conjunct_Break",
+    "InCB",
     "Indic_Syllabic_Category",
+    "InSC",
     "Script",
+    "sc",
 )
 
 
@@ -384,6 +391,8 @@ class Block(Property, StrEnum):
     Zanabazar_Square = "Zanabazar_Square"
     Znamenny_Musical_Notation = "Znamenny_Music"
 
+blk = Block
+
 
 class Canonical_Combining_Class(Property, IntEnum):
     Not_Reordered = 0
@@ -466,6 +475,8 @@ class Canonical_Combining_Class(Property, IntEnum):
     Iota_Subscript = 240
     IS = 240
 
+ccc = Canonical_Combining_Class
+
 
 class East_Asian_Width(Property, StrEnum):
     Ambiguous = "A"
@@ -474,6 +485,8 @@ class East_Asian_Width(Property, StrEnum):
     Neutral = "N"
     Narrow = "Na"
     Wide = "W"
+
+ea = East_Asian_Width
 
 
 class General_Category(Property, StrEnum):
@@ -516,12 +529,16 @@ class General_Category(Property, StrEnum):
     Paragraph_Separator = "Zp"
     Space_Separator = "Zs"
 
+gc = General_Category
+
 
 class Indic_Conjunct_Break(Property, StrEnum):
     Consonant = "Consonant"
     Extend = "Extend"
     Linker = "Linker"
     None_ = "None"
+
+InCB = Indic_Conjunct_Break
 
 
 class Indic_Syllabic_Category(Property, StrEnum):
@@ -562,6 +579,8 @@ class Indic_Syllabic_Category(Property, StrEnum):
     Vowel = "Vowel"
     Vowel_Dependent = "Vowel_Dependent"
     Vowel_Independent = "Vowel_Independent"
+
+InSC = Indic_Syllabic_Category
 
 
 class Script(Property, StrEnum):
@@ -730,3 +749,5 @@ class Script(Property, StrEnum):
     Inherited = "Zinh"
     Common = "Zyyy"
     Unknown = "Zzzz"
+
+sc = Script

@@ -1,6 +1,6 @@
 from bisect import bisect_right as stdlib_bisect_right
 from collections import Counter, defaultdict
-from collections.abc import Iterator, MutableSet, Sequence, Set
+from collections.abc import Iterator, Sequence, Set
 import itertools
 import json
 import logging
@@ -56,7 +56,7 @@ from .parser import (
     to_range_and_string,
 )
 
-from demicode import __version__
+from ..demicode import __version__
 
 
 logger = logging.getLogger(__name__)
@@ -610,6 +610,7 @@ class UnicodeCharacterDatabase:
             return self._resolve(codepoint, ranges, default)
 
     def count(self, selection: Property) -> int:
+        self.prepare()
         attribute, default = _PROPERTY_RANGES_AND_DEFAULT[selection.__class__]
         ranges = getattr(self, attribute)
         result = 0
@@ -628,10 +629,23 @@ class UnicodeCharacterDatabase:
 
         return result
 
-    def materialize(self, selection: Property) -> MutableSet[CodePoint]:
+    def materialize(
+        self, selection: BinaryProperty | Property
+    ) -> set[CodePoint]:
+        result: set[CodePoint] = set()
+
+        if isinstance(selection, BinaryProperty):
+            if selection is BinaryProperty.Default_Ignorable_Code_Point:
+                ranges = self._default_ignorable
+            else:
+                ranges = self._emoji_data[selection.name]
+
+            for range in ranges:
+                result |= {cp for cp in range.codepoints()}
+            return result
+
         attribute, default = _PROPERTY_RANGES_AND_DEFAULT[selection.__class__]
         ranges = getattr(self, attribute)
-        result: MutableSet[CodePoint] = set()
 
         previous_plus_one: int = CodePoint.MIN
         for range, value in ranges:

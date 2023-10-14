@@ -16,7 +16,7 @@ from .control import Action, read_line_action
 from .model import Age, General_Category, Presentation
 from .render import Padding, Renderer
 from .ucd import UnicodeCharacterDatabase
-from demicode import __version__
+from ..demicode import __version__
 
 
 # --------------------------------------------------------------------------------------

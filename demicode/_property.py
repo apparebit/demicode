@@ -10,8 +10,21 @@ __all__ = (
     "BLK",
     "Canonical_Combining_Class",
     "CCC",
+    "Default_Ignorable_Code_Point",
+    "DI",
     "East_Asian_Width",
     "EA",
+    "Emoji",
+    "Emoji_Component",
+    "EComp",
+    "Emoji_Modifier",
+    "EMod",
+    "Emoji_Modifier_Base",
+    "EBase",
+    "Emoji_Presentation",
+    "EPres",
+    "Extended_Pictographic",
+    "ExtPict",
     "General_Category",
     "GC",
     "Indic_Conjunct_Break",
@@ -20,6 +33,8 @@ __all__ = (
     "InSC",
     "Script",
     "SC",
+    "White_Space",
+    "WSpace",
 )
 
 
@@ -478,6 +493,13 @@ class Canonical_Combining_Class(Property, IntEnum):
 CCC = Canonical_Combining_Class
 
 
+class Default_Ignorable_Code_Point(Property, StrEnum):
+    No = "N"
+    Yes = "Y"
+
+DI = Default_Ignorable_Code_Point
+
+
 class East_Asian_Width(Property, StrEnum):
     Ambiguous = "A"
     Fullwidth = "F"
@@ -487,6 +509,46 @@ class East_Asian_Width(Property, StrEnum):
     Wide = "W"
 
 EA = East_Asian_Width
+
+
+class Emoji(Property, StrEnum):
+    No = "N"
+    Yes = "Y"
+
+
+class Emoji_Component(Property, StrEnum):
+    No = "N"
+    Yes = "Y"
+
+EComp = Emoji_Component
+
+
+class Emoji_Modifier(Property, StrEnum):
+    No = "N"
+    Yes = "Y"
+
+EMod = Emoji_Modifier
+
+
+class Emoji_Modifier_Base(Property, StrEnum):
+    No = "N"
+    Yes = "Y"
+
+EBase = Emoji_Modifier_Base
+
+
+class Emoji_Presentation(Property, StrEnum):
+    No = "N"
+    Yes = "Y"
+
+EPres = Emoji_Presentation
+
+
+class Extended_Pictographic(Property, StrEnum):
+    No = "N"
+    Yes = "Y"
+
+ExtPict = Extended_Pictographic
 
 
 class General_Category(Property, StrEnum):
@@ -751,3 +813,10 @@ class Script(Property, StrEnum):
     Unknown = "Zzzz"
 
 SC = Script
+
+
+class White_Space(Property, StrEnum):
+    No = "N"
+    Yes = "Y"
+
+WSpace = White_Space

@@ -34,11 +34,19 @@ _PROPERTIES: dict[str, str] = {
     'Age': 'age',
     'Block': 'blk',
     'Canonical_Combining_Class': 'ccc',
+    'Default_Ignorable_Code_Point': 'DI',
     'East_Asian_Width': 'ea',
+    'Emoji': 'Emoji',
+    'Emoji_Component': 'EComp',
+    'Emoji_Modifier': 'EMod',
+    'Emoji_Modifier_Base': 'EBase',
+    'Emoji_Presentation': 'EPres',
+    'Extended_Pictographic': 'ExtPict',
     'General_Category': 'gc',
     'Indic_Conjunct_Break': 'InCB',
     'Indic_Syllabic_Category': 'InSC',
     'Script': 'sc',
+    'White_Space': 'WSpace',
 }
 
 

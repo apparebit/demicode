@@ -129,6 +129,17 @@ The output of the last command should look something like the first screenshot.
 
 ## Versions
 
+  - **v1.1.0** (2023/10/17):
+      - Improve terminal intput/output, notably by `--incrementally`/`-i`
+        displaying character blots, which is significantly slower but allows for
+        measuring the size of blots.
+      - Fix crashing bug in path handling for mirrored CLDR files.
+      - Make internal handling of UCD data more uniform, with an eye towards
+        evolving demicode's UCD abstractions into a more generally useful
+        library.
+      - Switch from mypy to pyright, address pyright's improved diagnostics,
+        integrate type checking into `runtest.py`, and improve test script
+        output.
   - **v1.0.0** (2023/09/19):
       - Support grapheme cluster segmentation according to Unicode 15.1 and 15.0.
       - Tabulate bit size of Unicode properties, alternative groups of required

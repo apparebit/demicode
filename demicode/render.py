@@ -18,6 +18,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from enum import StrEnum
+import io
 import os
 import sys
 from typing import Never, TextIO
@@ -276,7 +277,7 @@ class Renderer:
         return constructor(input, output, theme)
 
     # ----------------------------------------------------------------------------------
-    # Window Title
+    # Terminal Decodation
 
     def set_window_title(self, text: str) -> None:
         """Save window title and then update it."""
@@ -328,6 +329,13 @@ class Renderer:
     def width(self) -> int:
         return self._width
 
+    def _query(self, text: str) -> bytes:
+        raise NotImplementedError()
+
+    def get_position(self) -> None | tuple[int, int]:
+        """Get current cursor position. Only available for stylish terminals."""
+        raise NotImplementedError()
+
     # ----------------------------------------------------------------------------------
     # Input
 
@@ -353,15 +361,6 @@ class Renderer:
             raise NotImplementedError('Renderer.reader()')
 
     # ----------------------------------------------------------------------------------
-    # Querying the Terminal
-
-    def query(self, text: str) -> bytes:
-        raise NotImplementedError()
-
-    def get_position(self) -> None | tuple[int, int]:
-        raise NotImplementedError()
-
-    # ----------------------------------------------------------------------------------
     # Format Text
 
     def fit(self, text: str, *, width: None | int = None, fill: bool = False) -> str:
@@ -371,52 +370,86 @@ class Renderer:
             return text.ljust(width) if fill else text
         return text[:width - 1] + '…'
 
-    def adjust_column(self, column: int) -> str:
-        return ''
-
-    def format_legend(self, text: str) -> str:
-        return text
-
-    def format_heading(self, text: str) -> str:
-        return text
-
-    def format_blot(self, text: str, padding: Padding, width: int) -> str:
-        if padding is Padding.BACKGROUND:
-            return ''
-        else:
-            return text + (padding.value * width)
-
-    def faint(self, text:str) -> str:
-        return text
-
-    def em(self, text: str) -> str:
-        return text
-
-    def strong(self, text: str) -> str:
-        return text
-
-    def link(self, href: str, text: None | str = None) -> str:
-        return href if text is None else text
-
-    def format_error(self, text: str) -> str:
-        return text
-
     # ----------------------------------------------------------------------------------
-    # Output
+    # Output Formatted Text
+
+    def adjust_column(self, column: int) -> None:
+        pass
+
+    def newline(self) -> None:
+        self._output.write('\n')
+
+    def faint(self, text: str) -> None:
+        self._output.write(text)
+
+    def em(self, text: str) -> None:
+        self._output.write(text)
+
+    def strong(self, text: str) -> None:
+        self._output.write(text)
+
+    def link(self, href: str, text: None | str = None) -> None:
+        self._output.write(href if text is None else text)
+
+    def emit_legend(self, text: str) -> None:
+        self._output.write(text)
+
+    def emit_heading(self, text: str) -> None:
+        self._output.write(text)
+
+    def emit_blot(self, text: str, padding: Padding, width: int) -> None:
+        if padding is Padding.FOREGROUND:
+            self._output.write(text + (padding.value * width))
+
+    def emit_error(self, text: str) -> None:
+        self._output.write(text)
 
     def beep(self) -> None:
         pass
 
-    def print(self, text: str = '') -> None:
-        # Sneakily exposing flush()
+    # ----------------------------------------------------------------------------------
+    # Output
+
+    @contextmanager
+    def buffering(self) -> Iterator[io.StringIO]:
+        """
+        Buffer all output made inside a `with renderer.buffering()` block. The
+        buffered output is written and flushed upon completion of the block. A
+        call to `renderer.clear_buffer()` erases all text buffered so far.
+        """
+        # Don't cache new self._output in local variable; see clear_buffer() below.
+        saved_output = self._output
+        self._output = io.StringIO()
+        try:
+            yield self._output
+        finally:
+            saved_output.write(self._output.getvalue())
+            saved_output.flush()
+            self._output = saved_output
+
+    def clear_buffer(self) -> None:
+        """Erase output buffered so far."""
+        if not isinstance(self._output, io.StringIO):
+            raise TypeError('renderer is not buffering')
+        self._output = io.StringIO()
+
+    def write(self, text: str = '') -> None:
+        """Output the text. This method does not flush the output."""
         if text:
             self._output.write(str(text))
-        self._output.flush()
 
-    def println(self, text: str = '') -> None:
+    def writeln(self, text: str = '') -> None:
+        """
+        Output the text followed by a newline. This method flushes the output
+        stream. If that is undesired, consider `buffering()`.
+        """
         if text:
             self._output.write(str(text))
         self._output.write('\n')
+        self._output.flush()
+
+    def flush(self) -> None:
+        """Flush output."""
         self._output.flush()
 
 
@@ -428,66 +461,72 @@ class StyledRenderer(Renderer):
         return True
 
     def set_window_title(self, text: str) -> None:
+        """Save and update window title. This method flushes output."""
         if self.is_interactive:
-            self.print(f'{_CSI}22;0t{_OSC}0;{text}{_ST}')
+            self._output.write(f'{_CSI}22;0t{_OSC}0;{text}{_ST}')
+            self._output.flush()
 
     def restore_window_title(self) -> None:
+        """Restore previously saved window title. This method flushes output."""
         if self.is_interactive:
-            self.print(f'{_OSC}0;{_ST}{_CSI}23;0t')
+            self._output.write(f'{_OSC}0;{_ST}{_CSI}23;0t')
+            self._output.flush()
 
-    def query(self, text: str) -> bytes:
+    def _query(self, text: str) -> bytes:
         if not text.startswith('\x1B'):
             raise ValueError(f'query {text} is not an escape sequence')
         with self.reader() as reader:
-            self.print(text)
+            self._output.write(text)
+            self._output.flush()
             return reader.read_escape()
 
     def get_position(self) -> None | tuple[int, int]:
-        response = self.query(f'{_CSI}6n')
+        """Get current cursor position. This method flushes output."""
+        response = self._query(f'{_CSI}6n')
         if not response.startswith(b'\x1B[') or not response.endswith(b'R'):
             return None
         row, _, column = response[2:-1].partition(b';')
         return int(row), int(column)
 
-    def adjust_column(self, column: int) -> str:
-        return _CHA(column)
+    def adjust_column(self, column: int) -> None:
+        self._output.write(_CHA(column))
 
-    def format_legend(self, text: str) -> str:
-        return f'{self._theme.legend}{text}{Style.RESET}'
+    def faint(self, text:str) -> None:
+        self._output.write(f'{self._theme.faint}{text}{Style.RESET}')
 
-    def format_heading(self, text: str) -> str:
-        return f'{self._theme.heading}{text}{Style.RESET}'
+    def em(self, text: str) -> None:
+        self._output.write(Style.italic(text))
 
-    def format_blot(self, text: str, padding: Padding, width: int) -> str:
-        if padding is Padding.BACKGROUND:
-            return (
-                text
-                + self._theme.blot_highlight
-                + (padding.value * width)
-                + Style.RESET
-            )
-        else:
-            return (
-                text
-                + self._theme.blot_obstruction
-                + (padding.value * width)
-                + Style.RESET
-            )
+    def strong(self, text: str) -> None:
+        self._output.write(Style.bold(text))
 
-    def faint(self, text:str) -> str:
-        return f'{self._theme.faint}{text}{Style.RESET}'
+    def link(self, href: str, text: None | str = None) -> None:
+        self._output.write(Style.link(href, text))
 
-    def em(self, text: str) -> str:
-        return Style.italic(text)
+    def emit_legend(self, text: str) -> None:
+        self._output.write(f'{self._theme.legend}{text}{Style.RESET}')
 
-    def strong(self, text: str) -> str:
-        return Style.bold(text)
+    def emit_heading(self, text: str) -> None:
+        self._output.write(f'{self._theme.heading}{text}{Style.RESET}')
 
-    def link(self, href: str, text: None | str = None) -> str:
-        return Style.link(href, text)
+    def emit_blot(self, text: str, padding: Padding, width: int) -> None:
+        self._output.write(''.join([
+            text,
+            (
+                self._theme.blot_highlight
+                if padding is Padding.BACKGROUND
+                else self._theme.blot_obstruction
+            ),
+            padding.value * width,
+            Style.RESET
+        ]))
 
-    def format_error(self, text: str) -> str:
-        return f'{self._theme.error}{text}{Style.RESET}'
+    def emit_error(self, text: str) -> None:
+        """Emit the error text. This method flushes output."""
+        self._output.write(f'{self._theme.error}{text}{Style.RESET}')
+        self._output.flush
 
     def beep(self) -> None:
-        print('\a')
+        """Ring the terminal's bell. This method flushes output."""
+        self._output.write('\a')
+        self._output.flush()

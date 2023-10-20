@@ -284,12 +284,17 @@ def configure_parser() -> argparse.ArgumentParser:
         action='store_true',
         help='use verbose mode to enable instructive logging',
     )
+    out_group.add_argument(
+        '--timed', '-T',
+        action="store_true",
+        help="collect and emit latency for rendering page"
+    )
 
     # ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~
 
     about_group = parser.add_argument_group(b('about this tool'))
     about_group.add_argument(
-        '--stats',
+        '--stats', '-S',
         action='store_true',
         help='display summary statistics and exit'
     )
@@ -329,24 +334,25 @@ def run(arguments: Sequence[str]) -> int:
     try:
         return process(options, renderer)
     except UserError as x:
-        renderer.println(renderer.format_error(x.args[0]))
+        renderer.emit_error(x.args[0])
         if x.__context__:
-            renderer.println(f'In particular: {x.__context__.args[0]}')
+            renderer.writeln(f'In particular: {x.__context__.args[0]}')
         return 1
     except Exception as x:
-        renderer.println(renderer.format_error(
+        renderer.emit_error(
             'Demicode encountered an unexpected error. For details, please see the\n'
             'exception trace below. If you can exclude your system as cause, please\n'
             'file an issue at https://github.com/apparebit/demicode/issues.\n'
-        ))
-        renderer.println('\n'.join(traceback.format_exception(x)))
+        )
+        renderer.writeln('\n'.join(traceback.format_exception(x)))
         return 1
 
 
 def process(options: argparse.Namespace, renderer: Renderer) -> int:
     # ------------------------------------------------------------ Handle version
     if options.version:
-        renderer.println(renderer.strong(f' demicode {__version__} '))
+        renderer.strong(f' demicode {__version__} ')
+        renderer.newline()
         return 0
 
     # --------------------------------------------------------------- Prepare UCD
@@ -450,6 +456,7 @@ def process(options: argparse.Namespace, renderer: Renderer) -> int:
         incrementally=options.incrementally,
         in_grid=options.in_grid,
         read_action=read_action,
+        timed=options.timed and not options.in_grid,
     )
 
     # ---------------------------------------------------------------------- Done

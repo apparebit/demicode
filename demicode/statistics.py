@@ -101,16 +101,14 @@ def show_statistics(
     overlap: OverlapCounter,
     renderer: Renderer,
 ) -> None:
-    renderer.println()
+    renderer.newline()
     v = version.in_short_format()
-    renderer.println(renderer.strong(
-        f'UCD {v} Properties (Before / After Range Optimization)'
-    ))
-    renderer.println()
+    renderer.strong(f'UCD {v} Properties (Before / After Range Optimization)')
+    renderer.newline()
 
     def show_heading(text: str) -> None:
-        renderer.println(renderer.faint(f' {text:<28}  Bt     Points  Ranges  MinRng'))
-        renderer.println()
+        renderer.faint(f' {text:<28}  Bt     Points  Ranges  MinRng')
+        renderer.writeln('\n')
 
     sum_bits = sum_points = sum_ranges = sum_max_ranges = 0
 
@@ -123,21 +121,22 @@ def show_statistics(
         sum_ranges += ranges
         sum_max_ranges += max_ranges
 
-        renderer.println(
+        renderer.writeln(
             f' {to_property_name(property):<28}  {bits:2,d}  {points:9,d}  '
             f'{ranges:6,d}  {max_ranges:6,d}'
         )
 
     def show_total() -> None:
-        renderer.println(
-            f' {" " * 28}  {renderer.faint("–" * (2 + 2 + 9 + 2 + 6 + 2 + 6))}'
-        )
-        heading = renderer.faint(f'{"Subtotal":<28}')
-        renderer.println(
-            f' {heading}  {sum_bits:2,d}  {sum_points:9,d}  '
+        renderer.write(f' {" " * 28}  ')
+        renderer.faint('–' * (2 + 2 + 9 + 2 + 6 + 2 + 6))
+        renderer.newline()
+
+        renderer.faint(f' {"Subtotal":<28}')
+        renderer.writeln(
+            f'  {sum_bits:2,d}  {sum_points:9,d}  '
             f'{sum_ranges:6,d}  {sum_max_ranges:6,d}'
         )
-        renderer.println('\n')
+        renderer.writeln('\n')
 
     # ----------------------------------------------------------------------------------
 
@@ -175,7 +174,7 @@ def show_statistics(
 
     show_heading('Sequence Data')
     show_counts(Emoji_Sequence)
-    renderer.println('\n')
+    renderer.writeln('\n')
 
     # ----------------------------------------------------------------------------------
 
@@ -211,11 +210,9 @@ def show_statistics(
 
     # ----------------------------------------------------------------------------------
 
-    renderer.println(renderer.faint(
-        '    InCB       GCB     Count  (Properties of code points)'
-    ))
+    renderer.faint('    InCB       GCB     Count  (Properties of code points)')
 
-    renderer.println()
+    renderer.writeln()
     assert len(overlap) == 5
     for incb, ocb in (
         (Indic_Conjunct_Break.Extend, Grapheme_Cluster_Break.ZWJ),
@@ -226,12 +223,10 @@ def show_statistics(
     ):
         left = '⋯' if incb is None else incb.name
         right = '⋯' if ocb is None else ocb.name
-        renderer.println(f'{"":<2}  {left:<9}  {right:<6}  {overlap[(incb, ocb)]:5,d}')
-    renderer.println('\n')
+        renderer.writeln(f'{"":<2}  {left:<9}  {right:<6}  {overlap[(incb, ocb)]:5,d}')
+    renderer.writeln('\n')
 
     # ----------------------------------------------------------------------------------
 
-    renderer.println(renderer.link(
-        'https://github.com/apparebit/demicode/blob/boss/docs/props.md'
-    ))
-    renderer.println()
+    renderer.link('https://github.com/apparebit/demicode/blob/boss/docs/props.md')
+    renderer.newline()

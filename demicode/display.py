@@ -8,7 +8,10 @@ terminal size to ensure that the output fits into the window.
 """
 
 from collections.abc import Iterator, Iterable
+from contextlib import ExitStack
 import itertools
+import math
+import time
 from typing import Callable, cast
 
 from .codepoint import CodePoint, CodePointSequence
@@ -92,12 +95,10 @@ def _name_width(width: int) -> int:
 
 def format_legend(renderer: Renderer) -> str:
     """Format the per-page legend."""
-    if not renderer.has_style:
-        return LEGEND[6:]
-    return renderer.format_legend(LEGEND.ljust(renderer.width))
+    return LEGEND.ljust(renderer.width) if renderer.has_style else LEGEND[6:]
 
 
-def format_heading(heading: str, renderer: Renderer) -> str:
+def emit_heading(heading: str, renderer: Renderer) -> None:
     """Format the heading without the initial \\u0001 (Start of Heading)."""
     if heading[0] != '\u0001':
         raise ValueError(
@@ -118,17 +119,17 @@ def format_heading(heading: str, renderer: Renderer) -> str:
     else:
         heading = f'{heading} {"─" * right}'
 
-    return renderer.format_heading(heading)
+    renderer.emit_heading(heading)
 
 
-def format_blot(
+def emit_blot(
     codepoints: CodePoint | CodePointSequence,
     renderer: Renderer,
     ucd: UnicodeCharacterDatabase,
     *,
     start_column: int = 1,
     presentation: Presentation = Presentation.NONE,
-) -> Iterator[str]:
+) -> None:
     """Format the fixed-width character blot."""
     # Determine display and width for blot. If the code points are an unassigned
     # singleton or more than one grapheme cluster, their blots are elided.
@@ -158,33 +159,34 @@ def format_blot(
         display = str(CodePoint.REPLACEMENT_CHARACTER)
 
     # Render Character Blots
-    yield renderer.adjust_column(start_column + 1)
-    yield renderer.format_blot(display, Padding.BACKGROUND, 3 - width)
-    yield ' '
-    yield renderer.adjust_column(start_column + 7)
-    yield renderer.format_blot(display, Padding.FOREGROUND, 3 - width)
-    yield ' ' if renderer.has_style else '   '
+    renderer.adjust_column(start_column + 1)
+    renderer.emit_blot(display, Padding.BACKGROUND, 3 - width)
+    renderer.write(' ')
+    renderer.adjust_column(start_column + 7)
+    renderer.emit_blot(display, Padding.FOREGROUND, 3 - width)
+    renderer.write(' ' if renderer.has_style else '   ')
 
 
-def format_info(
+def emit_info(
     codepoints: CodePoint | CodePointSequence,
     renderer: Renderer,
     ucd: UnicodeCharacterDatabase,
     *,
     size: int = -1,
     presentation: Presentation = Presentation.NONE,
-) -> Iterator[str]:
+) -> None:
     """Format information about the code points."""
-    yield renderer.adjust_column(len(LEGEND_BLOT) + 1 + 1)
-    yield '   ' if size == -1 else f'{size: 2d} '
+    renderer.adjust_column(len(LEGEND_BLOT) + 1 + 1)
+    renderer.write('   ' if size == -1 else f'{size: 2d} ')
 
     # For code points, if they have implicit presentation, switch to single code
     # point and presentation instead. Otherwise, display the code points, plus
     # age and name for emoji sequences, plus disclaimer for non-grapheme-clusters.
     presentation, codepoints = presentation.normalize(codepoints)
     if not codepoints.is_singleton():
-        yield renderer.fit(
-            repr(codepoints), width=PROPS_WIDTH - SIZE_WIDTH - AGE_WIDTH - 1, fill=True)
+        renderer.write(renderer.fit(
+            repr(codepoints), width=PROPS_WIDTH - SIZE_WIDTH - AGE_WIDTH - 1, fill=True
+        ))
 
         # Account for non-grapheme-clusters and emoji sequences.
         name = age = None
@@ -193,30 +195,31 @@ def format_info(
                 f'Not a grapheme cluster in UCD {ucd.version.in_short_format()}',
                 width=_name_width(renderer.width)
             )
-            yield ' ' * (AGE_WIDTH + 1)
-            yield f' {renderer.faint(name)}'
+            renderer.write(' ' * (AGE_WIDTH + 1))
+            renderer.write(' ')
+            renderer.faint(name)
             return
 
         name, age = ucd.emoji_sequence_data(codepoints)
         if age:
-            yield f' {age.in_emoji_format():>{AGE_WIDTH}}'
+            renderer.write(f' {age.in_emoji_format():>{AGE_WIDTH}}')
         elif name:
-            yield ' ' * (AGE_WIDTH + 1)
+            renderer.write(' ' * (AGE_WIDTH + 1))
         if name:
-            yield f' {renderer.fit(name, width=_name_width(renderer.width))}'
+            renderer.write(f' {renderer.fit(name, width=_name_width(renderer.width))}')
         return
 
     # A single code point: Display detailed metadata including presentation.
     codepoint = codepoints.to_singleton()
     unidata = ucd.lookup(codepoint)
 
-    yield f'{codepoint!r:<8s} '
+    renderer.write(f'{codepoint!r:<8s} ')
     vs = presentation.variation_selector
-    yield f'{vs - CodePoint.VARIATION_SELECTOR_1 + 1:>2} ' if vs > 0 else '   '
-    yield unidata.category.value
-    yield f' {unidata.east_asian_width:<2} '
+    renderer.write(f'{vs - CodePoint.VARIATION_SELECTOR_1 + 1:>2} ' if vs>0 else '   ')
+    renderer.write(unidata.category.value)
+    renderer.write(f' {unidata.east_asian_width:<2} ')
     flags = ' '.join(f.value for f in unidata.flags)
-    yield renderer.fit(flags, width=25, fill=True)
+    renderer.write(renderer.fit(flags, width=25, fill=True))
 
     name = age = None
     if presentation is not Presentation.TEXT:
@@ -224,14 +227,14 @@ def format_info(
 
     age_display = '' if unidata.age is Age.Unassigned else str(unidata.age)
     age_display = age.in_emoji_format() if age else age_display
-    yield f' {age_display:>{AGE_WIDTH}} '
+    renderer.write(f' {age_display:>{AGE_WIDTH}} ')
 
     if unidata.category is General_Category.Unassigned:
         name = renderer.fit(
             f'Unassigned in UCD {ucd.version.in_short_format()}',
             width=_name_width(renderer.width)
         )
-        yield renderer.faint(name)
+        renderer.faint(name)
         return
 
     name = name or unidata.name or ''
@@ -240,38 +243,67 @@ def format_info(
         name = name + ' '
     if block:
         name = f'{name}({block})'
-    yield renderer.fit(name, width=_name_width(renderer.width))
+    renderer.write(renderer.fit(name, width=_name_width(renderer.width)))
 
 
 # --------------------------------------------------------------------------------------
 
 
-def format_lines(
-    data: Iterable[tuple[Presentation, str | CodePoint | CodePointSequence]],
+def emit_lines(
+    stream: Iterable[tuple[Presentation, str | CodePoint | CodePointSequence]],
     renderer: Renderer,
     ucd: UnicodeCharacterDatabase,
-) -> Iterator[str]:
-    """Emit the extended, per-line representation for all code points."""
-    for presentation, codepoints in data:
-        if presentation.is_heading:
-            yield format_heading(cast(str, codepoints), renderer)
-        else:
-            yield ''.join(
-                itertools.chain(
-                    format_blot(
-                        cast(CodePoint | CodePointSequence, codepoints),
-                        renderer,
-                        ucd,
-                        presentation=presentation,
-                    ),
-                    format_info(
-                        cast(CodePoint | CodePointSequence, codepoints),
-                        renderer,
-                        ucd,
-                        presentation=presentation,
-                    )
+    *,
+    legend: None | str,
+    incrementally: bool,
+    timed: bool,
+) -> int:
+    lines_printed = 0
+    with ExitStack() as stack:
+        if not incrementally:
+            # Buffering may not buy us any performance improvement,
+            # but pages are being rendered without ripples.
+            stack.enter_context(renderer.buffering())
+        start = time.perf_counter_ns() if timed else None
+
+        if legend is not None:
+            renderer.emit_legend(legend)
+            renderer.newline()
+
+        for presentation, codepoints in stream:
+            if presentation.is_heading:
+                emit_heading(cast(str, codepoints), renderer)
+            else:
+                emit_blot(
+                    cast(CodePoint | CodePointSequence, codepoints),
+                    renderer,
+                    ucd,
+                    presentation=presentation,
                 )
-            )
+
+                size = -1
+                if incrementally:
+                    renderer.flush()
+                    position = renderer.get_position()
+                    size = -1 if position is None else position[1] - 9
+
+                emit_info(
+                    cast(CodePoint | CodePointSequence, codepoints),
+                    renderer,
+                    ucd,
+                    size=size,
+                    presentation=presentation,
+                )
+
+            renderer.newline()
+            lines_printed += 1
+
+        if timed:
+            assert start is not None
+            diff = time.perf_counter_ns() - start
+            renderer.write(f'[{diff:,} ns]  ')
+
+    return lines_printed
 
 
 GRID_COLUMN_WIDTH = 16
@@ -280,104 +312,30 @@ def grid_column(index: int) -> int:
     return index * GRID_COLUMN_WIDTH + 2
 
 
-def format_grid_lines(
-    data: Iterable[tuple[Presentation, CodePoint | CodePointSequence]],
-    column_count: int,
+def emit_grid(
+    stream: Iterable[tuple[Presentation, str | CodePoint | CodePointSequence]],
     renderer: Renderer,
     ucd: UnicodeCharacterDatabase,
-) -> Iterator[str]:
+    *,
+    column_count: int,
+) -> None:
     """Emit the compact, grid-like representation for all code points."""
     # Ensure that every loop iteration consumes more code points
-    stream = iter(data)
+    #stream = iter(data)
 
-    while True:
-        line = ''.join(itertools.chain.from_iterable(
-            format_blot(
-                codepoints,
-                renderer,
-                ucd,
-                presentation=presentation,
-                start_column=grid_column(count),
-            )
-            for count, (presentation, codepoints)
-            in enumerate(itertools.islice(stream, column_count))
-        ))
-        if line == '':
-            return
-        yield line
+    for count, (presentation, codepoints) in enumerate(
+        itertools.islice(stream, column_count)
+    ):
+        emit_blot(
+            cast(CodePoint | CodePointSequence, codepoints),
+            renderer,
+            ucd,
+            presentation=presentation,
+            start_column=grid_column(count),
+        )
 
 
 # --------------------------------------------------------------------------------------
-
-
-def display_page_incr(
-    stream: Iterable[tuple[Presentation, str | CodePoint | CodePointSequence]],
-    renderer: Renderer,
-    ucd: UnicodeCharacterDatabase,
-    *,
-    legend: None | str,
-    body_height: int,
-) -> None:
-    if legend is not None:
-        renderer.println(legend)
-
-    lines_printed = 0
-    for presentation, codepoints in stream:
-        if presentation.is_heading:
-            renderer.println(format_heading(cast(str, codepoints), renderer))
-        else:
-            renderer.print(''.join(format_blot(
-                cast(CodePoint | CodePointSequence, codepoints),
-                renderer,
-                ucd,
-                presentation=presentation,
-            )))
-            position = renderer.get_position()
-            size = -1 if position is None else position[1] - 9
-            renderer.println(''.join(format_info(
-                cast(CodePoint | CodePointSequence, codepoints),
-                renderer,
-                ucd,
-                size=size,
-                presentation=presentation,
-            )))
-        lines_printed += 1
-
-    if lines_printed < body_height:
-        for _ in range(body_height - lines_printed):
-            renderer.println()
-
-
-def display_page(
-    stream: Iterable[tuple[Presentation, str | CodePoint | CodePointSequence]],
-    renderer: Renderer,
-    ucd: UnicodeCharacterDatabase,
-    *,
-    legend: None | str,
-    column_count: int,
-    body_height: int,
-    in_grid: bool,
-) -> None:
-    if in_grid:
-        body = [*format_grid_lines(
-            cast(
-                Iterable[tuple[Presentation, CodePoint | CodePointSequence]],
-                stream,
-            ),
-            column_count,
-            renderer,
-            ucd,
-        )]
-    else:
-        body = [*format_lines(stream, renderer, ucd)]
-
-    if renderer.is_interactive:
-        actual_body_height = len(body)
-        if actual_body_height < body_height:
-            body.extend([''] * (body_height - actual_body_height))
-
-    page = '\n'.join(itertools.chain([] if legend is None else [legend], body))
-    renderer.println(page)
 
 
 def display(
@@ -387,6 +345,7 @@ def display(
     *,
     incrementally: bool = False,
     in_grid: bool = False,
+    timed: bool = False,
     read_action: Callable[[Renderer], Action] = read_line_action,
 ) -> None:
     data = [*make_presentable(stream, ucd, headings=not in_grid)]
@@ -423,26 +382,32 @@ def display(
             renderer.restore_window_title()
             return
 
-        if incrementally:
-            display_page_incr(
+        if in_grid:
+            emit_grid(
                 data[start:stop],
                 renderer,
                 ucd,
-                legend=legend,
-                body_height=body_height,
-            )
-        else:
-            display_page(
-                data[start:stop],
-                renderer,
-                ucd,
-                legend=legend,
                 column_count=column_count,
-                body_height=body_height,
-                in_grid=in_grid,
+            )
+            blots_printed = stop - start + 1
+            lines_printed = math.ceil(blots_printed / column_count)
+        else:
+            lines_printed = emit_lines(
+                data[start:stop],
+                renderer,
+                ucd,
+                legend=legend,
+                incrementally=incrementally,
+                timed=timed,
             )
 
         if renderer.is_interactive:
+            # We might want to just reposition the cursor...
+            if lines_printed < body_height:
+                for _ in range(body_height - lines_printed):
+                    renderer.newline()
+
+            # Ask user for next action
             action = read_action(renderer)
             if action is Action.TERMINATE:
                 renderer.restore_window_title()

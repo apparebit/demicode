@@ -73,7 +73,8 @@ if KeyPressReader.PLATFORM_SUPPORTED:
 
     def read_key_action(renderer: Renderer, /) -> Action:
         """Read next action using raw standard input."""
-        renderer.print(renderer.faint(_pick_hint(_KEY_HINTS)))
+        renderer.faint(_pick_hint(_KEY_HINTS))
+        renderer.flush()
         with renderer.reader() as reader:
             try:
                 while True:
@@ -85,7 +86,7 @@ if KeyPressReader.PLATFORM_SUPPORTED:
                 return Action.TERMINATE
 
         # Terminate line with key hint after all. Return error-free action.
-        renderer.println()
+        renderer.newline()
         return action
 
 else:
@@ -97,7 +98,8 @@ else:
 def read_line_action(renderer: Renderer, /) -> Action:
     """Read next action using Python's line-oriented input() builtin."""
     try:
-        s = input(renderer.faint(_pick_hint(_LINE_HINTS))).lower()
+        renderer.faint(_pick_hint(_LINE_HINTS))
+        s = input().lower()
     except KeyboardInterrupt:
         return Action.TERMINATE
     if s in ('q', 'quit', 'x', 'exit'):

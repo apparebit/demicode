@@ -6,17 +6,17 @@ from typing import Never
 
 from demicode.render import MalformedEscape, Renderer
 
-def help() -> Never:
-    print('Usage: ./qtty.py csi|esc|osc <argument-string>')
-    print('    For csi, include the final character in the argument string')
-    print('    For osc, the terminating `ESC \\` are automatically appended')
+def help(renderer: Renderer) -> Never:
+    renderer.writeln('Usage: ./qtty.py csi|esc|osc <argument-string>')
+    renderer.writeln('    For csi, include the final character in the argument string')
+    renderer.writeln('    For osc, the terminating `ESC \\` are automatically appended')
     sys.exit(1)
 
 def main() -> None:
-    if len(sys.argv) != 3:
-        help()
-
     renderer = Renderer.new()
+
+    if len(sys.argv) != 3:
+        help(renderer)
 
     _, fn, params = sys.argv
 
@@ -27,7 +27,7 @@ def main() -> None:
     elif fn == 'osc':
         query = '\x1b]'
     else:
-        help()
+        help(renderer)
 
     query += params
 
@@ -35,14 +35,15 @@ def main() -> None:
         query += '\x1b\\'
 
     try:
-        response = str(renderer.query(query))[2:-1].replace('\\x1b', '<ESC>')
-        print(f'Response: {response}')
+        raw_response = renderer._query(query) # type: ignore
+        response = str(raw_response)[2:-1].replace('\\x1b', '<ESC>')
+        renderer.writeln(f'Response: {response}')
     except TimeoutError:
-        print('Query timed out')
+        renderer.writeln('Query timed out')
     except KeyboardInterrupt:
-        print('Query was interrupted')
+        renderer.writeln('Query was interrupted')
     except MalformedEscape:
-        print('Response was malformed')
+        renderer.writeln('Response was malformed')
     except Exception as x:
         traceback.print_exception(x)
 

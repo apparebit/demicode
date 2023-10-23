@@ -11,9 +11,9 @@ from collections.abc import Iterator, Iterable
 from contextlib import ExitStack
 import itertools
 import math
-import time
 from typing import Callable, cast
 
+from .benchmark import Probe
 from .codepoint import CodePoint, CodePointSequence
 from .control import Action, read_line_action
 from .model import Age, General_Category, Presentation
@@ -256,15 +256,14 @@ def emit_lines(
     *,
     legend: None | str,
     incrementally: bool,
-    timed: bool,
+    probe: None | Probe,
 ) -> int:
+    label = Probe.PAGE_LINE_BY_LINE if incrementally else Probe.PAGE_AT_ONCE
     lines_printed = 0
+
     with ExitStack() as stack:
-        if not incrementally:
-            # Buffering may not buy us any performance improvement,
-            # but pages are being rendered without ripples.
-            stack.enter_context(renderer.buffering())
-        start = time.perf_counter_ns() if timed else None
+        if probe:
+            stack.enter_context(probe.measure(label))
 
         if legend is not None:
             renderer.emit_legend(legend)
@@ -298,10 +297,10 @@ def emit_lines(
             renderer.newline()
             lines_printed += 1
 
-        if timed:
-            assert start is not None
-            diff = time.perf_counter_ns() - start
-            renderer.write(f'[{diff:,} ns]  ')
+        renderer.flush()
+
+    if probe:
+        renderer.write(f'[{ probe.latest_reading(label):,} ns]')
 
     return lines_printed
 
@@ -345,13 +344,14 @@ def display(
     *,
     incrementally: bool = False,
     in_grid: bool = False,
-    timed: bool = False,
+    probe: None | Probe = None,
     read_action: Callable[[Renderer], Action] = read_line_action,
 ) -> None:
     data = [*make_presentable(stream, ucd, headings=not in_grid)]
     total_count = len(data)
     start = stop = -1
     action = Action.FORWARD
+    pages_shown = 0
 
     renderer.set_window_title(
         f'[ Demicode {__version__} • Unicode {ucd.version.in_short_format()} ]'
@@ -398,17 +398,28 @@ def display(
                 ucd,
                 legend=legend,
                 incrementally=incrementally,
-                timed=timed,
+                probe=probe,
             )
+        pages_shown += 1
 
         if renderer.is_interactive:
-            # We might want to just reposition the cursor...
+            # Make sure we fill the page with lines
             if lines_printed < body_height:
                 for _ in range(body_height - lines_printed):
                     renderer.newline()
 
-            # Ask user for next action
-            action = read_action(renderer)
+            if probe is None:
+                # Ask user in true interactive mode
+                action = read_action(renderer)
+            elif pages_shown > 1:
+                # Thrash back and forth when timing page rendering
+                action = (
+                    Action.TERMINATE if pages_shown >= probe.required_readings else
+                    Action.FORWARD if action is Action.BACKWARD else
+                    Action.BACKWARD
+                )
+                renderer.newline()
+
             if action is Action.TERMINATE:
                 renderer.restore_window_title()
                 return

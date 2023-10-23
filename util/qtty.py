@@ -1,8 +1,11 @@
 #!.venv/bin/python
 
+from pathlib import Path
 import sys
 import traceback
 from typing import Never
+
+sys.path.insert(0, str(Path.cwd()))
 
 from demicode.render import MalformedEscape, Renderer
 
@@ -35,7 +38,7 @@ def main() -> None:
         query += '\x1b\\'
 
     try:
-        raw_response = renderer._query(query) # type: ignore
+        raw_response = renderer.query(query)
         response = str(raw_response)[2:-1].replace('\\x1b', '<ESC>')
         renderer.writeln(f'Response: {response}')
     except TimeoutError:

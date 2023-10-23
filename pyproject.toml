@@ -39,7 +39,7 @@ show_error_codes = true
 #pretty = true
 
 [tool.pyright]
-include = ["demicode/*.py", "test/*.py", "qtty.py", "runtest.py"]
+include = ["demicode/*.py", "test/*.py", "util/*.py", "runtest.py"]
 typeCheckingMode = "strict"
 venv = ".venv"
 pythonVersion = "3.11"

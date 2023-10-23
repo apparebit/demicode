@@ -315,7 +315,7 @@ class Renderer:
         them, i.e., just before building the next page to display.
         """
         if self.is_interactive:
-            width, self._height = os.get_terminal_size()
+            width, self._height = os.get_terminal_size(self._output.fileno())
             self._width = min(width, self.MAX_WIDTH)
         else:
             self._height = 30

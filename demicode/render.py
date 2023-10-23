@@ -157,7 +157,7 @@ class KeyPressReader(Iterator[bytes], metaclass=ABCMeta):
         consumes the input byte by byte.
         """
 
-    ESCAPE_TIMEOUT = 0.2
+    ESCAPE_TIMEOUT = 0.5
 
     def read_escape(self) -> bytes:
         """
@@ -329,7 +329,8 @@ class Renderer:
     def width(self) -> int:
         return self._width
 
-    def _query(self, text: str) -> bytes:
+    def query(self, query: str) -> bytes:
+        """Perform the query (without escape character)."""
         raise NotImplementedError()
 
     def get_position(self) -> None | tuple[int, int]:
@@ -472,17 +473,17 @@ class StyledRenderer(Renderer):
             self._output.write(f'{_OSC}0;{_ST}{_CSI}23;0t')
             self._output.flush()
 
-    def _query(self, text: str) -> bytes:
-        if not text.startswith('\x1B'):
-            raise ValueError(f'query {text} is not an escape sequence')
+    def query(self, query: str) -> bytes:
+        if not query.startswith('\x1B'):
+            query = f'\x1B{query}'
         with self.reader() as reader:
-            self._output.write(text)
+            self._output.write(query)
             self._output.flush()
             return reader.read_escape()
 
     def get_position(self) -> None | tuple[int, int]:
         """Get current cursor position. This method flushes output."""
-        response = self._query(f'{_CSI}6n')
+        response = self.query(f'{_CSI}6n')
         if not response.startswith(b'\x1B[') or not response.endswith(b'R'):
             return None
         row, _, column = response[2:-1].partition(b';')

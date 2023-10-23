@@ -15,6 +15,7 @@ import traceback
 from types import TracebackType
 from typing import Callable
 
+from .benchmark import Probe, report_page_rendering, TerminalSizeChecker
 from .codegen import generate_code
 from .codepoint import CodePoint, CodePointSequence
 from .control import read_key_action, read_line_action
@@ -235,7 +236,7 @@ def configure_parser() -> argparse.ArgumentParser:
 
     # ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~
 
-    out_group = parser.add_argument_group(b('control output'))
+    out_group = parser.add_argument_group(b('control presentation'))
     out_group.add_argument(
         '--incrementally', '-i',
         action='store_true',
@@ -284,26 +285,26 @@ def configure_parser() -> argparse.ArgumentParser:
         action='store_true',
         help='use verbose mode to enable instructive logging',
     )
-    out_group.add_argument(
-        '--timed', '-T',
-        action="store_true",
-        help="collect and emit latency for rendering page"
-    )
 
     # ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~
 
-    about_group = parser.add_argument_group(b('about this tool'))
-    about_group.add_argument(
-        '--stats', '-S',
+    about_tool_group = parser.add_argument_group(b('about this tool'))
+    about_tool_group.add_argument(
+        '--inspect-version', '-V',
         action='store_true',
-        help='display summary statistics and exit'
+        help='display the tool version and exit'
     )
-    about_group.add_argument(
-        '--version',
+    about_tool_group.add_argument(
+        '--inspect-latency', '-T',
+        action="store_true",
+        help="determine page rendering latency and exit"
+    )
+    about_tool_group.add_argument(
+        '--inspect-ucd', '-U',
         action='store_true',
-        help='display the package version and exit'
+        help='display UCD statistics and exit'
     )
-    about_group.add_argument(
+    about_tool_group.add_argument(
         '--generate-code',
         action='store_true',
         help='generate Python modules based on Unicode data\nfiles and exit',
@@ -349,12 +350,6 @@ def run(arguments: Sequence[str]) -> int:
 
 
 def process(options: argparse.Namespace, renderer: Renderer) -> int:
-    # ------------------------------------------------------------ Handle version
-    if options.version:
-        renderer.strong(f' demicode {__version__} ')
-        renderer.newline()
-        return 0
-
     # --------------------------------------------------------------- Prepare UCD
     ucd = UnicodeCharacterDatabase(local_cache_directory())
 
@@ -376,16 +371,21 @@ def process(options: argparse.Namespace, renderer: Renderer) -> int:
     if options.ucd_validate:
         ucd.validate()
 
-    # -------------------------------------------------------------- Leverage UCD
-    if options.generate_code:
-        assert ucd.version is not None
-        generate_code(ucd.path)
+    # ------------------------------------------------ Perform tool house keeping
+    if options.inspect_version:
+        renderer.strong(f' demicode {__version__} ')
+        renderer.newline()
         return 0
 
-    if options.stats:
+    if options.inspect_ucd:
         prop_counts = collect_statistics(ucd.path, ucd.version)
         overlap = ucd.count_break_overlap()
         show_statistics(ucd.version, prop_counts, overlap, renderer)
+        return 0
+
+    if options.generate_code:
+        assert ucd.version is not None
+        generate_code(ucd.path)
         return 0
 
     # ------------------------------------------ Determine code points to display
@@ -403,7 +403,7 @@ def process(options: argparse.Namespace, renderer: Renderer) -> int:
         codepoints.append(sorted(ucd.with_keycap))
 
     # Non-standard selections
-    if options.with_arrows:
+    if options.with_arrows or options.inspect_latency:
         codepoints.append(ARROWS)
     if options.with_chevrons:
         codepoints.append(CHEVRONS)
@@ -415,7 +415,7 @@ def process(options: argparse.Namespace, renderer: Renderer) -> int:
         codepoints.append(TASTE_OF_EMOJI)
     if options.with_version_oracle:
         codepoints.append(VERSION_ORACLE)
-    if options.with_curation:
+    if options.with_curation or options.inspect_latency:
         codepoints.append(MAD_DASH)
         codepoints.append(TASTE_OF_EMOJI)
         codepoints.append(LINGCHI)
@@ -436,7 +436,7 @@ def process(options: argparse.Namespace, renderer: Renderer) -> int:
         codepoints.append(
             [cluster.to_singleton() if cluster.is_singleton() else cluster])
 
-    # ---------------------------------- If there's nothing to display, tell user
+    # --------------------------------------- Make sure there is enough to display
     if len(codepoints) == 0:
         raise UserError(dedent("""\
             There are no code points to show.
@@ -444,20 +444,40 @@ def process(options: argparse.Namespace, renderer: Renderer) -> int:
             or with "-h" to see all options.
         """))
 
-    # ------------------------------------------------------- Display code points
-    read_action = read_line_action
-    if KeyPressReader.PLATFORM_SUPPORTED and not options.use_line_input:
-        read_action = read_key_action
+    if options.inspect_latency:
+        codepoints.extend(codepoints)
+        codepoints.extend(codepoints)
 
-    display(
-        itertools.chain.from_iterable(codepoints),
-        renderer,
-        ucd,
-        incrementally=options.incrementally,
-        in_grid=options.in_grid,
-        read_action=read_action,
-        timed=options.timed and not options.in_grid,
+    # ------------------------------------------------------- Display code points
+    incrementally = False if options.inspect_latency else options.incrementally
+    in_grid = False if options.inspect_latency else options.in_grid
+    if options.inspect_latency:
+        probe = Probe(validator=TerminalSizeChecker(renderer.output))
+    else:
+        probe = None
+    read_action = (
+        read_key_action
+        if KeyPressReader.PLATFORM_SUPPORTED and not options.use_line_input
+        else read_line_action
     )
+
+    for _ in range(2):
+        display(
+            itertools.chain.from_iterable(codepoints),
+            renderer,
+            ucd,
+            incrementally=incrementally,
+            in_grid=in_grid,
+            probe=probe,
+            read_action=read_action,
+        )
+
+        if probe is None:
+            break
+        incrementally = True
+
+    if probe:
+        report_page_rendering(probe, renderer)
 
     # ---------------------------------------------------------------------- Done
     return 0

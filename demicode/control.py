@@ -1,21 +1,13 @@
-from enum import Enum
 import time
 
+from .action import Action
 from .render import KeyPressReader, Renderer
 
 
 __all__ = (
-    'Action',
     'read_key_action',
     'read_line_action'
 )
-
-
-class Action(Enum):
-    ERROR = 665
-    BACKWARD = -1
-    TERMINATE = 0
-    FORWARD = 1
 
 
 _KEY_HINTS: tuple[str,...] = (

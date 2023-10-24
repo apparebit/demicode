@@ -449,17 +449,20 @@ def process(options: argparse.Namespace, renderer: Renderer) -> int:
         codepoints.extend(codepoints)
 
     # ------------------------------------------------------- Display code points
-    incrementally = False if options.inspect_latency else options.incrementally
-    in_grid = False if options.inspect_latency else options.in_grid
     if options.inspect_latency:
+        incrementally = False
+        in_grid = False
         probe = Probe(validator=TerminalSizeChecker(renderer.output))
+        read_action = probe.get_page_action
     else:
+        incrementally = options.incrementally
+        in_grid = options.in_grid
         probe = None
-    read_action = (
-        read_key_action
-        if KeyPressReader.PLATFORM_SUPPORTED and not options.use_line_input
-        else read_line_action
-    )
+        read_action = (
+            read_key_action
+            if KeyPressReader.PLATFORM_SUPPORTED and not options.use_line_input
+            else read_line_action
+        )
 
     for _ in range(2):
         display(

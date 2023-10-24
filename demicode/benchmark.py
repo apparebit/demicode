@@ -13,7 +13,7 @@ from .render import Renderer
 
 
 class TerminalSizeChecker:
-    """Validate that terminal size did not change."""
+    """Callable to check that terminal size didn't change on every invocation."""
 
     def __init__(self, output: None | TextIO = None) -> None:
         self._fileno = (output or sys.stdout).fileno()
@@ -30,11 +30,18 @@ class TerminalSizeChecker:
     def __call__(self) -> None:
         width, height = os.get_terminal_size(self._fileno)
         if self._width != width or self._height != height:
-            raise RuntimeError('terminal size has changed')
+            raise AssertionError(
+                f'terminal size changed from {self._width}×{self._height} '
+                f'to {width}×{height}'
+            )
 
 
 class Statistics(NamedTuple):
-    """Statistics for a series of readings."""
+    """
+    Basic statistics over a series of readings. Included quantities are minimum,
+    mean, median (q50), 90th percentile (q90), and maximum. The median and 90th
+    percentile values are *not* interpolated, but measured values.
+    """
 
     min: int|float
     mean: int|float
@@ -43,19 +50,20 @@ class Statistics(NamedTuple):
     max: int|float
 
     @classmethod
-    def of(cls, measurements: Sequence[int | float]) -> 'Statistics':
-        measurements = sorted(measurements)
-        count = len(measurements)
+    def of(cls, readings: Sequence[int | float]) -> 'Statistics':
+        readings = sorted(readings)
+        count = len(readings)
 
-        min = measurements[0]
-        mean = statistics.mean(measurements)
-        q50 = measurements[round(0.5 * count)]
-        q90 = measurements[round(0.9 * count) - 1]
-        max = measurements[-1]
+        min = readings[0]
+        mean = statistics.mean(readings)
+        q50 = readings[round(0.5 * count)]
+        q90 = readings[round(0.9 * count) - 1]
+        max = readings[-1]
 
         return cls(min, mean, q50, q90, max)
 
     def scale(self, factor: float) -> 'Statistics':
+        """Scale all values by dividing them with the factor."""
         return type(self)(
             self.min / factor,
             self.mean / factor,
@@ -67,9 +75,10 @@ class Statistics(NamedTuple):
 
 class Probe:
     """
-    A probe for measuring demicode's latency. It accumulates measurements by
-    label, while also ensuring that the probed environment remains consistent.
-    In particular, it ensures that the terminal size does not change.
+    A probe for measuring latency. The probe accumulates measurements by label,
+    while also ensuring that the probed environment remains consistent. When
+    measuring page rendering latency, the probe should be created with a
+    `TerminalSizeChecker` as validator.
     """
 
     PAGE_LINE_BY_LINE = 'page.line_by_line'
@@ -126,6 +135,7 @@ _TERM_PROGRAM = {
     'Apple_Terminal': 'Terminal.app',
     'Hyper': 'Hyper',
     'iTerm.app': 'iTerm2',
+    'rio': 'Rio',
     'vscode': 'Visual Studio Code',
     'WarpTerminal': 'Warp',
     'WezTerm': 'WezTerm',
@@ -137,6 +147,7 @@ _CF_BUNDLE_IDENTIFIER = {
     'co.zeit.hyper': 'Hyper',
     'com.googlecode.iterm2': 'iTerm2',
     'net.kovidgoyal.kitty': 'Kitty',
+    'com.raphaelamorim.rio': 'Rio',
     'com.apple.Terminal': 'Terminal.app',
     'dev.warp.Warp-Stable': 'Warp',
     'com.github.wez.wezterm': 'WezTerm',

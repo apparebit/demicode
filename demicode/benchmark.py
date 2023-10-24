@@ -9,6 +9,7 @@ import sys
 import time
 from typing import Callable, cast, NamedTuple, Self, TextIO
 
+from .action import Action
 from .render import Renderer
 
 
@@ -94,6 +95,9 @@ class Probe:
         self.validate = validator
         self._readings: dict[str, list[int]] = defaultdict(list)
 
+        self._last_label = ''
+        self._pages: dict[str, tuple[int, Action]] = {}
+
     @property
     def required_readings(self) -> int:
         return self._required_readings
@@ -107,6 +111,7 @@ class Probe:
         finally:
             duration = time.perf_counter_ns() - start
             self._readings[label].append(duration)
+            self._last_label = label
             self.validate()
 
     def latest_reading(self, label: str) -> int:
@@ -126,6 +131,18 @@ class Probe:
 
     def statistics(self, label: str) -> Statistics:
         return Statistics.of(self.all_readings(label))
+
+    def get_page_action(self, renderer: Renderer) -> Action:
+        renderer.newline()
+
+        count, action = self._pages.get(self._last_label, (0, Action.BACKWARD))
+        count += 1
+        if count >= self._required_readings:
+            action = Action.TERMINATE
+        else:
+            action = action.flip()
+        self._pages[self._last_label] = count, action
+        return action
 
 
 # --------------------------------------------------------------------------------------

@@ -351,7 +351,6 @@ def display(
     total_count = len(data)
     start = stop = -1
     action = Action.FORWARD
-    pages_shown = 0
 
     renderer.set_window_title(
         f'[ Demicode {__version__} • Unicode {ucd.version.in_short_format()} ]'
@@ -400,7 +399,6 @@ def display(
                 incrementally=incrementally,
                 probe=probe,
             )
-        pages_shown += 1
 
         if renderer.is_interactive:
             # Make sure we fill the page with lines
@@ -408,18 +406,7 @@ def display(
                 for _ in range(body_height - lines_printed):
                     renderer.newline()
 
-            if probe is None:
-                # Ask user in true interactive mode
-                action = read_action(renderer)
-            elif pages_shown > 1:
-                # Thrash back and forth when timing page rendering
-                action = (
-                    Action.TERMINATE if pages_shown >= probe.required_readings else
-                    Action.FORWARD if action is Action.BACKWARD else
-                    Action.BACKWARD
-                )
-                renderer.newline()
-
+            action = read_action(renderer)
             if action is Action.TERMINATE:
                 renderer.restore_window_title()
                 return

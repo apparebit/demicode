@@ -10,26 +10,31 @@ the upper left corner of the terminal, thus helping hit the target size.
 import os
 import time
 
-SLEEP = 0.5
+SLEEP = 2/3
 
 if __name__ == '__main__':
     try:
+        # 47/1047 won't do since they don't save cursor state.
+        print('\x1b[?1049h', end=None)  # Use alternate buffer
+        print('\x1b[?25l', end=None)  # Hide cursor
+
         block = False
-        print('\x1b[?25l')  # Hide cursor
-
         while True:
-            # Update the width and height
+            # Update state
             width, height = os.get_terminal_size()
-            print(f'\x1b[H\x1b[2J{width:3d} x {height:3d}')
-
-            # Update liveness indicator
             block = not block
             char = '█' if block else ' '
-            print(f'\x1b[2;1H{char}')
 
-            # Take a nap
+            # Display state
+            print(
+                f'\x1b[H\x1b[2J{width:3d} x {height:3d} {char}',
+                end=None
+            )
+
+            # Take nap
             time.sleep(SLEEP)
     except KeyboardInterrupt:
         pass
     finally:
-        print('\x1b[?25h')  # Show cursor
+        print('\x1b[?25h', end=None)  # Show cursor
+        print('\x1b[?1049l', end=None)  # Use regular buffer

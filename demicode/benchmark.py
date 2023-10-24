@@ -11,6 +11,7 @@ from typing import Callable, cast, NamedTuple, Self, TextIO
 
 from .action import Action
 from .render import Renderer
+from .terminal import identify_terminal, termid
 
 
 class TerminalSizeChecker:
@@ -148,58 +149,6 @@ class Probe:
 # --------------------------------------------------------------------------------------
 
 
-_TERM_PROGRAM = {
-    'Apple_Terminal': 'Terminal.app',
-    'Hyper': 'Hyper',
-    'iTerm.app': 'iTerm2',
-    'rio': 'Rio',
-    'vscode': 'Visual Studio Code',
-    'WarpTerminal': 'Warp',
-    'WezTerm': 'WezTerm',
-}
-
-
-_CF_BUNDLE_IDENTIFIER = {
-    'org.alacritty': 'Alacritty',
-    'co.zeit.hyper': 'Hyper',
-    'com.googlecode.iterm2': 'iTerm2',
-    'net.kovidgoyal.kitty': 'Kitty',
-    'com.raphaelamorim.rio': 'Rio',
-    'com.apple.Terminal': 'Terminal.app',
-    'dev.warp.Warp-Stable': 'Warp',
-    'com.github.wez.wezterm': 'WezTerm',
-}
-
-
-def identify_terminal(renderer: Renderer) -> tuple[None | str, None | str]:
-    terminal = os.getenv('TERM_PROGRAM')
-    if terminal is not None:
-        terminal = _TERM_PROGRAM.get(terminal, terminal)
-    if terminal is None:
-        terminal = os.getenv('__CFBundleIdentifier')
-        if terminal is not None:
-            terminal = _CF_BUNDLE_IDENTIFIER.get(terminal, terminal)
-
-    version = os.getenv('TERM_PROGRAM_VERSION')
-    if version is None:
-        try:
-            v = renderer.query('[>q')
-        except (NotImplementedError, TimeoutError):
-            v = None
-        if v is not None:
-            v = v[4:-2]
-            if v[-1] == 41:
-                parts = v.rsplit(b'(', maxsplit=1)
-                if len(parts) == 2:
-                    version = parts[1][:-1].decode('ascii')
-            else:
-                parts = v.rsplit(b' ', maxsplit=1)
-                if len(parts) == 2:
-                    version = parts[1].decode('ascii')
-
-    return terminal, version
-
-
 def integral_digits(num: int | float) -> int:
     return math.ceil(math.log10(num + 1)) if num >= 1.0 else 0
 
@@ -233,9 +182,7 @@ def report_page_rendering(probe: Probe, renderer: Renderer) -> None:
     precision = max_digits + max_digits // 3
 
     terminal, terminal_version = identify_terminal(renderer)
-    termid = terminal or 'Unknown Terminal'
-    if terminal_version:
-        termid = f'{termid} {terminal_version}'
+    terminal_id = termid(terminal, terminal_version)
 
     probe.validate()
     checker = cast(TerminalSizeChecker, probe.validate)
@@ -257,7 +204,7 @@ def report_page_rendering(probe: Probe, renderer: Renderer) -> None:
     renderer.writeln('\n')
 
     # Show human-readable report
-    renderer.strong(f'{termid} Rendering {width}×{height} Page')
+    renderer.strong(f'{terminal_id} Rendering {width}×{height} Page')
     renderer.writeln('\n')
 
     renderer.faint(f'         {" ":>12} ')

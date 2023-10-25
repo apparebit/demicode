@@ -25,7 +25,11 @@ _CANONICAL_NAME = {
 }
 
 
-def report_xtversion(renderer: Renderer) -> tuple[None | str, None | str]:
+def report_xtversion(
+    renderer: None | Renderer = None
+) -> tuple[None | str, None | str]:
+    renderer = Renderer.new() if renderer is None else renderer
+
     try:
         response = renderer.query('[>q')
     except (NotImplementedError, TimeoutError):
@@ -52,7 +56,11 @@ def report_xtversion(renderer: Renderer) -> tuple[None | str, None | str]:
     return _CANONICAL_NAME.get(t, t), version.decode('ascii')
 
 
-def identify_terminal(renderer: Renderer) -> tuple[None | str, None | str]:
+def report_terminal_version(
+    renderer: None | Renderer = None
+) -> tuple[None | str, None | str]:
+    renderer = Renderer.new() if renderer is None else renderer
+
     terminal = os.getenv('TERM_PROGRAM')
     if terminal is not None:
         terminal = _CANONICAL_NAME.get(terminal, terminal)
@@ -72,12 +80,16 @@ def identify_terminal(renderer: Renderer) -> tuple[None | str, None | str]:
     return terminal, version
 
 
-def termid(terminal: None | str, version: None | str) -> str:
+def join_terminal_version(terminal: None | str, version: None | str) -> str:
     if terminal is None:
         return 'Unknown Terminal'
     if version is None:
         return terminal
     return f'{terminal} ({version})'
+
+
+def termid(renderer: None | Renderer = None) -> str:
+    return join_terminal_version(*report_terminal_version(renderer))
 
 
 if __name__ == '__main__':
@@ -97,5 +109,5 @@ if __name__ == '__main__':
 
     renderer = Renderer.new()
     if show_all:
-        print(termid(*report_xtversion(renderer)))
-    print(termid(*identify_terminal(renderer)))
+        print(join_terminal_version(*report_xtversion(renderer)))
+    print(join_terminal_version(*report_terminal_version(renderer)))

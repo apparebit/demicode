@@ -11,7 +11,7 @@ from typing import Callable, cast, NamedTuple, Self, TextIO
 
 from .action import Action
 from .render import Renderer
-from .terminal import identify_terminal, termid
+from .terminal import join_terminal_version, report_terminal_version
 
 
 class TerminalSizeChecker:
@@ -181,8 +181,8 @@ def report_page_rendering(probe: Probe, renderer: Renderer) -> None:
     max_digits = integral_digits(max(*at_once, *line_by_line))
     precision = max_digits + max_digits // 3
 
-    terminal, terminal_version = identify_terminal(renderer)
-    terminal_id = termid(terminal, terminal_version)
+    terminal, terminal_version = report_terminal_version(renderer)
+    terminal_id = join_terminal_version(terminal, terminal_version)
 
     probe.validate()
     checker = cast(TerminalSizeChecker, probe.validate)

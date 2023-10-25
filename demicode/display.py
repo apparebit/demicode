@@ -352,61 +352,58 @@ def display(
     start = stop = -1
     action = Action.FORWARD
 
-    renderer.set_window_title(
+    with renderer.window_title(
         f'[ Demicode {__version__} • Unicode {ucd.version.in_short_format()} ]'
-    )
+    ):
+        while True:
+            renderer.refresh()
 
-    while True:
-        renderer.refresh()
+            legend = None if in_grid else format_legend(renderer)
+            legend_height = 0 if legend is None else len(legend.splitlines())
+            body_height = renderer.height - legend_height - 1
+            column_count = (renderer.width - 2) // GRID_COLUMN_WIDTH if in_grid else 1
+            display_count = body_height * column_count
 
-        legend = None if in_grid else format_legend(renderer)
-        legend_height = 0 if legend is None else len(legend.splitlines())
-        body_height = renderer.height - legend_height - 1
-        column_count = (renderer.width - 2) // GRID_COLUMN_WIDTH if in_grid else 1
-        display_count = body_height * column_count
+            if action is Action.FORWARD:
+                start = stop + 1
+                stop = min(start + display_count, total_count)
+                done = start >= total_count
+            elif action is Action.BACKWARD:
+                stop = start - 1
+                start = max(0, stop - display_count)
+                done = stop <= 0
+            else:
+                stop = min(start + display_count, total_count)
+                done = start >= total_count
 
-        if action is Action.FORWARD:
-            start = stop + 1
-            stop = min(start + display_count, total_count)
-            done = start >= total_count
-        elif action is Action.BACKWARD:
-            stop = start - 1
-            start = max(0, stop - display_count)
-            done = stop <= 0
-        else:
-            stop = min(start + display_count, total_count)
-            done = start >= total_count
-
-        if done:
-            renderer.restore_window_title()
-            return
-
-        if in_grid:
-            emit_grid(
-                data[start:stop],
-                renderer,
-                ucd,
-                column_count=column_count,
-            )
-            blots_printed = stop - start + 1
-            lines_printed = math.ceil(blots_printed / column_count)
-        else:
-            lines_printed = emit_lines(
-                data[start:stop],
-                renderer,
-                ucd,
-                legend=legend,
-                incrementally=incrementally,
-                probe=probe,
-            )
-
-        if renderer.is_interactive:
-            # Make sure we fill the page with lines
-            if lines_printed < body_height:
-                for _ in range(body_height - lines_printed):
-                    renderer.newline()
-
-            action = read_action(renderer)
-            if action is Action.TERMINATE:
-                renderer.restore_window_title()
+            if done:
                 return
+
+            if in_grid:
+                emit_grid(
+                    data[start:stop],
+                    renderer,
+                    ucd,
+                    column_count=column_count,
+                )
+                blots_printed = stop - start + 1
+                lines_printed = math.ceil(blots_printed / column_count)
+            else:
+                lines_printed = emit_lines(
+                    data[start:stop],
+                    renderer,
+                    ucd,
+                    legend=legend,
+                    incrementally=incrementally,
+                    probe=probe,
+                )
+
+            if renderer.is_interactive:
+                # Make sure we fill the page with lines
+                if lines_printed < body_height:
+                    for _ in range(body_height - lines_printed):
+                        renderer.newline()
+
+                action = read_action(renderer)
+                if action is Action.TERMINATE:
+                    return

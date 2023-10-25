@@ -279,13 +279,9 @@ class Renderer:
     # ----------------------------------------------------------------------------------
     # Terminal Decodation
 
-    def set_window_title(self, text: str) -> None:
-        """Save window title and then update it."""
-        pass
-
-    def restore_window_title(self) -> None:
-        """Restore window title saved before setting it."""
-        pass
+    @contextmanager
+    def window_title(self, text: str) -> Iterator[None]:
+        yield
 
     # ----------------------------------------------------------------------------------
     # Terminal Properties Including Size
@@ -461,17 +457,18 @@ class StyledRenderer(Renderer):
     def has_style(self) -> bool:
         return True
 
-    def set_window_title(self, text: str) -> None:
-        """Save and update window title. This method flushes output."""
+    @contextmanager
+    def window_title(self, text: str) -> Iterator[None]:
+        """Update the window title."""
         if self.is_interactive:
             self._output.write(f'{_CSI}22;0t{_OSC}0;{text}{_ST}')
             self._output.flush()
-
-    def restore_window_title(self) -> None:
-        """Restore previously saved window title. This method flushes output."""
-        if self.is_interactive:
-            self._output.write(f'{_OSC}0;{_ST}{_CSI}23;0t')
-            self._output.flush()
+        try:
+            yield
+        finally:
+            if self.is_interactive:
+                self._output.write(f'{_OSC}0;{_ST}{_CSI}23;0t')
+                self._output.flush()
 
     def query(self, query: str) -> bytes:
         if not query.startswith('\x1B'):

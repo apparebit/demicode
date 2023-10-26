@@ -16,14 +16,16 @@ YELLOW = f'{CSI}38;5;220m'
 BLUE = f'{CSI}38;5;63m'
 RESET = f'{CSI}0m'
 INDENT = '    '
+PREFIX = '\u2E3B\u2A0C{sep}\U0001F9D1\u200D\U0001F4BB'
+
 
 def parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser('badterm')
+    parser = argparse.ArgumentParser('badterm', 'usage: badterm [-hsx123]')
     parser.add_argument('-1', action='store_const', const=1, default=0, dest='spaces')
     parser.add_argument('-2', action='store_const', const=2, dest='spaces')
     parser.add_argument('-3', action='store_const', const=3, dest='spaces')
-    parser.add_argument('-4', action='store_const', const=4, dest='spaces')
     parser.add_argument('-s', action='store_true', dest='star')
+    parser.add_argument('-x', action='store_true', dest='extra')
     return parser
 
 
@@ -34,7 +36,10 @@ def main() -> None:
     star = '\uFF0A'
     if options.star:
         star = f'{BLUE}█{RESET}{star}{BLUE}█{RESET}'
-    payload = f'\u2E3B\u2A0C{sep}\U0001F9D1\u200D\U0001F4BB{star}𝔽𝕚𝕩𝕖𝕕-𝐖𝐢𝐝𝐭𝐡'
+    if options.extra:
+        payload = ''.join(PREFIX.format(sep=sep) for sep in ('', ' ', '  '))
+    else:
+        payload = f'\u2E3B\u2A0C{sep}\U0001F9D1\u200D\U0001F4BB{star}𝔽𝕚𝕩𝕖𝕕-𝐖𝐢𝐝𝐭𝐡'
 
     WIDTH = 29
 

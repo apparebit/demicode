@@ -9,7 +9,7 @@ keywords= ["Unicode", "fixed-width", "East Asian width", "wcwidth", "hot mess"]
 dynamic = ["version"]
 
 [project.optional-dependencies]
-dev = ["mypy", "flit"]
+dev = ["pyright", "flit"]
 
 [project.urls]
 repository = "https://github.com/apparebit/demicode"
@@ -20,6 +20,12 @@ demicode = "demicode.__main__:main"
 [build-system]
 requires = ["flit_core >=3.4"]
 build-backend = "flit_core.buildapi"
+
+[tool.pyright]
+include = ["demicode/*.py", "test/*.py", "util/*.py", "runtest.py"]
+typeCheckingMode = "strict"
+venv = ".venv"
+pythonVersion = "3.11"
 
 [tool.mypy]
 python_version = "3.11"
@@ -37,9 +43,3 @@ show_error_context = true
 show_column_numbers = true
 show_error_codes = true
 #pretty = true
-
-[tool.pyright]
-include = ["demicode/*.py", "test/*.py", "util/*.py", "runtest.py"]
-typeCheckingMode = "strict"
-venv = ".venv"
-pythonVersion = "3.11"

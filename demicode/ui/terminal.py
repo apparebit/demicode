@@ -1,4 +1,5 @@
 import os
+import subprocess
 import sys
 from typing import TextIO
 
@@ -26,7 +27,14 @@ _CANONICAL_NAME = {
 }
 
 
-def report_xtversion(
+def inspect_env_variables() -> tuple[None | str, None | str]:
+    if (terminal := os.getenv('TERM_PROGRAM')):
+        terminal = _CANONICAL_NAME.get(terminal, terminal)
+    version = os.getenv('TERM_PROGRAM_VERSION')
+    return terminal or None, version or None
+
+
+def inspect_xtversion(
     renderer: None | Renderer = None
 ) -> tuple[None | str, None | str]:
     renderer = Renderer.new() if renderer is None else renderer
@@ -35,9 +43,7 @@ def report_xtversion(
         response = renderer.query('[>q')
     except (NotImplementedError, TimeoutError):
         return None, None
-    if not response.startswith(b'\x1BP>|'):
-        return None, None
-    if not response.endswith(b'\x1B\\'):
+    if not response.startswith(b'\x1BP>|') or not response.endswith(b'\x1B\\'):
         return None, None
 
     response = response[4:-2]
@@ -57,28 +63,49 @@ def report_xtversion(
     return _CANONICAL_NAME.get(t, t), version.decode('ascii')
 
 
+def inspect_bundle_id() -> tuple[None | str, None | str]:
+    if not (bundle_id := os.getenv('__CFBundleIdentifier')):
+        return None, None
+    terminal = _CANONICAL_NAME.get(bundle_id, bundle_id)
+
+    paths = subprocess.run(
+        ["mdfind", f"kMDItemCFBundleIdentifier == '{bundle_id}'"],
+        stdout=subprocess.PIPE,
+        encoding='utf8',
+    ).stdout.splitlines()
+
+    if not paths:
+        return terminal, None
+
+    for path in paths:
+        version = subprocess.run(
+            ['mdls', '-name', 'kMDItemVersion', '-raw', path],
+            stdout=subprocess.PIPE,
+            encoding='utf8',
+        ).stdout
+        if version:
+            return terminal, version
+
+    return terminal, None
+
+
 def report_terminal_version(
     renderer: None | Renderer = None
 ) -> tuple[None | str, None | str]:
+    t1, v1 = inspect_env_variables()
+    if t1 and v1:
+        return t1, v1
+
     renderer = Renderer.new() if renderer is None else renderer
+    t2, v2 = inspect_xtversion(renderer)
+    if t2 and v2:
+        return t2, v2
 
-    terminal = os.getenv('TERM_PROGRAM')
-    if terminal is not None:
-        terminal = _CANONICAL_NAME.get(terminal, terminal)
+    t3, v3 = inspect_bundle_id()
+    if t3 and v3:
+        return t3, v3
 
-    if terminal is None:
-        terminal = os.getenv('__CFBundleIdentifier')
-        if terminal is not None:
-            terminal = _CANONICAL_NAME.get(terminal, terminal)
-
-    version = os.getenv('TERM_PROGRAM_VERSION')
-
-    if terminal is None or version is None:
-        t, v = report_xtversion(renderer)
-        terminal = terminal or t
-        version = version or v
-
-    return terminal, version
+    return t1 or t2 or t3 or None, v1 or v2 or v3 or None
 
 
 def join_terminal_version(terminal: None | str, version: None | str) -> str:
@@ -109,10 +136,16 @@ if __name__ == '__main__':
             sys.exit(1)
 
     renderer = Renderer.new()
+    idn = join_terminal_version(*report_terminal_version(renderer))
     if show_all:
-        print(join_terminal_version(*report_xtversion(renderer)))
-    print(join_terminal_version(*report_terminal_version(renderer)))
-
+        id1 = join_terminal_version(*inspect_env_variables())
+        id2 = join_terminal_version(*inspect_xtversion(renderer))
+        id3 = join_terminal_version(*inspect_bundle_id())
+        width = max(len(id1), len(id2), len(id3), len(idn)) + 8
+        print(f'   env: {id1}\n  ansi: {id2}\nbundle: {id3}\n{"─" * width}')
+        print(f' combo: {idn}')
+    else:
+        print(idn)
 
 # --------------------------------------------------------------------------------------
 

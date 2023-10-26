@@ -1,6 +1,7 @@
 from enum import Enum
 
 class Action(Enum):
+    """A pager action: Go Forward or Backward; Done; or User Error."""
     ERROR = 665
     BACKWARD = -1
     TERMINATE = 0

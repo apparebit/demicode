@@ -40,7 +40,7 @@ def _parse_line(
 
     if len(more_codepoints) == 0:
         start, _, stop = first_codepoint.partition('..')
-        if stop:
+        if stop and stop != start:
             return CodePointRange.of(start, stop), tuple(properties)
         else:
             return CodePoint.of(start), tuple(properties)

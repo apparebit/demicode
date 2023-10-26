@@ -2,7 +2,7 @@
   {
     "terminal": {
       "name": "Alacritty",
-      "version": null
+      "version": "0.12.2"
     },
     "page-size": {
       "width": 120,
@@ -54,7 +54,7 @@
   {
     "terminal": {
       "name": "iTerm2",
-      "version": "3.5.0beta10"
+      "version": "3.5.0b10"
     },
     "page-size": {
       "width": 120,
@@ -132,7 +132,7 @@
   {
     "terminal": {
       "name": "Terminal.app",
-      "version": "447"
+      "version": "2.13"
     },
     "page-size": {
       "width": 120,
@@ -184,7 +184,7 @@
   {
     "terminal": {
       "name": "Warp",
-      "version": "v0.2023.10.17.08.03.stable_01"
+      "version": "2023-10-17"
     },
     "page-size": {
       "width": 120,
@@ -210,7 +210,7 @@
   {
     "terminal": {
       "name": "WezTerm",
-      "version": "20230712-072601-f4abf8fd"
+      "version": "2023-07-12"
     },
     "page-size": {
       "width": 120,

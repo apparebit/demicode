@@ -3,40 +3,17 @@ from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 import json
 import math
-import os
 import statistics
-import sys
 import time
-from typing import Callable, cast, NamedTuple, Self, TextIO
+from typing import Callable, cast, NamedTuple, Self
 
-from .action import Action
-from .render import Renderer
-from .terminal import join_terminal_version, report_terminal_version
-
-
-class TerminalSizeChecker:
-    """Callable to check that terminal size didn't change on every invocation."""
-
-    def __init__(self, output: None | TextIO = None) -> None:
-        self._fileno = (output or sys.stdout).fileno()
-        self._width, self._height = os.get_terminal_size(self._fileno)
-
-    @property
-    def width(self) -> int:
-        return self._width
-
-    @property
-    def height(self) -> int:
-        return self._height
-
-    def __call__(self) -> None:
-        width, height = os.get_terminal_size(self._fileno)
-        if self._width != width or self._height != height:
-            raise AssertionError(
-                f'terminal size changed from {self._width}×{self._height} '
-                f'to {width}×{height}'
-            )
-
+from .ui.action import Action
+from .ui.render import Renderer
+from .ui.terminal import (
+    join_terminal_version,
+    report_terminal_version,
+    TerminalSizeChecker,
+)
 
 class Statistics(NamedTuple):
     """

@@ -15,10 +15,10 @@ from typing import Callable, cast
 
 from .benchmark import Probe
 from .codepoint import CodePoint, CodePointSequence
-from .control import Action, read_line_action
 from .model import Age, General_Category, Presentation
-from .render import Padding, Renderer
 from .ucd import UnicodeCharacterDatabase
+from .ui.control import Action, read_line_action
+from .ui.render import Padding, Renderer
 from . import __version__
 
 

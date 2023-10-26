@@ -5,7 +5,7 @@ import sys
 
 sys.path.insert(0, '')
 
-from demicode.terminal import report_terminal_version
+from demicode.ui.terminal import report_terminal_version
 
 
 CSI = '\x1b['

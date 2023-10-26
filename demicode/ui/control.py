@@ -1,7 +1,7 @@
 import time
 
-from .action import Action
 from .render import KeyPressReader, Renderer
+from .action import Action
 
 
 __all__ = (

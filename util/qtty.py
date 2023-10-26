@@ -7,7 +7,7 @@ from typing import Never
 
 sys.path.insert(0, str(Path.cwd()))
 
-from demicode.render import MalformedEscape, Renderer
+from demicode.ui.render import MalformedEscape, Renderer
 
 def help(renderer: Renderer) -> Never:
     renderer.writeln('Usage: ./qtty.py csi|esc|osc <argument-string>')

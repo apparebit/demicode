@@ -1,5 +1,6 @@
 import os
 import sys
+from typing import TextIO
 
 from .render import Renderer
 
@@ -111,3 +112,30 @@ if __name__ == '__main__':
     if show_all:
         print(join_terminal_version(*report_xtversion(renderer)))
     print(join_terminal_version(*report_terminal_version(renderer)))
+
+
+# --------------------------------------------------------------------------------------
+
+
+class TerminalSizeChecker:
+    """Callable to check that terminal size didn't change on every invocation."""
+
+    def __init__(self, output: None | TextIO = None) -> None:
+        self._fileno = (output or sys.stdout).fileno()
+        self._width, self._height = os.get_terminal_size(self._fileno)
+
+    @property
+    def width(self) -> int:
+        return self._width
+
+    @property
+    def height(self) -> int:
+        return self._height
+
+    def __call__(self) -> None:
+        width, height = os.get_terminal_size(self._fileno)
+        if self._width != width or self._height != height:
+            raise AssertionError(
+                f'terminal size changed from {self._width}×{self._height} '
+                f'to {width}×{height}'
+            )

@@ -19,8 +19,8 @@ from .model import (
     to_property_name,
     Version,
 )
-from .render import Renderer
 from .ucd import OverlapCounter, UnicodeCharacterDatabase
+from .ui.render import Renderer
 
 
 _PROPERTIES: tuple[PropertyId, ...] = (

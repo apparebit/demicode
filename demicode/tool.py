@@ -18,13 +18,13 @@ from typing import Callable
 from .benchmark import Probe, report_page_rendering, TerminalSizeChecker
 from .codegen import generate_code
 from .codepoint import CodePoint, CodePointSequence
-from .control import read_key_action, read_line_action
 from .display import display
 from .mirror import local_cache_directory
-from .render import KeyPressReader, Renderer, Style
 from .selection import *
 from .statistics import collect_statistics, show_statistics
 from .ucd import UnicodeCharacterDatabase
+from .ui.control import read_key_action, read_line_action
+from .ui.render import KeyPressReader, Renderer, Style
 from . import __version__
 
 

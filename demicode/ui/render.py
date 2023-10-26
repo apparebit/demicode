@@ -24,7 +24,7 @@ import sys
 from typing import Never, TextIO
 
 
-from .codepoint import CodePoint
+from ..codepoint import CodePoint
 from .darkmode import is_darkmode
 
 

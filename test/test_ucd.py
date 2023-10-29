@@ -19,7 +19,7 @@ from demicode.model import (
     Script,
 )
 from demicode.ucd import UnicodeCharacterDatabase
-from demicode.version import FIRST_SUPPORTED_VERSION, KNOWN_UCD_VERSIONS, Version
+from demicode.version import Version
 
 from test.grapheme_clusters import GRAPHEME_CLUSTER_BREAKS
 
@@ -140,11 +140,7 @@ class ClusterBreakVisualizer:
 class TestProperty(unittest.TestCase):
 
     def test_known_versions(self):
-        for raw_version in KNOWN_UCD_VERSIONS:
-            if raw_version < FIRST_SUPPORTED_VERSION:
-                continue
-
-            version = Version(*raw_version)
+        for version in Version.supported():
             with self.subTest(version=version):
                 ucd = UnicodeCharacterDatabase(UCD_PATH, version).prepare()
                 self.assertEqual(ucd.version, version)

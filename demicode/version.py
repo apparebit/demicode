@@ -1,3 +1,4 @@
+from collections.abc import Iterator
 from typing import NamedTuple
 
 
@@ -72,6 +73,12 @@ class Version(NamedTuple):
 
     def __str__(self) -> str:
         return '.'.join(str(c) for c in self)
+
+    @staticmethod
+    def supported() -> 'Iterator[Version]':
+        for version in KNOWN_UCD_VERSIONS:
+            if version >= FIRST_SUPPORTED_VERSION:
+                yield version
 
 
 FIRST_SUPPORTED_VERSION = Version(4, 1, 0)

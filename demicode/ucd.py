@@ -8,6 +8,7 @@ from pathlib import Path
 import re
 from typing import (
     Any,
+    Callable,
     cast,
     Self,
     TypeAlias,
@@ -245,7 +246,7 @@ class UnicodeCharacterDatabase:
     # ----------------------------------------------------------------------------------
     # Prepare, Optimize, Validate
 
-    def prepare(self) -> Self:
+    def prepare(self, tick: None | Callable[[], None] = None) -> Self:
         """
         Prepare the UCD for active use. This method locks in the current
         configuration and locally mirrors any required UCD as well as CLDR
@@ -254,7 +255,7 @@ class UnicodeCharacterDatabase:
         if self._is_prepared:
             return self
 
-        self._mirror = mirror = Mirror.setup(self._path)
+        self._mirror = mirror = Mirror.setup(self._path, tick)
         self._version = version = self._version or mirror.version
         mirror.check_version(version)
         logger.info('mirroring UCD files at "%s"', mirror.root)

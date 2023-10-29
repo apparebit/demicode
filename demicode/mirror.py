@@ -105,7 +105,11 @@ class CLDR:
         archive.unlink()
         return path
 
-    def retrieve_all(self, root: Path) -> Iterator[Path]:
+    def retrieve_all(
+        self,
+        root: Path,
+        tick: None | Callable[[], None] = None
+    ) -> None:
         for url, member, stem in (
             (
                 self.annotations,
@@ -119,7 +123,9 @@ class CLDR:
             )
         ):
             if not (root / self.filename(stem, '.json')).is_file():
-                yield self.retrieve(url, member, root, stem)
+                self.retrieve(url, member, root, stem)
+                if tick:
+                    tick()
 
 
 # --------------------------------------------------------------------------------------
@@ -250,13 +256,10 @@ class Mirror:
     def retrieve_data(
         self, previous: 'Mirror', tick: None | Callable[[], None] = None
     ) -> Self:
-        tick = tick or (lambda: None)
         if self.version != previous.version:
-            for _ in self.files.retrieve_version(self.version):
-                tick()
+            self.files.retrieve_version(self.version, tick)
         if self.cldr.version != previous.cldr.version:
-            for _ in self.cldr.retrieve_all(self.root):
-                tick()
+            self.cldr.retrieve_all(self.root, tick)
         return dataclasses.replace(self, timestamp=datetime.now(timezone.utc))
 
     def save_manifest(self) -> Self:
@@ -272,7 +275,13 @@ class Mirror:
         mirror: None | str | Path = None,
         tick: None | Callable[[], None] = None
     ) -> Self:
-        mirror = _get_app_cache() if mirror is None else Path(mirror)
+        if mirror is None:
+            if os.getenv('CI') == 'true':
+                mirror = Path.cwd()
+            else:
+                mirror = _get_app_cache() / 'demicode' / 'ucd'
+        else:
+            mirror = Path(mirror)
 
         previous = cls.from_manifest(mirror)
         if previous.younger_than(timedelta(weeks=1)):
@@ -362,24 +371,31 @@ class FileManager:
 
     def retrieve(self, url: str, path: Path) -> Path:
         _logger.info('retrieving UCD file from "%s" to "%s"', url, path)
-        path.parent.mkdir(exist_ok=True)
+        path.parent.mkdir(parents=True, exist_ok=True)
         with _make_request(url) as response, open(path, mode='wb') as file:
             shutil.copyfileobj(response, file)
         return path
 
-    def retrieve_version(self, version: None | Version = None) -> Iterator[Path]:
+    def retrieve_version(
+        self,
+        version: None | Version = None,
+        tick: None | Callable[[], None] = None,
+    ) -> None:
         version = version or self.mirror.version
+        tick = tick or (lambda: None)
+
         for filename in _UCD_FILES:
             # Raises upon invalid version
             url = self.url(filename, version)
             if url is not None:
                 path = self.path(filename, version)
                 if not path.is_file():
-                    yield self.retrieve(url, self.path(filename, version))
+                    self.retrieve(url, self.path(filename, version))
+                    tick()
 
-    def retrieve_all(self) -> Iterator[Path]:
+    def retrieve_all(self, tick: None | Callable[[], None] = None) -> None:
         for version in Version.supported():
-            yield from self.retrieve_version(version)
+            self.retrieve_version(version, tick)
 
     @contextmanager
     def data(self, filename: str, version: Version) -> Iterator[IO[str]]:

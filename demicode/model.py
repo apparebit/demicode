@@ -8,12 +8,6 @@ from typing import TypeAlias
 
 from .codepoint import CodePoint, CodePointSequence
 from ._property import *
-from ._version import (
-    FIRST_SUPPORTED_VERSION,
-    KNOWN_UCD_VERSIONS,
-    VersioningError,
-    Version,
-)
 
 
 __all__ = (
@@ -36,16 +30,12 @@ __all__ = (
     'BinaryProperty',
     'CharacterData',
     'Emoji_Sequence',
-    'FIRST_SUPPORTED_VERSION',
     'Grapheme_Cluster_Break',
     'GCB',
     'GRAPHEME_CLUSTER_PATTERN',
-    'KNOWN_UCD_VERSIONS',
     'Presentation',
     'Property',
     'PropertyId',
-    'Version',
-    'VersioningError',
 )
 
 

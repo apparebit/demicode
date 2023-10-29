@@ -17,10 +17,10 @@ from .model import (
     PropertyId,
     Script,
     to_property_name,
-    Version,
 )
 from .ucd import OverlapCounter, UnicodeCharacterDatabase
 from .ui.render import Renderer
+from .version import Version
 
 
 _PROPERTIES: tuple[PropertyId, ...] = (

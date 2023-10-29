@@ -11,17 +11,15 @@ from demicode.model import (
     Canonical_Combining_Class,
     CharacterData,
     East_Asian_Width,
-    FIRST_SUPPORTED_VERSION,
     General_Category,
     Grapheme_Cluster_Break,
     Indic_Conjunct_Break,
     Indic_Syllabic_Category,
-    KNOWN_UCD_VERSIONS,
     PropertyId,
     Script,
-    Version,
 )
 from demicode.ucd import UnicodeCharacterDatabase
+from demicode.version import FIRST_SUPPORTED_VERSION, KNOWN_UCD_VERSIONS, Version
 
 from test.grapheme_clusters import GRAPHEME_CLUSTER_BREAKS
 

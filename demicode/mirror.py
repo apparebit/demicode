@@ -252,7 +252,7 @@ class Mirror:
     ) -> Self:
         tick = tick or (lambda: None)
         if self.version != previous.version:
-            for _ in self.files.retrieve_all(self.version):
+            for _ in self.files.retrieve_version(self.version):
                 tick()
         if self.cldr.version != previous.cldr.version:
             for _ in self.cldr.retrieve_all(self.root):
@@ -367,7 +367,7 @@ class FileManager:
             shutil.copyfileobj(response, file)
         return path
 
-    def retrieve_all(self, version: None | Version = None) -> Iterator[Path]:
+    def retrieve_version(self, version: None | Version = None) -> Iterator[Path]:
         version = version or self.mirror.version
         for filename in _UCD_FILES:
             # Raises upon invalid version
@@ -376,6 +376,10 @@ class FileManager:
                 path = self.path(filename, version)
                 if not path.is_file():
                     yield self.retrieve(url, self.path(filename, version))
+
+    def retrieve_all(self) -> Iterator[Path]:
+        for version in Version.supported():
+            yield from self.retrieve_version(version)
 
     @contextmanager
     def data(self, filename: str, version: Version) -> Iterator[IO[str]]:

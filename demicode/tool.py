@@ -160,6 +160,11 @@ def configure_parser() -> argparse.ArgumentParser:
         action='store_true',
         help='validate UCD data',
     )
+    ucd_group.add_argument(
+        '--ucd-mirror-all',
+        action='store_true',
+        help='eagerly mirror the files for all known UCD versions'
+    )
 
     # ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~
 
@@ -370,6 +375,8 @@ def process(options: argparse.Namespace, renderer: Renderer) -> int:
         ucd.optimize()
     if options.ucd_validate:
         ucd.validate()
+    if options.ucd_mirror_all:
+        ucd.mirror.files.retrieve_all()
 
     # ------------------------------------------------ Perform tool house keeping
     if options.inspect_version:

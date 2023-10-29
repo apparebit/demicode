@@ -404,6 +404,10 @@ class Renderer:
     def beep(self) -> None:
         pass
 
+    def tick(self) ->  None:
+        """Visibly track progress for long-running, interactive tasks."""
+        pass
+
     # ----------------------------------------------------------------------------------
     # Output
 
@@ -522,9 +526,14 @@ class StyledRenderer(Renderer):
     def emit_error(self, text: str) -> None:
         """Emit the error text. This method flushes output."""
         self._output.write(f'{self._theme.error}{text}{Style.RESET}')
-        self._output.flush
+        self._output.flush()
 
     def beep(self) -> None:
         """Ring the terminal's bell. This method flushes output."""
         self._output.write('\a')
         self._output.flush()
+
+    def tick(self) -> None:
+        if self.is_interactive:
+            self._output.write('•')
+            self._output.flush()

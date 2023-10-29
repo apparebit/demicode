@@ -1,328 +1,391 @@
-"""
-Support for mirroring Unicode data on the local machine.
-
-This module contains the logic for discovering the latest versions of the
-Unicode Character Database (UCD) and the Common Locale Data Repository (CLDR)
-and for downloading necessary files from both. It also mirrors files from the
-Unicode Emoji standard. By default, the local mirror uses the operating system's
-directory for application caches.
-
-This module downloads UCD and Unicode Emoji files from Unicode's servers at
-https://www.unicode.org/Public/. It downloads CLDR data in JSON format through
-the Unicode Consortium's official distribution at https://registry.npmjs.org.
-The local cache directory contains `latest-ucd-version.txt` and
-`latest-cldr-version.txt`, which store the most recent version of the UCD and
-CLDR. This module uses each file's last modified time to throttle server
-accesses, checking for new versions only after a week.
-
-To accommodate more than one Unicode version, the local mirror organizes
-downloaded files into subdirectories named after the Unicode version. It does
-not maintain nested subdirectories as found in the UCD.
-
-Files from the Unicode Emoji standard are not stored separately but with the
-corresponding UCD files. The `demicode.model` module implements the version
-logic equating Unicode 8.0 with Emoji 1.0, 9.0 with E3.0, and 10.0 with E5.0.
-Starting with Unicode 11.0, Unicode Emoji are released on the same schedule and
-use the same version numbers. Starting with Unicode 13.0, the UCD includes
-several emoji files that were previously part of the Unicode Emoji files.
-
-Since demicode only requires two CLDR files and only for the names of emoji
-sequences, the local mirror keeps only the latest version of these two files as
-`annotations1.json` and `annotations2.json` in the cache directory.
-"""
 from collections.abc import Iterator
 from contextlib import contextmanager
+import dataclasses
+from datetime import datetime, timedelta, timezone
+from io import StringIO
 import json
 import logging
 import os
 from pathlib import Path
 import re
-import sys
 import shutil
-import tarfile as tar
-import time
-from typing import Any, cast, IO, Literal, overload
+import sys
+import tarfile
+from typing import Any, Callable, cast, IO, Self
 from urllib.request import Request, urlopen
 
-
-from .model import Version, VersioningError
 from . import __version__
+from .version import Version, VersionError
 
 
-logger = logging.getLogger(__name__)
+_logger = logging.getLogger(__name__)
 
 
-_USER_AGENT = (
+_HTTP_USER_AGENT = (
     f'demicode/{__version__} (https://github.com/apparebit/demicode) '
     f'Python/{".".join(str(v) for v in sys.version_info[:3])}'
 )
+_HTTP_CLDR_ACCEPT = (
+    'application/vnd.npm.install-v1+json; q=1.0, application/json; q=0.8'
+)
 
-def request_for(url: str, **headers: str) -> Request:
-    """
-    Build a request for the given URL and headers. By default, this function
-    only ensures a User-Agent that appropriately discloses this tool.
-    """
-    return Request(url, None, {'User-Agent': _USER_AGENT} | headers)
+
+def _make_request(url: str, **headers: str) -> Any:
+    """Request the resource with the given URL and return the response."""
+    return urlopen(Request(url, None, {'User-Agent': _HTTP_USER_AGENT} | headers))
 
 
 # --------------------------------------------------------------------------------------
-# UCD
 
 
-_AUXILIARY_FILES = ('GraphemeBreakProperty.txt', 'GraphemeBreakTest.txt')
-_EXTRACTED_FILES = (
-    'DerivedCombiningClass.txt',
-    'DerivedGeneralCategory.txt'
-)
-_CORE_EMOJI_FILES = ('emoji-data.txt', 'emoji-variation-sequences.txt')
-_ALSO_EMOJI_FILES = ('emoji-sequences.txt', 'emoji-test.txt', 'emoji-zwj-sequences.txt')
+@dataclasses.dataclass(frozen=True, slots=True)
+class CLDR:
+    version: Version
+    annotations: str
+    derived_annotations: str
 
-@overload
-def ucd_url_of(file: Literal['ReadMe.txt'], version: Literal[None] = None) -> str:
-    ...
-@overload
-def ucd_url_of(file: str, version: Version) -> str:
-    ...
-def ucd_url_of(file: str, version: None | Version = None) -> str:
-    """
-    Get the URL for the given UCD file and version.
+    @staticmethod
+    def retrieve_metadata(url: str) -> tuple[Version, str]:
+        _logger.info('retrieving CLDR annotation metadata from "%s"', url)
+        with _make_request(url, Accept=_HTTP_CLDR_ACCEPT) as response:
+            metadata = json.load(response)
+        version = metadata['dist-tags']['latest']
+        url = metadata['versions'][version]['dist']['tarball']
+        return Version.of(version), url
 
-    If the file is `ReadMe.txt`, the version is ignored since we only ever
-    access that file to determine the latest version. For all other files, the
-    version must be a valid version.
+    @classmethod
+    def from_registry(cls) -> Self:
+        v1, source1 = CLDR.retrieve_metadata(
+            'https://registry.npmjs.org/cldr-annotations-modern')
+        v2, source2 = CLDR.retrieve_metadata(
+            'https://registry.npmjs.org/cldr-annotations-derived-modern')
+        if v1 != v2:
+            raise VersionError('versions of CLDR annotations diverge: {v1} and {v2}')
+        return cls(v1, source1, source2)
 
-    A varying number of emoji data files (depending on version) are not part of
-    the Unicode standard itself but belong to the Unicode Emoji standard, which
-    is also known as [Unicode Technical Standard
-    #51](https://unicode.org/reports/tr51/). With Unicode version 11.0, Unicode
-    Emoji started using the same version number as the Unicode standard. But
-    prior versions need to be mapped, with me preferring the earliest available
-    Unicode Emoji version to approximate release dates. Alas, that works only
-    for Unicode versions 10.0, 9.0, and 8.0, which map to E5.0, E3.0, and E1.0,
-    respectively. Earlier Unicode versions must do without emoji data.
-    """
-    # ReadMe for latest version
-    if file == 'ReadMe.txt':
-        return 'https://www.unicode.org/Public/UCD/latest/ReadMe.txt'
+    @classmethod
+    def from_dict(cls, data: dict[str, str]) -> Self:
+        return cls(
+            Version.of(data['version']),
+            data['annotations'],
+            data['derived-annotations'],
+        )
 
-    assert version is not None
+    def to_dict(self) -> dict[str, object]:
+        return {
+            'version': str(self.version),
+            'annotations': self.annotations,
+            'derived-annotations': self.derived_annotations,
+        }
 
-    # Extended UCD files
-    if file in _AUXILIARY_FILES:
-        path = f'{version}/ucd/auxiliary'
-    elif file in _EXTRACTED_FILES:
-        path = f'{version}/ucd/extracted'
-    elif file in _CORE_EMOJI_FILES and version >= (13, 0, 0):
-        path = f'{version}/ucd/emoji'
+    def filename(self, stem: str, suffix: str) -> str:
+        return f'{stem}-{self.version}{suffix}'
 
-    # Indic_Syllabic_Category was provisional in 6.0, became normative in 7.0.
-    elif (
-        file == 'IndicSyllabicCategory.txt' and version < (6, 0, 0)
-    ):
-        raise VersioningError(f'UCD {version} does not include {file}')
+    def retrieve(self, url: str, member: str, root: Path, stem: str) -> Path:
+        archive = root / self.filename(stem, '.tgz')
+        _logger.info('retrieving CLDR component from "%s" to "%s"', url, archive)
+        with _make_request(url) as response, open(archive, mode='wb') as file:
+            shutil.copyfileobj(response, file)
 
-    # Core UCD files
-    elif file not in _CORE_EMOJI_FILES and file not in _ALSO_EMOJI_FILES:
-        path = f'{version}/ucd'
+        path = root / self.filename(stem, '.json')
+        tmp = path.with_suffix('.next.json')
+        _logger.info('extracting CLDR annotations "%s" to "%s"', member, path)
+        with tarfile.open(archive) as tarball:
+            # Make sure member is a file and not a symlink.
+            member_info = tarball.getmember(member)
+            if not member_info.isfile():
+                raise ValueError(
+                    f'member "{member}" of CLDR component "{url}" is not a file')
 
-    # Unicode Emoji files (which took way too many iterations to get right)
-    else:
-        emoji_version = version.to_emoji()
-        if (
-            file == 'emoji-variation-sequences.txt' and emoji_version <= (4, 0, 0)
-            or file == 'emoji-test.txt' and emoji_version <= (3, 0, 0)
-            or file != 'emoji-data.txt' and emoji_version <= (1, 0, 0)
-            or emoji_version.is_v0()
+            with cast(IO[bytes], tarball.extractfile(member)) as source:
+                with open(tmp, mode='wb') as target:
+                    shutil.copyfileobj(source, target)
+
+        tmp.replace(path)
+        archive.unlink()
+        return path
+
+    def retrieve_all(self, root: Path) -> Iterator[Path]:
+        for url, member, stem in (
+            (
+                self.annotations,
+                'package/annotations/en/annotations.json',
+                'annotations',
+            ),
+            (
+                self.derived_annotations,
+                'package/annotationsDerived/en/annotations.json',
+                'derived-annotations',
+            )
         ):
-            raise VersioningError(
-                f'UCD {version} or Emoji {emoji_version} does not include {file}')
-
-        path = f'emoji/{emoji_version.in_short_format()}'
-
-    return f'https://www.unicode.org/Public/{path}/{file}'
+            if not (root / self.filename(stem, '.json')).is_file():
+                yield self.retrieve(url, member, root, stem)
 
 
-_VERSION_PATTERN = (
+# --------------------------------------------------------------------------------------
+
+
+_UCD_VERSION_PATTERN = (
     re.compile(r'Version (?P<version>\d+[.]\d+[.]\d+) of the Unicode Standard')
 )
 
-_ONE_WEEK = 7 * 24 * 60 * 60
 
-def retrieve_latest_ucd_version(root: Path) -> Version:
-    """
-    Determine the latest UCD version. To avoid network accesses for every
-    invocation of demicode, this method uses the `latest-ucd-version.txt` file
-    in the local mirror directory as a cache and only checks the Unicode
-    Consortium's servers once a week.
-    """
-    stamp_path = root / 'latest-ucd-version.txt'
-    if stamp_path.is_file() and stamp_path.stat().st_mtime + _ONE_WEEK > time.time():
-        try:
-            return Version.of(stamp_path.read_text('utf8')).to_ucd()
-        except ValueError:
-            pass
-
-    url = ucd_url_of('ReadMe.txt')
-    logger.info('retrieving latest UCD version from "%s"', url)
-    with urlopen(request_for(url)) as response:
-        text = response.read().decode('utf8')
-
-    rematch = _VERSION_PATTERN.search(text)
-    if rematch is None:
-        msg = '"ReadMe.txt" in latest UCD elides version number'
-        logger.error(msg)
-        raise ValueError(msg)
-    version = Version.of(rematch.group('version'))
-
-    root.mkdir(parents=True, exist_ok=True)
-    stamp_path.write_text(str(version), encoding='utf8')
-    return version
-
-
-def local_cache_directory() -> Path:
-    """Determine the operating system's cache directory."""
+def _get_app_cache() -> Path:
+    """Determine the operating system's cache directory for applications."""
     platform = sys.platform
     if platform == 'win32':
         raw_path = os.environ.get('LOCALAPPDATA', '')
-        if raw_path:
-            path = Path(raw_path)
-        else:
-            path = Path.home()
+        return Path(raw_path) if raw_path else Path.home()
     elif platform == 'darwin':
-        path = Path(os.path.expanduser('~/Library/Caches'))
+        return Path(os.path.expanduser('~/Library/Caches'))
     else:
         raw_path = os.environ.get('XDG_CACHE_HOME', '').strip()
         if not raw_path:
             raw_path = os.path.expanduser('~/.cache')
-        path = Path(raw_path)
-
-    return Path(path) / 'demicode'
+        return Path(raw_path)
 
 
-def mirror_unicode_data(filename: str, version: Version, cache: Path) -> Path:
-    """
-    Locally mirror a file from the Unicode Character Database. This method
-    raises a `VersioningError` if the requested file does not yet exist for the
-    requested Unicode version. In particular, that may happen for files with
-    emoji data. Callers should be prepared to gracefully recover from this
-    exception.
-    """
-    version_root = cache / str(version)
-    path = version_root / filename
-    if not path.exists():
-        version_root.mkdir(parents=True, exist_ok=True)
-
-        url = ucd_url_of(filename, version=version)
-        logger.info('mirroring UCD file "%s" to "%s"', url, path)
-        with (
-            urlopen(request_for(url)) as response,
-            open(path, mode='wb') as file
-        ):
-            shutil.copyfileobj(response, file)
-    return path
+def _to_manifest(mirror: Path) -> Path:
+    return mirror.with_suffix('.manifest.json')
 
 
-@contextmanager
-def mirrored_data(
-    filename: str, version: Version, cache: Path
-) -> Iterator[Iterator[str]]:
-    """
-    Create a new context manager that provides an iterator over the lines of a
-    locally mirrored UCD file. Since the lines are not buffered, they must be
-    consumed before leaving the context manager's scope. If the UCD version does
-    not include the file, the context manager intercepts the resulting
-    versioning error and offers an empty iterator instead. If the file has not
-    been mirrored before, the context manager retrieves it from the Unicode
-    Consortium's server.
-    """
-    try:
-        path = mirror_unicode_data(filename, version, cache)
-    except VersioningError:
-        logger.info('skipping non-existent "%s" for UCD %s', filename, version)
-        yield iter(())
-        return
-    with open(path, mode='r', encoding='utf8') as data:
-        yield data
+def _check_ucd_version(version: Version) -> None:
+    if not version.is_ucd():
+        raise VersionError(f'v{version} is not a valid UCD version')
+    if not version.is_supported_ucd():
+        raise VersionError(f'v{version} is not supported')
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class Mirror:
+    root: Path
+    version: Version
+    cldr: CLDR
+    timestamp: datetime
+
+    def __post_init__(self) -> None:
+        if self.timestamp.tzinfo is None:
+            raise ValueError(f'timestamp {self.timestamp} has no timezone')
+        offset = timezone.utc.utcoffset(None)
+        if offset.total_seconds() != 0:
+            raise ValueError(f'timestamp {self.timestamp} is {offset} from UTC')
+        if self.version != (0, 0, 0):
+            _check_ucd_version(self.version)
+
+    @property
+    def manifest(self) -> Path:
+        return _to_manifest(self.root)
+
+    @property
+    def files(self) -> 'FileManager':
+        return FileManager(self)
+
+    def younger_than(self, age: timedelta) -> bool:
+        return (datetime.now(timezone.utc) - self.timestamp) < age
+
+    def check_version(self, version: Version) -> None:
+        _check_ucd_version(version)
+        if version > self.version:
+            raise VersionError(f'v{version} is from future')
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> Self:
+        return cls(
+            Path(data['root']),
+            Version.of(data['version']),
+            CLDR.from_dict(data['cldr']),
+            datetime.fromisoformat(data['timestamp'])
+        )
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            'root': str(self.root),
+            'version': str(self.version),
+            'cldr': self.cldr.to_dict(),
+            'timestamp': self.timestamp.isoformat(),
+        }
+
+    @classmethod
+    def from_manifest(cls, root: str | Path) -> Self:
+        root = Path(root)
+        if root.exists() and not root.is_dir():
+            raise ValueError('"root" is not a directory')
+
+        try:
+            with open(_to_manifest(root), mode='rb') as file:
+                return cls.from_dict(json.load(file))
+        except:
+            return cls(
+                root,
+                Version(0, 0, 0),
+                CLDR(Version(0, 0, 0), '', ''),
+                datetime.fromtimestamp(665, tz=timezone.utc),
+            )
+
+    @staticmethod
+    def retrieve_ucd_version() -> Version:
+        url = 'https://www.unicode.org/Public/UCD/latest/ReadMe.txt'
+        _logger.info('retrieving latest UCD version from "%s"', url)
+        with _make_request(url) as response:
+            text = response.read().decode('utf8')
+
+        if (match := _UCD_VERSION_PATTERN.search(text)) is None:
+            msg = 'latest "ReadMe.txt" in UCD elides version number'
+            raise VersionError(msg)
+
+        version = Version.of(match.group('version'))
+        assert version.is_supported_ucd()
+        return version
+
+    @classmethod
+    def from_origin(cls, root: str | Path) -> Self:
+        root = Path(root)
+        return cls(
+            root,
+            Mirror.retrieve_ucd_version(),
+            CLDR.from_registry(),
+            datetime.now(timezone.utc),
+        )
+
+    def retrieve_data(
+        self, previous: 'Mirror', tick: None | Callable[[], None] = None
+    ) -> Self:
+        tick = tick or (lambda: None)
+        if self.version != previous.version:
+            for _ in self.files.retrieve_all(self.version):
+                tick()
+        if self.cldr.version != previous.cldr.version:
+            for _ in self.cldr.retrieve_all(self.root):
+                tick()
+        return dataclasses.replace(self, timestamp=datetime.now(timezone.utc))
+
+    def save_manifest(self) -> Self:
+        tmp = self.manifest.with_suffix('.next.json')
+        with open(tmp, mode='w', encoding='utf8') as file:
+            json.dump(self.to_dict(), file, indent=2)
+        tmp.replace(self.manifest)
+        return self
+
+    @classmethod
+    def setup(
+        cls,
+        mirror: None | str | Path = None,
+        tick: None | Callable[[], None] = None
+    ) -> Self:
+        mirror = _get_app_cache() if mirror is None else Path(mirror)
+
+        previous = cls.from_manifest(mirror)
+        if previous.younger_than(timedelta(weeks=1)):
+            return previous
+
+        current = cls.from_origin(mirror)
+        current = current.retrieve_data(previous, tick)
+        return current.save_manifest()
 
 
 # --------------------------------------------------------------------------------------
-# CLDR, or Let's Reimplement NPM in Python 😳
 
 
-_CLDR_URL1 = 'https://registry.npmjs.org/cldr-annotations-modern'
-_CLDR_URL2 = 'https://registry.npmjs.org/cldr-annotations-derived-modern'
-_CLDR_ACCEPT = 'application/vnd.npm.install-v1+json; q=1.0, application/json; q=0.8'
+_CORE_EMOJI_FILES = ('emoji-data.txt', 'emoji-variation-sequences.txt')
+_EMOJI_FILES = _CORE_EMOJI_FILES + (
+    'emoji-sequences.txt',
+    'emoji-test.txt',
+    'emoji-zwj-sequences.txt',
+)
+_UCD_FILES = _EMOJI_FILES + (
+    'Blocks.txt',
+    'DerivedAge.txt',
+    'DerivedCombiningClass.txt',
+    'DerivedCoreProperties.txt',
+    'DerivedGeneralCategory.txt',
+    'EastAsianWidth.txt',
+    'GraphemeBreakProperty.txt',
+    'IndicSyllabicCategory.txt',
+    'PropertyValueAliases.txt',
+    'PropList.txt',
+    'Scripts.txt',
+    'UnicodeData.txt',
+)
 
 
-def _load_cldr_metadata(url: str) -> dict[str, Any]:
-    logger.info('loading metadata for CLDR annotations from "%s"', url)
-    with urlopen(request_for(url, Accept=_CLDR_ACCEPT)) as response:
-        return json.load(response)
+@dataclasses.dataclass(frozen=True, slots=True)
+class FileManager:
+    mirror: Mirror
 
+    @property
+    def root(self) -> Path:
+        return self.mirror.root
 
-def _load_cldr_annotations(
-    root: Path, metadata: dict[str, Any], version: Version, member: str, path: Path
-) -> None:
-    url = metadata['versions'][str(version)]['dist']['tarball']
-    tarball = root / 'annotations.tgz'
-    logger.info('downloading CLDR annotations from "%s" to "%s"', url, tarball)
-    with (
-        urlopen(request_for(url)) as response,
-        open(tarball, mode='wb') as file
-    ):
-        shutil.copyfileobj(response, file)
+    @property
+    def version(self) -> Version:
+        return self.mirror.version
 
-    # Extract via temporary file so that user isn't left with no file upon failure.
-    tmp = path.with_suffix('.next.json')
+    def url(self, filename: str, version: Version) -> None | str:
+        """
+        Determine the UCD URL for the given file and UCD version. This method
+        raises an exception if the file or version are known to be invalid. It
+        returns `None` if file and version are valid but the file has not been
+        released for the UCD version.
+        """
+        _check_ucd_version(version)
+        if version > self.mirror.version:
+            raise VersionError(f'v{version} has not been released')
+        elif filename in ('GraphemeBreakProperty.txt', 'GraphemeBreakTest.txt'):
+            path = f'{version}/ucd/auxiliary'
+        elif filename in ('DerivedCombiningClass.txt', 'DerivedGeneralCategory.txt'):
+            path = f'{version}/ucd/extracted'
+        elif filename in _CORE_EMOJI_FILES and version >= (13, 0, 0):
+            path = f'{version}/ucd/emoji'
+        elif filename in _EMOJI_FILES:
+            emo_version = version.to_emoji()
+            if (
+                filename == 'emoji-variation-sequences.txt' and emo_version <= (4, 0, 0)
+                or filename == 'emoji-test.txt' and emo_version <= (3, 0, 0)
+                or filename != 'emoji-data.txt' and emo_version <= (1, 0, 0)
+                or emo_version.major == 0
+            ):
+                return None
 
-    logger.info('extracting "%s" to "%s"', member, path)
-    with tar.open(tarball) as archive:
-        member_info = archive.getmember(member)
-        if not member_info.isfile():
-            raise ValueError(
-                f'entry for "{member}" in CLDR archive "{url}" is not a file')
-        with (
-            cast(IO[bytes], archive.extractfile(member_info)) as source,
-            open(tmp, mode='wb') as target
-        ):
-            shutil.copyfileobj(source, target)
-    tmp.replace(path)
+            path = f'emoji/{emo_version.in_short_format()}'
+        elif filename == 'IndicSyllabicCategory.txt' and version < (6, 0, 0):
+            # File was provisional in 6.0 and became normative in 7.0
+            return None
+        elif filename in _UCD_FILES:
+            path = f'{version}/ucd'
+        else:
+            raise ValueError(f'"{filename}" is not a supported UCD file')
 
-    tarball.unlink()
+        return f'https://www.unicode.org/Public/{path}/{filename}'
 
+    def path(self, filename: str, version: Version) -> Path:
+        return self.root / str(version) / filename
 
-def mirror_cldr_annotations(root: Path) -> tuple[Path, Path]:
-    annotations1 = root / 'annotations1.json'
-    annotations2 = root / 'annotations2.json'
-    stamp_path = root / 'latest-cldr-version.txt'
+    def retrieve(self, url: str, path: Path) -> Path:
+        _logger.info('retrieving UCD file from "%s" to "%s"', url, path)
+        path.parent.mkdir(exist_ok=True)
+        with _make_request(url) as response, open(path, mode='wb') as file:
+            shutil.copyfileobj(response, file)
+        return path
 
-    local_version = None
-    if annotations1.is_file() and annotations2.is_file():
-        if stamp_path.is_file():
-            try:
-                local_version = Version.of(stamp_path.read_text('utf8'))
-            except:
-                pass
+    def retrieve_all(self, version: None | Version = None) -> Iterator[Path]:
+        version = version or self.mirror.version
+        for filename in _UCD_FILES:
+            # Raises upon invalid version
+            url = self.url(filename, version)
+            if url is not None:
+                path = self.path(filename, version)
+                if not path.is_file():
+                    yield self.retrieve(url, self.path(filename, version))
 
-        if local_version and stamp_path.stat().st_mtime + _ONE_WEEK > time.time():
-            return annotations1, annotations2
-
-    metadata = _load_cldr_metadata(_CLDR_URL1)
-    latest_version = Version.of(metadata['dist-tags']['latest'])
-    if (
-        annotations1.is_file()
-        and annotations2.is_file()
-        and local_version == latest_version
-    ):
-        stamp_path.write_text(str(latest_version), encoding='utf8')
-        return annotations1, annotations2
-
-    member = 'package/annotations/en/annotations.json'
-    _load_cldr_annotations(root, metadata, latest_version, member, annotations1)
-
-    metadata = _load_cldr_metadata(_CLDR_URL2)
-    member = 'package/annotationsDerived/en/annotations.json'
-    _load_cldr_annotations(root, metadata, latest_version, member, annotations2)
-
-    stamp_path.write_text(str(latest_version), encoding='utf8')
-    return annotations1, annotations2
+    @contextmanager
+    def data(self, filename: str, version: Version) -> Iterator[IO[str]]:
+        path = self.path(filename, version)
+        if not path.is_file():
+            # Raises upon invalid filename or version
+            url = self.url(filename, version)
+            if url is None:
+                yield StringIO()
+                return
+            self.retrieve(url, path)
+        with open(path, mode='r', encoding='utf8') as file:
+            yield file

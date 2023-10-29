@@ -124,10 +124,10 @@ class StyledStream:
         return self.sgr('38;5;88', text)
 
     def failure(self, text: str) -> str:
-        return self.sgr('1;38;5;15;48;5;88', text)
+        return self.sgr('1;38;5;255;48;5;88', text)
 
     def success(self, text: str) -> str:
-        return self.sgr('1;48;5;118', text)
+        return self.sgr('1;48;5;119', text)
 
 
 BrokenTest: TypeAlias = tuple[testunit, str]
@@ -181,8 +181,9 @@ def print_summary(stream: TextIO) -> ResultPrinter:
 
         broken = len(failures) + len(errors)
         stream.write(
-            styled.failure(f'{broken} out of {tests} tests failed!') if broken
-            else styled.success(f'All {tests} tests passed!')
+            styled.failure(styled.pad(f'{broken} out of {tests} tests failed!'))
+            if broken
+            else styled.success(styled.pad(f'All {tests} tests passed!'))
         )
         stream.write('\n\n')
         stream.flush()

@@ -339,11 +339,13 @@ def run(arguments: Sequence[str]) -> int:
     try:
         return process(options, renderer)
     except UserError as x:
+        renderer.newline()
         renderer.emit_error(x.args[0])
         if x.__context__:
             renderer.writeln(f'In particular: {x.__context__.args[0]}')
         return 1
     except Exception as x:
+        renderer.newline()
         renderer.emit_error(
             'Demicode encountered an unexpected error. For details, please see the\n'
             'exception trace below. If you can exclude your system as cause, please\n'
@@ -369,14 +371,14 @@ def process(options: argparse.Namespace, renderer: Renderer) -> int:
         ):
             ucd.use_version(options.ucd_version)
 
-    ucd.prepare()
+    ucd.prepare(renderer.tick)
 
     if options.ucd_optimize:
         ucd.optimize()
     if options.ucd_validate:
         ucd.validate()
     if options.ucd_mirror_all:
-        ucd.mirror.files.retrieve_all()
+        ucd.mirror.files.retrieve_all(renderer.tick)
 
     # ------------------------------------------------ Perform tool house keeping
     if options.inspect_version:

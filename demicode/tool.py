@@ -19,7 +19,6 @@ from .benchmark import Probe, report_page_rendering, TerminalSizeChecker
 from .codegen import generate_code
 from .codepoint import CodePoint, CodePointSequence
 from .display import display
-from .mirror import local_cache_directory
 from .selection import *
 from .statistics import collect_statistics, show_statistics
 from .ucd import UnicodeCharacterDatabase
@@ -351,13 +350,14 @@ def run(arguments: Sequence[str]) -> int:
 
 def process(options: argparse.Namespace, renderer: Renderer) -> int:
     # --------------------------------------------------------------- Prepare UCD
-    ucd = UnicodeCharacterDatabase(local_cache_directory())
+    ucd = UnicodeCharacterDatabase()
 
     if options.ucd_path:
         with user_error(
             ValueError, '"{}" is not a valid UCD directory', options.ucd_path
         ):
             ucd.use_path(Path(options.ucd_path))
+
     if options.ucd_version:
         with user_error(
             ValueError, '"{}" is not a valid UCD version ', options.ucd_version
@@ -378,14 +378,14 @@ def process(options: argparse.Namespace, renderer: Renderer) -> int:
         return 0
 
     if options.inspect_ucd:
-        prop_counts = collect_statistics(ucd.path, ucd.version)
+        prop_counts = collect_statistics(ucd.mirror.root, ucd.version)
         overlap = ucd.count_break_overlap()
         show_statistics(ucd.version, prop_counts, overlap, renderer)
         return 0
 
     if options.generate_code:
         assert ucd.version is not None
-        generate_code(ucd.path)
+        generate_code(ucd.mirror)
         return 0
 
     # ------------------------------------------ Determine code points to display

@@ -15,18 +15,8 @@ from typing import (
 )
 
 
-from .codepoint import (
-    CodePoint,
-    CodePointRange,
-    CodePointSequence,
-)
-
-from .mirror import (
-    mirror_cldr_annotations,
-    mirrored_data,
-    retrieve_latest_ucd_version,
-)
-
+from .codepoint import CodePoint, CodePointRange, CodePointSequence
+from .mirror import Mirror
 from .model import (
     Age,
     Block,
@@ -43,7 +33,6 @@ from .model import (
     Property,
     PropertyId,
     Script,
-    Version,
 )
 
 from .parser import (
@@ -56,6 +45,7 @@ from .parser import (
     to_range_and_string,
 )
 
+from .version import Version
 from . import __version__
 
 
@@ -90,21 +80,21 @@ _EmojiSequenceEntry: TypeAlias = tuple[
 
 
 def _load_emoji_data_as_sequences(
-    root: Path, version: Version,
+    stamp: Mirror, version: Version,
 ) -> Sequence[_EmojiSequenceEntry]:
     assert version == (8, 0, 0)
-    with mirrored_data('emoji-data.txt', version, root) as lines:
+    with stamp.files.data('emoji-data.txt', version) as lines:
         return [*parse(lines, lambda cp, _: (no_range(cp), None, None))]
 
 
 _EMOJI_VERSION = re.compile(r'E(\d+\.\d+)')
 
 def _load_emoji_sequences(
-    root: Path, version: Version,
+    stamp: Mirror, version: Version,
 ) -> Sequence[_EmojiSequenceEntry]:
-    with mirrored_data('emoji-sequences.txt', version, root) as lines:
+    with stamp.files.data('emoji-sequences.txt', version) as lines:
         data1 = [*parse(lines, lambda cp, p: (cp, p), with_comment=True)]
-    with mirrored_data('emoji-zwj-sequences.txt', version, root) as lines:
+    with stamp.files.data('emoji-zwj-sequences.txt', version) as lines:
         data2 = [*parse(lines, lambda cp, p: (cp, p), with_comment=True)]
 
     result: list[_EmojiSequenceEntry] = []
@@ -130,24 +120,6 @@ def _load_emoji_sequences(
                     given_name = None
                 result.append((codepoint, given_name, age))
     return result
-
-
-# --------------------------------------------------------------------------------------
-
-
-def _load_cldr_annotations(root: Path) -> dict[str, str]:
-    path1, path2 = mirror_cldr_annotations(root)
-    with open(path1, mode='r') as file:
-        raw = json.load(file)
-    data1 = {
-        k: v['tts'][0] for k,v in raw['annotations']['annotations'].items()
-    }
-    with open(path2, mode='r') as file:
-        raw = json.load(file)
-    data2 = {
-        k: v['tts'][0] for k,v in raw['annotationsDerived']['annotations'].items()
-    }
-    return data1 | data2
 
 
 # --------------------------------------------------------------------------------------
@@ -232,11 +204,21 @@ class UnicodeCharacterDatabase:
     invokes the method as needed, i.e., on look-ups.
     """
 
-    def __init__(self, path: Path, version: None | str | Version = None) -> None:
-        self._path = path
-        self._version = None if version is None else Version.of(version)
+    def __init__(
+        self, path: None | Path = None, version: None | str | Version = None
+    ) -> None:
         self._is_prepared: bool = False
         self._is_optimized: bool = False
+
+        self._path: None | Path = None
+        self._version: None | Version = None
+
+        if path is not None:
+            self.use_path(path)
+        if version is not None:
+            self.use_version(version)
+
+        self._mirror: None | Mirror = None
 
     def use_path(self, path: Path) -> None:
         """
@@ -251,14 +233,14 @@ class UnicodeCharacterDatabase:
             raise ValueError(f'UCD path "{path}" is not a directory')
         self._path = path
 
-    def use_version(self, version: str) -> None:
+    def use_version(self, version: str | Version) -> None:
         """
         Use the given UCD version. It is an error to invoke this method after
         this instance has been prepared.
         """
         if self._is_prepared:
             raise ValueError('trying to update UCD version after UCD has been ingested')
-        self._version = Version.of(version).to_supported_ucd()
+        self._version = Version.of(version)
 
     # ----------------------------------------------------------------------------------
     # Prepare, Optimize, Validate
@@ -271,46 +253,48 @@ class UnicodeCharacterDatabase:
         """
         if self._is_prepared:
             return self
-        path, version = self._path, self._version
-        if version is None:
-            self._version = version = retrieve_latest_ucd_version(self._path)
-        logger.info('using UCD version %s', version)
 
-        with mirrored_data('DerivedAge.txt', version, path) as lines:
+        self._mirror = mirror = Mirror.setup(self._path)
+        self._version = version = self._version or mirror.version
+        mirror.check_version(version)
+        logger.info('mirroring UCD files at "%s"', mirror.root)
+        logger.info('running with UCD version %s', version)
+
+        with mirror.files.data('DerivedAge.txt', version) as lines:
             self._age = sorted(parse(
                 lines, lambda cp, p: (cp.to_range(), Age(p[0]))
             ), key=get_range)
-        with mirrored_data('Blocks.txt', version, path) as lines:
+        with mirror.files.data('Blocks.txt', version) as lines:
             self._block = [*parse(
                 lines, lambda cp, p: (cp.to_range(), Block[to_property_value(p[0])])
             )]
-        with mirrored_data('DerivedCombiningClass.txt', version, path) as lines:
+        with mirror.files.data('DerivedCombiningClass.txt', version) as lines:
             self._combining_class = sorted(parse(
                 lines, lambda cp, p: (cp.to_range(), int(p[0]))
             ), key=get_range)
-        with mirrored_data('DerivedCoreProperties.txt', version, path) as lines:
+        with mirror.files.data('DerivedCoreProperties.txt', version) as lines:
             self._default_ignorable = [*parse(lines, lambda cp, p: (
                 cp.to_range()
                 if p[0] == BinaryProperty.Default_Ignorable_Code_Point.name
                 else None
             ))]
-        with mirrored_data('EastAsianWidth.txt', version, path) as lines:
+        with mirror.files.data('EastAsianWidth.txt', version) as lines:
             self._east_asian_width = [*parse(lines, lambda cp, p: (
                 cp.to_range(), East_Asian_Width(p[0])
             ))]
         if version != (8, 0, 0):
             self._emoji_data: dict[str, list[CodePointRange]] = defaultdict(list)
-            with mirrored_data('emoji-data.txt', version, path) as lines:
+            with mirror.files.data('emoji-data.txt', version) as lines:
                 for range, label in parse(lines, to_range_and_string):
                     self._emoji_data[label].append(range)
         else:
             # Make sure that look-ups don't fail.
             self._emoji_data = { p.name: [] for p in BinaryProperty if p.is_emoji }
-        with mirrored_data('emoji-variation-sequences.txt', version, path) as lines:
+        with mirror.files.data('emoji-variation-sequences.txt', version) as lines:
             self._emoji_variations = frozenset(dict.fromkeys(parse(
                 lines, lambda cp, _: cp.to_sequence_head()
             )))
-        with mirrored_data('DerivedGeneralCategory.txt', version, path) as lines:
+        with mirror.files.data('DerivedGeneralCategory.txt', version) as lines:
             # The file covers *all* Unicode code points, so we drop Unassigned.
             # That's consistent with the default category for UnicodeData.txt.
             # Also, Cn accounts for 825,345 out of 1,114,112 code points.
@@ -319,27 +303,27 @@ class UnicodeCharacterDatabase:
                     None if p[0] == 'Cn' else (cp.to_range(), General_Category(p[0]))
                 )
             ), key=get_range)
-        with mirrored_data('GraphemeBreakProperty.txt', version, path) as lines:
+        with mirror.files.data('GraphemeBreakProperty.txt', version) as lines:
             self._grapheme_break = sorted(parse(
                 lines, lambda cp, p: (cp.to_range(), Grapheme_Cluster_Break[p[0]])
             ), key=get_range)
-        with mirrored_data('DerivedCoreProperties.txt', version, path) as lines:
+        with mirror.files.data('DerivedCoreProperties.txt', version) as lines:
             self._indic_conjunct_break = sorted(parse(lines, lambda cp, p: (
                 (cp.to_range(), Indic_Conjunct_Break(p[1])) if p[0] == 'InCB' else None
             )))
-        with mirrored_data('IndicSyllabicCategory.txt', version, path) as lines:
+        with mirror.files.data('IndicSyllabicCategory.txt', version) as lines:
             self._indic_syllabic = sorted(parse(
                 lines, lambda cp, p: (cp.to_range(), Indic_Syllabic_Category[p[0]])
             ), key=get_range)
-        with mirrored_data('UnicodeData.txt', version, path) as lines:
+        with mirror.files.data('UnicodeData.txt', version) as lines:
             self._name = dict(parse(lines, lambda cp, p: (
                 None if p[0].startswith('<') else (cp.to_singleton(), p[0])
             )))
-        with mirrored_data('Scripts.txt', version, path) as lines:
+        with mirror.files.data('Scripts.txt', version) as lines:
             self._script = sorted(parse(
                 lines, lambda cp, p: (cp.to_range(), Script[p[0]])
             ), key=get_range)
-        with mirrored_data('PropList.txt', version, path) as lines:
+        with mirror.files.data('PropList.txt', version) as lines:
             self._white_space = [*parse(lines, lambda cp, p: (
                 cp.to_range()
                 if p[0] == BinaryProperty.White_Space.name
@@ -353,15 +337,23 @@ class UnicodeCharacterDatabase:
         # sequences but not all. Since they are not covered by Unicode's
         # stability policy, they may be more accurate and hence are preferable.
         if version == (8, 0, 0):
-            sequences = _load_emoji_data_as_sequences(path, version)
+            sequences = _load_emoji_data_as_sequences(mirror, version)
         else:
-            sequences = _load_emoji_sequences(path, version)
+            sequences = _load_emoji_sequences(mirror, version)
 
         # Also load CLDR annotations with names for emoji sequences. While the
         # primary distribution format for the CLDR is XML, JSON is officially
         # supported through several NPM packages as well. Alas, that means
         # executing NPM's version resolution and download logic in Python. 😜
-        annotations = _load_cldr_annotations(path)
+        annotations: dict[str, str] = {}
+        for stem, key1, key2 in (
+            ('annotations', 'annotations', 'annotations'),
+            ('derived-annotations', 'annotationsDerived', 'annotations'),
+        ):
+            path = mirror.root / mirror.cldr.filename(stem, '.json')
+            with open(path, mode='r') as file:
+                raw = json.load(file)
+            annotations |= { k: v['tts'][0] for k, v in raw[key1][key2].items() }
 
         # Try to fill in missing emoji sequence names from CLDR data.
         invalid = False
@@ -408,10 +400,10 @@ class UnicodeCharacterDatabase:
 
         # Check that the number of ingested emoji sequences is the sum of the
         # total counts given in comments in the corresponding files.
-        ucd = self.path / str(self.version)
-        text = (ucd / 'emoji-sequences.txt').read_text('utf8')
+        version_root = self.mirror.root / str(self.version)
+        text = (version_root / 'emoji-sequences.txt').read_text('utf8')
         entries = sum(int(c) for c in _TOTAL_ELEMENTS_PATTERN.findall(text))
-        text = (ucd / 'emoji-zwj-sequences.txt').read_text('utf8')
+        text = (version_root / 'emoji-zwj-sequences.txt').read_text('utf8')
         entries += sum(int(c) for c in _TOTAL_ELEMENTS_PATTERN.findall(text))
         if len(self._emoji_sequences) != entries:
             logger.error(
@@ -472,9 +464,9 @@ class UnicodeCharacterDatabase:
     # Introspecting the Configuration
 
     @property
-    def path(self) -> Path:
+    def mirror(self) -> Mirror:
         self.prepare()
-        return self._path
+        return cast(Mirror, self._mirror)
 
     @property
     def version(self) -> Version:

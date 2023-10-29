@@ -21,13 +21,12 @@ a locked version.
 
 from collections.abc import Iterator
 from collections import defaultdict
-from pathlib import Path
 import re
 from textwrap import dedent
 
-from .mirror import mirrored_data, retrieve_latest_ucd_version
+from .mirror import Mirror
 from .parser import parse
-from ._version import Version
+from .version import Version
 
 
 _PROPERTIES: dict[str, str] = {
@@ -42,10 +41,10 @@ _PROPERTIES: dict[str, str] = {
 }
 
 
-def generate_code(root: Path) -> None:
+def generate_code(mirror: Mirror) -> None:
     # Define properties and their values based on the most recent version.
     # Thanks to Unicode's stability policy, it is the most comprehensive.
-    property_values = retrieve_property_values(root, retrieve_latest_ucd_version(root))
+    property_values = retrieve_property_values(mirror)
     with open('demicode/_property.py', mode='w', encoding='utf8') as file:
         for line in generate_property_values(property_values):
             print(line, file=file)
@@ -57,12 +56,12 @@ def generate_code(root: Path) -> None:
 
     with open('test/grapheme_clusters.py', mode='w', encoding='utf8') as file:
         print('# This module is machine-generated. Do not edit by hand.\n', file=file)
-        with mirrored_data('GraphemeBreakTest.txt', v15_0, root) as lines:
+        with mirror.files.data('GraphemeBreakTest.txt', v15_0) as lines:
             for line in grapheme_cluster_breaks(lines, v15_0):
                 print(line, file=file)
 
         print('\n', file=file)
-        with mirrored_data('GraphemeBreakTest.txt', v15_1, root) as lines:
+        with mirror.files.data('GraphemeBreakTest.txt', v15_1) as lines:
             for line in grapheme_cluster_breaks(lines, v15_1):
                 print(line, file=file)
         print(dedent("""
@@ -78,13 +77,13 @@ def generate_code(root: Path) -> None:
 # Property Values
 
 
-def retrieve_property_values(
-    root: Path, version: Version
-) -> dict[str, list[tuple[str, str, None | str]]]:
+def retrieve_property_values(mirror: Mirror) -> dict[
+    str, list[tuple[str, str, None | str]]
+]:
     properties_of_interest = _PROPERTIES.values()
 
     result: dict[str, list[tuple[str, str, None | str]]] = defaultdict(list)
-    with mirrored_data('PropertyValueAliases.txt', version, root) as lines:
+    with mirror.files.data('PropertyValueAliases.txt', mirror.version) as lines:
         records = parse(lines, lambda _, p: p, with_codepoints=False)
         for short_property, *entry in records:
             if short_property not in properties_of_interest:

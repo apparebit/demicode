@@ -21,7 +21,7 @@ from .db.ucd import UnicodeCharacterDatabase
 from .db.version import VersionError
 from .display import display
 from .selection import *
-from .statistics import collect_statistics, show_statistics
+from .statistics import collect_statistics, show_mirrored_versions, show_statistics
 from .ui.control import read_key_action, read_line_action
 from .ui.render import KeyPressReader, Renderer, Style
 from . import __version__
@@ -164,6 +164,11 @@ def configure_parser() -> argparse.ArgumentParser:
         '--ucd-mirror-all',
         action='store_true',
         help='eagerly mirror the files for all known UCD versions'
+    )
+    ucd_group.add_argument(
+        '--ucd-list-versions',
+        action='store_true',
+        help='list UCD versions in mirror directory and exit'
     )
 
     # ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~
@@ -374,6 +379,10 @@ def process(options: argparse.Namespace, renderer: Renderer) -> int:
         ucd.mirror.retrieve_all(renderer.tick)
 
     renderer.newline()  # Terminate potential line with ticks
+
+    if options.ucd_list_versions:
+        show_mirrored_versions(ucd, renderer)
+        return 0
 
     # ------------------------------------------------ Perform tool house keeping
     if options.inspect_version:

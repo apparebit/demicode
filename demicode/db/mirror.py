@@ -649,6 +649,9 @@ class Mirror:
     def url(self, filename: str, version: Version) -> None | str:
         return self._manifest.files.url(filename, version)
 
+    def retrieved_versions(self) -> list[Version]:
+        return list(self._manifest.versions)
+
     def retrieve_all(self, tick: None | Callable[[], None] = None) -> None:
         self._manifest = self._manifest.require_all(tick)
 

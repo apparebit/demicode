@@ -230,3 +230,22 @@ def show_statistics(
 
     renderer.link('https://github.com/apparebit/demicode/blob/boss/docs/props.md')
     renderer.newline()
+
+_VERSION_STRIDE = 6
+
+def show_mirrored_versions(ucd: UnicodeCharacterDatabase, renderer: Renderer) -> None:
+    renderer.strong('Mirrored UCD Versions')
+    renderer.writeln('\n')
+    renderer.writeln(f'    Mirror at "{ucd.mirror.root}"')
+    renderer.writeln('    comprises these versions:')
+
+    major = -1
+    for version in ucd.mirror.retrieved_versions():
+        if version.major == major:
+            renderer.write(f', {version}')
+        else:
+            major = version.major
+            renderer.newline()
+            renderer.write(f'       {str(version):>7}')
+
+    renderer.writeln('\n')

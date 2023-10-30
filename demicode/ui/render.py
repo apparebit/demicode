@@ -242,7 +242,9 @@ class Renderer:
     def __init__(self, input: TextIO, output: TextIO, theme: Theme) -> None:
         self._input = input
         self._output = output
-        self._interactive = input.isatty() and output.isatty()
+        self._interactive = (
+            os.getenv('CI') != 'true' and input.isatty() and output.isatty()
+        )
         self._theme = theme
         self.refresh()
 

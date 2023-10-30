@@ -99,7 +99,10 @@ class StyledStream:
     def __init__(self, stream: TextIO) -> None:
         self.stream = stream
         self.isatty = stream.isatty()
-        self.width, self.height = os.get_terminal_size()
+        try:
+            self.width = os.get_terminal_size().columns
+        except:
+            self.width = 80
 
     @property
     def tight_width(self) -> int:

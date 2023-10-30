@@ -75,7 +75,7 @@ class Version(NamedTuple):
         return '.'.join(str(c) for c in self)
 
     @staticmethod
-    def supported() -> 'Iterator[Version]':
+    def all_supported() -> 'Iterator[Version]':
         for version in KNOWN_UCD_VERSIONS:
             if version >= FIRST_SUPPORTED_VERSION:
                 yield version

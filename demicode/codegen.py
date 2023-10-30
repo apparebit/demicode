@@ -56,12 +56,12 @@ def generate_code(mirror: Mirror) -> None:
 
     with open('test/grapheme_clusters.py', mode='w', encoding='utf8') as file:
         print('# This module is machine-generated. Do not edit by hand.\n', file=file)
-        with mirror.files.data('GraphemeBreakTest.txt', v15_0) as lines:
+        with mirror.data('GraphemeBreakTest.txt', v15_0) as lines:
             for line in grapheme_cluster_breaks(lines, v15_0):
                 print(line, file=file)
 
         print('\n', file=file)
-        with mirror.files.data('GraphemeBreakTest.txt', v15_1) as lines:
+        with mirror.data('GraphemeBreakTest.txt', v15_1) as lines:
             for line in grapheme_cluster_breaks(lines, v15_1):
                 print(line, file=file)
         print(dedent("""
@@ -83,7 +83,7 @@ def retrieve_property_values(mirror: Mirror) -> dict[
     properties_of_interest = _PROPERTIES.values()
 
     result: dict[str, list[tuple[str, str, None | str]]] = defaultdict(list)
-    with mirror.files.data('PropertyValueAliases.txt', mirror.version) as lines:
+    with mirror.data('PropertyValueAliases.txt', mirror.version) as lines:
         records = parse(lines, lambda _, p: p, with_codepoints=False)
         for short_property, *entry in records:
             if short_property not in properties_of_interest:

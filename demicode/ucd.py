@@ -9,7 +9,6 @@ import re
 from typing import (
     Any,
     Callable,
-    cast,
     Self,
     TypeAlias,
     TypeVar,
@@ -81,21 +80,21 @@ _EmojiSequenceEntry: TypeAlias = tuple[
 
 
 def _load_emoji_data_as_sequences(
-    stamp: Mirror, version: Version,
+    mirror: Mirror, version: Version,
 ) -> Sequence[_EmojiSequenceEntry]:
     assert version == (8, 0, 0)
-    with stamp.files.data('emoji-data.txt', version) as lines:
+    with mirror.data('emoji-data.txt', version) as lines:
         return [*parse(lines, lambda cp, _: (no_range(cp), None, None))]
 
 
 _EMOJI_VERSION = re.compile(r'E(\d+\.\d+)')
 
 def _load_emoji_sequences(
-    stamp: Mirror, version: Version,
+    mirror: Mirror, version: Version,
 ) -> Sequence[_EmojiSequenceEntry]:
-    with stamp.files.data('emoji-sequences.txt', version) as lines:
+    with mirror.data('emoji-sequences.txt', version) as lines:
         data1 = [*parse(lines, lambda cp, p: (cp, p), with_comment=True)]
-    with stamp.files.data('emoji-zwj-sequences.txt', version) as lines:
+    with mirror.data('emoji-zwj-sequences.txt', version) as lines:
         data2 = [*parse(lines, lambda cp, p: (cp, p), with_comment=True)]
 
     result: list[_EmojiSequenceEntry] = []
@@ -206,96 +205,54 @@ class UnicodeCharacterDatabase:
     """
 
     def __init__(
-        self, path: None | Path = None, version: None | str | Version = None
+        self,
+        *,
+        root: None | str | Path = None,
+        version: None | str | Version = None,
+        tick: None | Callable[[], None] = None,
     ) -> None:
-        self._is_prepared: bool = False
         self._is_optimized: bool = False
 
-        self._path: None | Path = None
-        self._version: None | Version = None
-
-        if path is not None:
-            self.use_path(path)
-        if version is not None:
-            self.use_version(version)
-
-        self._mirror: None | Mirror = None
-
-    def use_path(self, path: Path) -> None:
-        """
-        Use the given path for locally mirroring UCD files. It is an error to
-        invoke this method after this instance has been prepared.
-        """
-        if self._is_prepared:
-            raise ValueError('trying to update UCD path after UCD has been ingested')
-        if not path.exists():
-            raise ValueError(f'UCD path "{path}" does not exist')
-        if not path.is_dir():
-            raise ValueError(f'UCD path "{path}" is not a directory')
-        self._path = path
-
-    def use_version(self, version: str | Version) -> None:
-        """
-        Use the given UCD version. It is an error to invoke this method after
-        this instance has been prepared.
-        """
-        if self._is_prepared:
-            raise ValueError('trying to update UCD version after UCD has been ingested')
-        self._version = Version.of(version)
-
-    # ----------------------------------------------------------------------------------
-    # Prepare, Optimize, Validate
-
-    def prepare(self, tick: None | Callable[[], None] = None) -> Self:
-        """
-        Prepare the UCD for active use. This method locks in the current
-        configuration and locally mirrors any required UCD as well as CLDR
-        files. Repeated invocations have no effect.
-        """
-        if self._is_prepared:
-            return self
-
-        self._mirror = mirror = Mirror.setup(self._path, tick)
-        self._version = version = self._version or mirror.version
-        mirror.check_version(version)
+        self._mirror = mirror = Mirror(root, version, tick)
+        version = mirror.version
         logger.info('mirroring UCD files at "%s"', mirror.root)
-        logger.info('running with UCD version %s', version)
+        logger.info('running with UCD version %s', mirror.version)
 
-        with mirror.files.data('DerivedAge.txt', version) as lines:
+        with mirror.data('DerivedAge.txt', version) as lines:
             self._age = sorted(parse(
                 lines, lambda cp, p: (cp.to_range(), Age(p[0]))
             ), key=get_range)
-        with mirror.files.data('Blocks.txt', version) as lines:
+        with mirror.data('Blocks.txt', version) as lines:
             self._block = [*parse(
                 lines, lambda cp, p: (cp.to_range(), Block[to_property_value(p[0])])
             )]
-        with mirror.files.data('DerivedCombiningClass.txt', version) as lines:
+        with mirror.data('DerivedCombiningClass.txt', version) as lines:
             self._combining_class = sorted(parse(
                 lines, lambda cp, p: (cp.to_range(), int(p[0]))
             ), key=get_range)
-        with mirror.files.data('DerivedCoreProperties.txt', version) as lines:
+        with mirror.data('DerivedCoreProperties.txt', version) as lines:
             self._default_ignorable = [*parse(lines, lambda cp, p: (
                 cp.to_range()
                 if p[0] == BinaryProperty.Default_Ignorable_Code_Point.name
                 else None
             ))]
-        with mirror.files.data('EastAsianWidth.txt', version) as lines:
+        with mirror.data('EastAsianWidth.txt', version) as lines:
             self._east_asian_width = [*parse(lines, lambda cp, p: (
                 cp.to_range(), East_Asian_Width(p[0])
             ))]
         if version != (8, 0, 0):
             self._emoji_data: dict[str, list[CodePointRange]] = defaultdict(list)
-            with mirror.files.data('emoji-data.txt', version) as lines:
+            with mirror.data('emoji-data.txt', version) as lines:
                 for range, label in parse(lines, to_range_and_string):
                     self._emoji_data[label].append(range)
         else:
             # Make sure that look-ups don't fail.
             self._emoji_data = { p.name: [] for p in BinaryProperty if p.is_emoji }
-        with mirror.files.data('emoji-variation-sequences.txt', version) as lines:
+        with mirror.data('emoji-variation-sequences.txt', version) as lines:
             self._emoji_variations = frozenset(dict.fromkeys(parse(
                 lines, lambda cp, _: cp.to_sequence_head()
             )))
-        with mirror.files.data('DerivedGeneralCategory.txt', version) as lines:
+        with mirror.data('DerivedGeneralCategory.txt', version) as lines:
             # The file covers *all* Unicode code points, so we drop Unassigned.
             # That's consistent with the default category for UnicodeData.txt.
             # Also, Cn accounts for 825,345 out of 1,114,112 code points.
@@ -304,27 +261,27 @@ class UnicodeCharacterDatabase:
                     None if p[0] == 'Cn' else (cp.to_range(), General_Category(p[0]))
                 )
             ), key=get_range)
-        with mirror.files.data('GraphemeBreakProperty.txt', version) as lines:
+        with mirror.data('GraphemeBreakProperty.txt', version) as lines:
             self._grapheme_break = sorted(parse(
                 lines, lambda cp, p: (cp.to_range(), Grapheme_Cluster_Break[p[0]])
             ), key=get_range)
-        with mirror.files.data('DerivedCoreProperties.txt', version) as lines:
+        with mirror.data('DerivedCoreProperties.txt', version) as lines:
             self._indic_conjunct_break = sorted(parse(lines, lambda cp, p: (
                 (cp.to_range(), Indic_Conjunct_Break(p[1])) if p[0] == 'InCB' else None
             )))
-        with mirror.files.data('IndicSyllabicCategory.txt', version) as lines:
+        with mirror.data('IndicSyllabicCategory.txt', version) as lines:
             self._indic_syllabic = sorted(parse(
                 lines, lambda cp, p: (cp.to_range(), Indic_Syllabic_Category[p[0]])
             ), key=get_range)
-        with mirror.files.data('UnicodeData.txt', version) as lines:
+        with mirror.data('UnicodeData.txt', version) as lines:
             self._name = dict(parse(lines, lambda cp, p: (
                 None if p[0].startswith('<') else (cp.to_singleton(), p[0])
             )))
-        with mirror.files.data('Scripts.txt', version) as lines:
+        with mirror.data('Scripts.txt', version) as lines:
             self._script = sorted(parse(
                 lines, lambda cp, p: (cp.to_range(), Script[p[0]])
             ), key=get_range)
-        with mirror.files.data('PropList.txt', version) as lines:
+        with mirror.data('PropList.txt', version) as lines:
             self._white_space = [*parse(lines, lambda cp, p: (
                 cp.to_range()
                 if p[0] == BinaryProperty.White_Space.name
@@ -351,7 +308,7 @@ class UnicodeCharacterDatabase:
             ('annotations', 'annotations', 'annotations'),
             ('derived-annotations', 'annotationsDerived', 'annotations'),
         ):
-            path = mirror.root / mirror.cldr.filename(stem, '.json')
+            path = mirror.root / mirror.cldr_filename(stem, '.json')
             with open(path, mode='r') as file:
                 raw = json.load(file)
             annotations |= { k: v['tts'][0] for k, v in raw[key1][key2].items() }
@@ -372,11 +329,7 @@ class UnicodeCharacterDatabase:
         if invalid:
             raise AssertionError('UCD is missing data; see log messages')
 
-        self._is_prepared = True
-        return self
-
     def optimize(self) -> Self:
-        self.prepare()
         if self._is_optimized:
             return self
 
@@ -396,7 +349,6 @@ class UnicodeCharacterDatabase:
         return self
 
     def validate(self) -> Self:
-        self.prepare()
         invalid = False
 
         # Check that the number of ingested emoji sequences is the sum of the
@@ -466,13 +418,11 @@ class UnicodeCharacterDatabase:
 
     @property
     def mirror(self) -> Mirror:
-        self.prepare()
-        return cast(Mirror, self._mirror)
+        return self._mirror
 
     @property
     def version(self) -> Version:
-        self.prepare()
-        return cast(Version, self._version)
+        return self._mirror.version
 
     @property
     def is_optimized(self) -> bool:
@@ -511,8 +461,6 @@ class UnicodeCharacterDatabase:
         )
 
     def count_break_overlap(self) -> OverlapCounter:
-        self.prepare()
-
         counts: OverlapCounter = Counter()
         icb: None | Indic_Conjunct_Break
         for range, icb in self._indic_conjunct_break:
@@ -547,7 +495,6 @@ class UnicodeCharacterDatabase:
         cluster property values. Thereafter, it uses a regular expression for
         iterating over the grapheme cluster breaks.
         """
-        self.prepare()
         grapheme_cluster_props = self._to_grapheme_cluster_string(text)
         length = len(text)
 
@@ -582,7 +529,6 @@ class UnicodeCharacterDatabase:
     # Test Binary Properties, Count Properties
 
     def test(self, codepoint: CodePoint, property: BinaryProperty) -> bool:
-        self.prepare()
         if property is BinaryProperty.Default_Ignorable_Code_Point:
             return _is_in_range(codepoint, self._default_ignorable)
         elif property is BinaryProperty.White_Space:
@@ -595,7 +541,6 @@ class UnicodeCharacterDatabase:
         ranges: Sequence[tuple[CodePointRange, _T]],
         default: _T,
     ) -> _T:
-        self.prepare()
         index = _bisect_range_data(ranges, codepoint)
         if not (0 <= index < len(ranges)):
             return default
@@ -606,7 +551,6 @@ class UnicodeCharacterDatabase:
         self, codepoint: CodePoint, property: type[Property]
     ) -> Any:
         """Resolve the codepoint's property."""
-        self.prepare()
         if property is Emoji_Sequence:
             return self.emoji_sequence_data(codepoint)
         else:
@@ -615,7 +559,6 @@ class UnicodeCharacterDatabase:
             return self._resolve(codepoint, ranges, default)
 
     def count(self, selection: Property) -> int:
-        self.prepare()
         attribute, default = _PROPERTY_RANGES_AND_DEFAULT[selection.__class__]
         ranges = getattr(self, attribute)
         result = 0
@@ -740,7 +683,6 @@ class UnicodeCharacterDatabase:
         count is the same. `None` indicates that the property is not currently
         maintained.
         """
-        self.prepare()
         if isinstance(property, BinaryProperty):
             if property.is_emoji:
                 return (
@@ -804,7 +746,6 @@ class UnicodeCharacterDatabase:
         have emoji presentation and are followed by the emoji variation
         selector.
         """
-        self.prepare()
         return self._to_emoji_info(self._to_codepoints(codepoints)) is not None
 
     def emoji_sequence_data(
@@ -816,7 +757,6 @@ class UnicodeCharacterDatabase:
         have emoji presentation and are followed by the emoji variation
         selector.
         """
-        self.prepare()
         return self._to_emoji_info(self._to_codepoints(codepoints)) or (None, None)
 
     def extended_pictographic_ranges(self) -> Iterator[CodePointRange]:
@@ -824,7 +764,6 @@ class UnicodeCharacterDatabase:
         Create an iterator over code point ranges that are extended
         pictographic.
         """
-        self.prepare()
         for range in self._emoji_data[BinaryProperty.Extended_Pictographic.name]:
             yield range.to_range()
 
@@ -849,7 +788,6 @@ class UnicodeCharacterDatabase:
         colorful squarish emoji. This property is very much different from
         `with_selector`, which produces the code points triggering variations.
         """
-        self.prepare()
         return self._emoji_variations
 
     # ----------------------------------------------------------------------------------

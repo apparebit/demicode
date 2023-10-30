@@ -140,10 +140,11 @@ The output of the last command should look something like the first screenshot.
         4–9&nbsp;ms on a four-year-old macOS laptop. But when demicode also
         queries the terminal for the current column, the spread of average
         latencies explodes to 10–946&nbsp;ms.
-      - To correctly track provenance of experimental results, demicode
-        automatically extracts terminal name and version, using environment
-        variables, ANSI escape codes, or macOS utilities.
-      - Demicode now uses GitHub's CI for testing.
+      - To better track provenance of experimental results, demicode now
+        automatically determines the terminal name and version—based on
+        environment variables, ANSI escape codes, and on macOS, also bundle
+        identifiers.
+      - Demicode now uses GitHub actions for CI.
   - **v1.1.0** (2023/10/17):
       - Improve terminal intput/output, notably by `--incrementally`/`-i`
         displaying character blots, which is significantly slower but allows for

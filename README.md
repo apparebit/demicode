@@ -129,6 +129,21 @@ The output of the last command should look something like the first screenshot.
 
 ## Versions
 
+  - **v1.2.0** (2023/10/30):
+      - Mirroring of UCD files has been refactored and now uses an [explicit
+        manifest](ucd.manifest.json) for tracking locally available versions.
+        `--ucd-mirror-all` causes demicode to eagerly download all files for all
+        versions, enabling fully disconnected operation.
+      - With `--inspect-latency`/`-T`, demicode now measures page rendering
+        latency. [Initial results](perf.json) suggest that the nine measured
+        terminals are reasonable fast rendering styled text, taking between
+        4–9&nbsp;ms on a four-year-old macOS laptop. But when demicode also
+        queries the terminal for the current column, the spread of average
+        latencies explodes to 10–946&nbsp;ms.
+      - To correctly track provenance of experimental results, demicode
+        automatically extracts terminal name and version, using environment
+        variables, ANSI escape codes, or macOS utilities.
+      - Demicode now uses GitHub's CI for testing.
   - **v1.1.0** (2023/10/17):
       - Improve terminal intput/output, notably by `--incrementally`/`-i`
         displaying character blots, which is significantly slower but allows for

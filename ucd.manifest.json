@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "mirror": "/Users/rgrimm/Work/demicode/ucd",
+  "mirror": "ucd",
   "ucd": "15.1.0",
   "versions": [
     "4.1.0",

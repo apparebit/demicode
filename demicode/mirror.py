@@ -45,13 +45,17 @@ class CLDR:
     derived_annotations: str
 
     @staticmethod
-    def retrieve_metadata(url: str) -> tuple[Version, str]:
-        _logger.info('retrieving CLDR annotation metadata from "%s"', url)
-        with _make_request(url, Accept=_HTTP_CLDR_ACCEPT) as response:
+    def retrieve_metadata(component: str) -> tuple[Version, str]:
+        _logger.info('retrieving metadata for CLDR component "%s"', component)
+        with _make_request(component, Accept=_HTTP_CLDR_ACCEPT) as response:
             metadata = json.load(response)
         version = metadata['dist-tags']['latest']
-        url = metadata['versions'][version]['dist']['tarball']
-        return Version.of(version), url
+        archive = metadata['versions'][version]['dist']['tarball']
+        _logger.info(
+            'v%s of CLDR component "%s" is available at "%s"',
+            version, component, archive
+        )
+        return Version.of(version), archive
 
     @classmethod
     def from_registry(cls) -> Self:
@@ -183,8 +187,6 @@ class Manifest:
             raise ValueError(f'invalid schema ID {self.schema}')
 
         _check_mirror_path(self.mirror)
-        if not self.mirror.is_absolute():
-            raise AssertionError(f'"{self.mirror}" is not absolute')
 
         if self.schema == self.VOID:
             if (
@@ -266,13 +268,16 @@ class Manifest:
 
     @classmethod
     def from_file(cls, mirror: str | Path) -> Self:
-        mirror = Path(mirror).resolve()
+        mirror = Path(mirror)
         _check_mirror_path(mirror)
+        manifest = _to_manifest_path(mirror)
 
         try:
-            with open(_to_manifest_path(mirror), mode='rb') as file:
+            _logger.info('reading mirror manifest from "%s"', manifest)
+            with open(manifest, mode='rb') as file:
                 return cls.from_dict(json.load(file))
         except:
+            _logger.info('using void manifest instead of inaccessible "%s"', manifest)
             return cls(
                 cls.VOID,
                 mirror,
@@ -294,12 +299,13 @@ class Manifest:
             raise VersionError(msg)
 
         version = Version.of(match.group('version'))
+        _logger.info('latest UCD version is %s', version)
         assert version.is_supported_ucd()
         return version
 
     @classmethod
     def from_origin(cls, mirror: str | Path) -> Self:
-        mirror = Path(mirror).resolve()
+        mirror = Path(mirror)
         _check_mirror_path(mirror)
         ucd = Manifest.retrieve_ucd_version()
         ts = datetime.now(timezone.utc)
@@ -357,10 +363,7 @@ class Manifest:
         mirror: str | Path,
         tick: None | Callable[[], None] = None
     ) -> Self:
-        # Both from_file() and from_origin() do this, too. But that leaves a
-        # tiny window for a file system mutation to produce inconsistent
-        # results. So it's better to just lock in the path.
-        mirror = Path(mirror).resolve()
+        mirror = Path(mirror)
 
         # If no manifest exists, previous will be a void manifest with a
         # timestamp surprisingly close to the start of the epoch.
@@ -495,14 +498,16 @@ class FileManager:
         __tick: None | Callable[[], None] = None,
     ) -> None:
         """Retrieve all files for one version, several versions, or all versions."""
-        if __version is None:
+        if (version_is_tick := callable(__version)) or __version is None:
+            _logger.info('retrieving all UCD files for all supported versions')
             versions = Version.all_supported()
-        elif callable(__version):
-            versions = Version.all_supported()
-            __tick = __version
+            if version_is_tick:
+                __tick = __version
         elif isinstance(__version, Version):
+            _logger.info('retrieving all UCD files for version %s', __version)
             versions = iter([__version])
         else:
+            _logger.info('retrieving all UCD files for versions %s', __version)
             versions = iter(__version)
 
         tick = __tick or (lambda: None)
@@ -521,7 +526,9 @@ class FileManager:
         Scan mirror for retrieved versions. Since this method does not check for
         a version's files, consider invoking retrieve_all() on the result.
         """
+        _logger.info('scanning mirror "%s" for versions', self.mirror)
         result: list[Version] = []
+
         for entry in self.mirror.iterdir():
             if not _LOOSE_VERSION_PATTERN.match(entry.name):
                 continue

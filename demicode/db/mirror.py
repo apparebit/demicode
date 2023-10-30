@@ -14,7 +14,7 @@ import tarfile
 from typing import Any, Callable, cast, ClassVar, IO, overload, Self
 from urllib.request import Request, urlopen
 
-from . import __version__
+from .. import __version__
 from .version import Version, VersionError
 
 

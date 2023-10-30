@@ -46,7 +46,7 @@ from .parser import (
 )
 
 from .version import Version
-from . import __version__
+from .. import __version__
 
 
 _logger = logging.getLogger(__name__)

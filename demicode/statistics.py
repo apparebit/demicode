@@ -60,7 +60,7 @@ def collect_statistics(root: Path, version: Version) -> dict[PropertyId, Propert
     code point ranges in the UCD file, and the number of code point ranges after
     combining adjacent ranges for the same property value.
     """
-    ucd = UnicodeCharacterDatabase(root=root, version=version).validate()
+    ucd = UnicodeCharacterDatabase(root, version).validate()
     if ucd.is_optimized:
         raise AssertionError('UCD claims to be optimized without call to optimize()')
     counts: list[tuple[int, int]] = []

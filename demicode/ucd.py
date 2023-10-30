@@ -49,7 +49,7 @@ from .version import Version
 from . import __version__
 
 
-logger = logging.getLogger(__name__)
+_logger = logging.getLogger(__name__)
 
 
 OverlapCounter: TypeAlias = Counter[
@@ -206,7 +206,6 @@ class UnicodeCharacterDatabase:
 
     def __init__(
         self,
-        *,
         root: None | str | Path = None,
         version: None | str | Version = None,
         tick: None | Callable[[], None] = None,
@@ -215,8 +214,8 @@ class UnicodeCharacterDatabase:
 
         self._mirror = mirror = Mirror(root, version, tick)
         version = mirror.version
-        logger.info('mirroring UCD files at "%s"', mirror.root)
-        logger.info('running with UCD version %s', mirror.version)
+        _logger.info('mirroring UCD files at "%s"', mirror.root)
+        _logger.info('running with UCD version %s', mirror.version)
 
         with mirror.data('DerivedAge.txt', version) as lines:
             self._age = sorted(parse(
@@ -323,7 +322,7 @@ class UnicodeCharacterDatabase:
                 name = annotations.get(str(codepoints))
                 # UCD 9.0 / E3.0 contains sequences without CLDR name
                 if name is None and version > (9, 0, 0):
-                    logger.error('emoji sequence %r has no CLDR name', codepoints)
+                    _logger.error('emoji sequence %r has no CLDR name', codepoints)
                     invalid = True
             self._emoji_sequences[codepoints] = (name, age)
         if invalid:
@@ -359,7 +358,7 @@ class UnicodeCharacterDatabase:
         text = (version_root / 'emoji-zwj-sequences.txt').read_text('utf8')
         entries += sum(int(c) for c in _TOTAL_ELEMENTS_PATTERN.findall(text))
         if len(self._emoji_sequences) != entries:
-            logger.error(
+            _logger.error(
                 'UCD has %d emoji sequences even though there should be %d',
                 len(self._emoji_sequences),
                 entries,
@@ -376,7 +375,7 @@ class UnicodeCharacterDatabase:
                 for codepoint in range.codepoints():
                     if (val := self._resolve(codepoint, grapheme_break, None)) is None:
                         continue
-                    logger.error(
+                    _logger.error(
                         'extended pictograph %s %r has grapheme cluster break '
                         '%s, not Other',
                         codepoint, codepoint, val.name
@@ -393,7 +392,7 @@ class UnicodeCharacterDatabase:
                     CodePoint.REGIONAL_INDICATOR_SYMBOL_LETTER_A
                      <= cp <= CodePoint.REGIONAL_INDICATOR_SYMBOL_LETTER_Z
                 ) and cp not in self._emoji_sequences:
-                    logger.error(
+                    _logger.error(
                         '%r %s has emoji presentation but is not amongst valid '
                         'emoji sequences', cp, cp
                     )
@@ -403,7 +402,7 @@ class UnicodeCharacterDatabase:
                         cp, CodePoint.EMOJI_VARIATION_SELECTOR
                     )
                     if redundant in self._emoji_sequences:
-                        logger.error(
+                        _logger.error(
                             'the redundant but valid sequence %r U+FE0F %s is listed '
                             'amongst emoji sequences', cp, cp
                         )

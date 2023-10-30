@@ -359,9 +359,7 @@ def process(options: argparse.Namespace, renderer: Renderer) -> int:
     # --------------------------------------------------------------- Prepare UCD
     try:
         ucd = UnicodeCharacterDatabase(
-            root=options.ucd_path,
-            version=options.ucd_version,
-            tick=renderer.tick
+            options.ucd_path, options.ucd_version, renderer.tick
         )
     except NotADirectoryError:
         raise UserError(f'"{options.ucd_path}" is not a directory')

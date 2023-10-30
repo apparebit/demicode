@@ -140,9 +140,9 @@ class ClusterBreakVisualizer:
 class TestProperty(unittest.TestCase):
 
     def test_known_versions(self):
-        for version in Version.supported():
+        for version in Version.all_supported():
             with self.subTest(version=version):
-                ucd = UnicodeCharacterDatabase(UCD_PATH, version).prepare()
+                ucd = UnicodeCharacterDatabase(root=UCD_PATH, version=version)
                 self.assertEqual(ucd.version, version)
 
                 # Check that data is usable by looking up properties.
@@ -186,7 +186,8 @@ class TestProperty(unittest.TestCase):
     def test_counts(self) -> None:
         for version in ('15.0', '15.1'):
             with self.subTest(version=version):
-                ucd = UnicodeCharacterDatabase(UCD_PATH, version).prepare().validate()
+                ucd = UnicodeCharacterDatabase(root=UCD_PATH, version=version)
+                ucd.validate()
                 expected_counts = PROPERTY_COUNTS[version]
                 points1 = self.check_property_value_counts(expected_counts, ucd)
 
@@ -196,7 +197,7 @@ class TestProperty(unittest.TestCase):
                 self.assertDictEqual(points1, points2)
 
     def test_character_data(self) ->  None:
-        ucd = UnicodeCharacterDatabase(UCD_PATH, '15.0').prepare()
+        ucd = UnicodeCharacterDatabase(root=UCD_PATH, version='15.0')
 
         for expected_data in CHARACTER_DATA:
             actual_data = ucd.lookup(expected_data.codepoint)
@@ -205,7 +206,7 @@ class TestProperty(unittest.TestCase):
     def test_grapheme_cluster_breaks(self) -> None:
         for version in ('15.0', '15.1'):
             with self.subTest(version=version):
-                ucd = UnicodeCharacterDatabase(UCD_PATH, version).prepare()
+                ucd = UnicodeCharacterDatabase(root=UCD_PATH, version=version)
                 for codepoints, expected in GRAPHEME_CLUSTER_BREAKS[version].items():
                     sequence = CodePointSequence.of(*codepoints)
                     actual = tuple(ucd.grapheme_cluster_breaks(sequence))

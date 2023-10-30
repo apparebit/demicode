@@ -7,7 +7,6 @@ from collections.abc import Iterable, Sequence
 from contextlib import AbstractContextManager
 import itertools
 import logging
-from pathlib import Path
 import re
 import sys
 from textwrap import dedent
@@ -24,6 +23,7 @@ from .statistics import collect_statistics, show_statistics
 from .ucd import UnicodeCharacterDatabase
 from .ui.control import read_key_action, read_line_action
 from .ui.render import KeyPressReader, Renderer, Style
+from .version import VersionError
 from . import __version__
 
 
@@ -357,28 +357,23 @@ def run(arguments: Sequence[str]) -> int:
 
 def process(options: argparse.Namespace, renderer: Renderer) -> int:
     # --------------------------------------------------------------- Prepare UCD
-    ucd = UnicodeCharacterDatabase()
-
-    if options.ucd_path:
-        with user_error(
-            ValueError, '"{}" is not a valid UCD directory', options.ucd_path
-        ):
-            ucd.use_path(Path(options.ucd_path))
-
-    if options.ucd_version:
-        with user_error(
-            ValueError, '"{}" is not a valid UCD version ', options.ucd_version
-        ):
-            ucd.use_version(options.ucd_version)
-
-    ucd.prepare(renderer.tick)
+    try:
+        ucd = UnicodeCharacterDatabase(
+            root=options.ucd_path,
+            version=options.ucd_version,
+            tick=renderer.tick
+        )
+    except NotADirectoryError:
+        raise UserError(f'"{options.ucd_path}" is not a directory')
+    except VersionError:
+        raise UserError(f'"{options.ucd_version}" is not a valid UCD version')
 
     if options.ucd_optimize:
         ucd.optimize()
     if options.ucd_validate:
         ucd.validate()
     if options.ucd_mirror_all:
-        ucd.mirror.files.retrieve_all(renderer.tick)
+        ucd.mirror.retrieve_all(renderer.tick)
 
     # ------------------------------------------------ Perform tool house keeping
     if options.inspect_version:

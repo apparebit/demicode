@@ -133,7 +133,8 @@ The output of the last command should look something like the first screenshot.
       - Mirroring of UCD files has been refactored and now uses an [explicit
         manifest](ucd.manifest.json) for tracking locally available versions.
         `--ucd-mirror-all` causes demicode to eagerly download all files for all
-        versions, enabling fully disconnected operation.
+        versions, enabling fully disconnected operation. `--ucd-list-versions`
+        lists all versions contained in mirror directory.
       - With `--inspect-latency`/`-T`, demicode now measures page rendering
         latency. [Initial results](perf.json) suggest that the nine measured
         terminals are reasonable fast rendering styled text, taking between

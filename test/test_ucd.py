@@ -2,8 +2,8 @@ from dataclasses import dataclass
 from itertools import chain
 import unittest
 
-from demicode.codepoint import CodePoint, CodePointSequence
-from demicode.model import (
+from demicode.db.codepoint import CodePoint, CodePointSequence
+from demicode.db.model import (
     Age,
     Block,
     BinaryProperty,
@@ -17,8 +17,8 @@ from demicode.model import (
     PropertyId,
     Script,
 )
-from demicode.ucd import UnicodeCharacterDatabase
-from demicode.version import Version
+from demicode.db.ucd import UnicodeCharacterDatabase
+from demicode.db.version import Version
 
 from test.grapheme_clusters import GRAPHEME_CLUSTER_BREAKS
 

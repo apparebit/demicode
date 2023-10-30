@@ -2,8 +2,8 @@ import math
 from pathlib import Path
 from typing import cast, NamedTuple
 
-import demicode.model as model
-from .model import (
+import demicode.db.model as model
+from .db.model import (
     Age,
     BinaryProperty,
     Block,
@@ -18,9 +18,9 @@ from .model import (
     Script,
     to_property_name,
 )
-from .ucd import OverlapCounter, UnicodeCharacterDatabase
+from .db.ucd import OverlapCounter, UnicodeCharacterDatabase
+from .db.version import Version
 from .ui.render import Renderer
-from .version import Version
 
 
 _PROPERTIES: tuple[PropertyId, ...] = (

@@ -1,6 +1,6 @@
 """Code points selected by human judgement."""
 
-from .codepoint import CodePoint, CodePointSequence
+from .db.codepoint import CodePoint, CodePointSequence
 
 __all__ = (
     'ARROWS',

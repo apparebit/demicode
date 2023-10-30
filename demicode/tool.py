@@ -15,15 +15,15 @@ from types import TracebackType
 from typing import Callable
 
 from .benchmark import Probe, report_page_rendering, TerminalSizeChecker
-from .codegen import generate_code
-from .codepoint import CodePoint, CodePointSequence
+from .db.codegen import generate_code
+from .db.codepoint import CodePoint, CodePointSequence
+from .db.ucd import UnicodeCharacterDatabase
+from .db.version import VersionError
 from .display import display
 from .selection import *
 from .statistics import collect_statistics, show_statistics
-from .ucd import UnicodeCharacterDatabase
 from .ui.control import read_key_action, read_line_action
 from .ui.render import KeyPressReader, Renderer, Style
-from .version import VersionError
 from . import __version__
 
 

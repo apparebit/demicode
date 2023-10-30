@@ -14,9 +14,9 @@ import math
 from typing import Callable, cast
 
 from .benchmark import Probe
-from .codepoint import CodePoint, CodePointSequence
-from .model import Age, General_Category, Presentation
-from .ucd import UnicodeCharacterDatabase
+from .db.codepoint import CodePoint, CodePointSequence
+from .db.model import Age, General_Category, Presentation
+from .db.ucd import UnicodeCharacterDatabase
 from .ui.control import Action, read_line_action
 from .ui.render import Padding, Renderer
 from . import __version__

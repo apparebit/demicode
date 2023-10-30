@@ -1,7 +1,7 @@
 import unittest
 
-from demicode.codepoint import CodePoint, CodePointRange
-from demicode.version import Version
+from demicode.db.codepoint import CodePoint, CodePointRange
+from demicode.db.version import Version
 
 
 POINT_DATA = (

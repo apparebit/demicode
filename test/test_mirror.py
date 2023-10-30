@@ -1,8 +1,8 @@
 from pathlib import Path
 import unittest
 
-from demicode.mirror import Mirror
-from demicode.version import Version, VersionError
+from demicode.db.mirror import Mirror
+from demicode.db.version import Version, VersionError
 
 
 UCD_PATH = Path(__file__).parents[1] / 'ucd'

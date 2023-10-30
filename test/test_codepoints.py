@@ -1,6 +1,6 @@
 import unittest
 
-from demicode.codepoint import (
+from demicode.db.codepoint import (
     CodePoint,
     CodePointRange,
     codepoints_to_ranges,

@@ -373,6 +373,8 @@ def process(options: argparse.Namespace, renderer: Renderer) -> int:
     if options.ucd_mirror_all:
         ucd.mirror.retrieve_all(renderer.tick)
 
+    renderer.newline()  # Terminate potential line with ticks
+
     # ------------------------------------------------ Perform tool house keeping
     if options.inspect_version:
         renderer.strong(f' demicode {__version__} ')

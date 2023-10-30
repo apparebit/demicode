@@ -24,7 +24,6 @@ import sys
 from typing import Never, TextIO
 
 
-from ..codepoint import CodePoint
 from .darkmode import is_darkmode
 
 
@@ -117,7 +116,7 @@ class Style:
 
 class Padding(StrEnum):
     BACKGROUND = ' '
-    FOREGROUND = str(CodePoint.FULL_BLOCK)
+    FOREGROUND = '█'
 
 
 # --------------------------------------------------------------------------------------

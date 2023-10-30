@@ -391,6 +391,15 @@ class Manifest:
         self.files.retrieve_all(version, tick)
         return self.with_inventory(version, *self.versions).save_manifest()
 
+    def require_all(self, tick: None | Callable[[], None] = None) -> Self:
+        self.check_not_void()
+        missing = set(Version.all_supported()) - set(self.versions)
+        if not missing:
+            return self
+
+        self.files.retrieve_all(missing, tick)
+        return self.with_inventory(*missing, *self.versions).save_manifest()
+
 
 # --------------------------------------------------------------------------------------
 
@@ -625,7 +634,6 @@ class Mirror:
         if version is not None:
             self._manifest = self._manifest.require(version, tick)
         self._version = version or self._manifest.ucd
-        self._file_manager = self._manifest.files
 
     @property
     def root(self) -> Path:
@@ -635,18 +643,14 @@ class Mirror:
     def version(self) -> Version:
         return self._version
 
-    @property
-    def cldr(self) -> Self:
-        return self
-
     def cldr_filename(self, stem: str, suffix: str) -> str:
         return self._manifest.cldr.filename(stem, suffix)
 
     def url(self, filename: str, version: Version) -> None | str:
-        return self._file_manager.url(filename, version)
+        return self._manifest.files.url(filename, version)
 
     def retrieve_all(self, tick: None | Callable[[], None] = None) -> None:
-        return self._file_manager.retrieve_all(tick)
+        self._manifest = self._manifest.require_all(tick)
 
     def data(self, filename: str, version: Version) -> AbstractContextManager[IO[str]]:
-        return self._file_manager.data(filename, version)
+        return self._manifest.files.data(filename, version)

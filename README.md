@@ -25,24 +25,24 @@ highlight any overlap and the second using `█` U+2588 full block to obstruct
 those same bits.
 
 The following screenshot shows an example for **demicode's output
-`--with-curation`** when running in Terminal.app on macOS. Out of the seven
-terminals I have been testing—[Hyper](https://hyper.is),
-[iTerm2](https://iterm2.com), [Kitty](https://sw.kovidgoyal.net/kitty/),
+`--with-curation`** when running in Terminal.app on macOS. Out of the nine
+terminals I have been testing—[Alacritty](https://alacritty.org),
+[Hyper](https://hyper.is), [iTerm2](https://iterm2.com),
+[Kitty](https://sw.kovidgoyal.net/kitty/), [Rio](https://raphamorim.io/rio/),
 [Terminal.app](https://en.wikipedia.org/wiki/Terminal_(macOS)), [Visual Studio
 Code's terminal](https://code.visualstudio.com/docs/terminal/basics),
 [Warp](https://www.warp.dev), and
-[wezTerm](https://wezfurlong.org/wezterm/index.html)—it generates middling
-output: I find Terminal.app's and iTerm2's handling of overly wide glyphs the
-least bad. However, even with demicode using ANSI escape codes to line up
-columns, Terminal.app still manages to distort the column grid, as the lines for
-the technologist, person: red hair, and rainbow flag emoji in the screenshot
-below illustrate. I haven't found an effective work-around, despite trying
-several alternatives such as rendering character information first and blots
-second.
+[wezTerm](https://wezfurlong.org/wezterm/index.html)—I find Terminal.app's and
+iTerm2's handling of overly wide glyphs the least bad. However, even with
+demicode using ANSI escape codes to line up columns, Terminal.app still manages
+to distort the column grid, as the lines for the technologist, person: red hair,
+and rainbow flag emoji in the screenshot below illustrate. I haven't found an
+effective work-around, despite trying several alternatives such as rendering
+character information first and blots second.
 
 
 ![Demicode's output in the default one-grapheme-per-line format and light
-mode](https://raw.githubusercontent.com/apparebit/demicode/boss/docs/terminal.app.png)
+mode](https://raw.githubusercontent.com/apparebit/demicode/boss/doc/terminal.app.png)
 
 
 ## Features
@@ -86,7 +86,7 @@ Demicode supports the following features:
 
 
 ![Demicode's themes for light and dark mode and with more colors and doubly more
-colors](https://raw.githubusercontent.com/apparebit/demicode/boss/docs/terminal.app-mode-vs-brightness.png)
+colors](https://raw.githubusercontent.com/apparebit/demicode/boss/doc/terminal.app-mode-vs-brightness.png)
 
 
 ## Installation

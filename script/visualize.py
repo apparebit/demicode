@@ -26,6 +26,18 @@ def _parse_rect(s: str) -> Rect:
     return int(n1), int(n2), int(n3), int(n4)
 
 
+def _grow_rect(rect: Rect, delta: int) -> Rect:
+    return rect[0] - delta, rect[1] - delta, rect[2] + delta, rect[3] + delta
+
+
+def _format_wh(w: int, h: int) -> str:
+    return f'{" " * (5 + 1 + 5 + 1)} {w:5,d}×{h:5,d}'
+
+
+def _format_xywh(x1: int, y1: int, x2: int, y2: int) -> str:
+    return f'{x1:5,d}×{y1:5,d}, {x2-x1:5,d}×{y2-y1:5,d}'
+
+
 def _run_applescript(script: str, **kwargs: Any) -> subprocess.CompletedProcess[bytes]:
     result = subprocess.run(
         ['osascript', '-s', 's', '-'],
@@ -45,11 +57,14 @@ def _run_applescript(script: str, **kwargs: Any) -> subprocess.CompletedProcess[
 # --------------------------------------------------------------------------------------
 
 
-def _is_red_pixel(r: int, g: int, b: int) -> bool:
-    return r > 230 and g < 55 and b < 55
-
-
+_DEBUG_COLOR = False
 _PROBES = 5
+
+
+def _is_red_pixel(r: int, g: int, b: int) -> bool:
+    # iTerm renders the red as #E74025
+    return r > 0xE0 and g < 0x48 and b < 0x30
+
 
 def _between_bars(im: Image.Image) -> tuple[None | Rect, None | Rect]:
     step = im.width // (_PROBES + 1)
@@ -58,6 +73,11 @@ def _between_bars(im: Image.Image) -> tuple[None | Rect, None | Rect]:
         for x in range(1, _PROBES + 1):
             pixel = x * step, y
             color = im.getpixel(pixel)  # type: ignore
+            if _DEBUG_COLOR:
+                print(
+                    f'probe {x:2d}×{step}={pixel[0]:4d}, {pixel[1]:4d}: '
+                    f'#{color[0]:02x}{color[1]:02x}{color[2]:02x}'
+                )
             if not _is_red_pixel(*color):  # type: ignore
                 return False
         return True
@@ -166,43 +186,42 @@ class Terminal:
         return self
 
     def make_frontmost(self) -> Self:
+        if self.name == 'iTerm2':
+            actions = ['keystroke "1" using {option down, command down}', 'delay 1']
+        else:
+            actions = ['set frontmost to true', '']
+
         _run_applescript(f"""
             tell application "System Events"
                 tell application process "{self.name}"
-                    set frontmost to true
+                    delay 3
+                    {actions[0]}
+                    {actions[1]}
+                    delay 1
                 end tell
             end tell
         """)
         return self
 
-    def run(self, cwd: str | Path, cmd: str) -> Self:
-        if self.name == 'iTerm2':
-            # Make up for iTerm not bringing window to front upon activation.
-            extra = ['keystroke "1" using {option down, command down}', 'delay 1']
-        else:
-            extra = ['', '']
-
-        _run_applescript(f"""\
+    def change_dir(self, cwd: str | Path) -> Self:
+        _run_applescript(f"""
             tell application "System Events"
                 tell application process "{self.name}"
-                    delay 3
-
-                    {extra[0]}
-                    {extra[1]}
-
-                    keystroke "clear"
-                    keystroke return
-                    delay 0.5
-
                     keystroke "cd {cwd}"
                     keystroke return
                     delay 1
+                end tell
+            end tell
+        """)
+        return self
 
+    def exec(self, cmd: str) -> Self:
+        _run_applescript(f"""\
+            tell application "System Events"
+                tell application process "{self.name}"
                     keystroke "{cmd}"
                     keystroke return
                     delay 2
-
-                    keystroke return
                 end tell
             end tell
         """)
@@ -260,24 +279,29 @@ class Terminal:
         isrunner = self.is_current()
 
         if isrunner:
+            # This terminal is running this script. Don't activate or quit.
+            # Just run badterm.py directly.
             assert demicode == Path.cwd()
-            print('    Print dash-integral')
+            print('    ⊙ Print dash-integral')
             subprocess.run(['./script/badterm.py'], check=True)
 
-            print('    Capture screenshot')
+            print('    ⊙ Capture screenshot')
             self.screenshot(screenshot)
 
         else:
-            print(f'    Activate {self.name}')
+            print(f'    ⊙ Activate {self.name}')
             self.activate()
+            self.make_frontmost()
+            self.change_dir(demicode)
+            self.exec('./venv/bin/python -m demicode.ui.terminal -a')
 
-            print(f'    Print dash-integral in {self.name}')
-            self.run(demicode, './script/badterm.py')
+            print(f'    ⊙ Instigate {self.name} to print dash-integral')
+            self.exec('./script/badterm.py')
 
-            print(f'    Capture screenshot of {self.name}')
+            print(f'    ⊙ Capture screenshot of {self.name}')
             self.screenshot(screenshot)
 
-            print(f'    Quit {self.name}')
+            print(f'    ⊙ Quit {self.name}')
             self.quit()
         return self
 
@@ -287,7 +311,7 @@ class Terminal:
                 im = _without_transparency(im)
 
             # Get rectangles between red horizontal bars
-            print('    Scan for red horizontal bars')
+            print('    ⊙ Scan for red horizontal bars')
             r1, r2 = _between_bars(im)
             assert r1 is not None
             assert r2 is not None
@@ -297,28 +321,21 @@ class Terminal:
 
             for rect1 in (r1, r2):
                 first = rect1 == r1
+                if first:
+                    print(f'{" " * (6 + 17)}     \x1b[3mx     y      w     h\x1b[0m')
 
-                # Crop image to area between bars
-                print(f'    Extract image #{2 - first}')
+                print(f'    ⊙ Extract image #{2 - first}: {_format_xywh(*rect1)}')
                 wim = im.copy() if first else im
                 wim = wim.crop(rect1)
-
-                # Get bounding box of text without surrounding all-white margin
-                print(f'    Trim image #{2 - first}')
                 rect2 = _trim(wim)
                 assert rect2 is not None
 
-                # Crop image to bounding box plus padding
-                rect2 = (
-                    rect2[0] - _PADDING,
-                    rect2[1] - _PADDING,
-                    rect2[2] + _PADDING,
-                    rect2[3] + _PADDING,
-                )
+                print(f'    ⊙ Trim white space: {_format_xywh(*rect2)}')
+                rect2 = _grow_rect(rect2, _PADDING)
                 wim = wim.crop(rect2)
 
-                # Save image
-                print(f'    Save image #{2 - first}')
+                image_size = _format_wh(wim.width, wim.height)
+                print(f'    ⊙ Save image #{2 - first}:    {image_size}')
                 path = Path(raw_screenshot).with_name(
                     f'dash-integral-{self.nickname}-{2 - first}.png'
                 )
@@ -356,6 +373,12 @@ def main() -> None:
     assert (demicode_root / 'script').is_dir()
     screenshot_dir = demicode_root / 'doc' / 'screenshot'
     screenshot_dir.mkdir(parents=True, exist_ok=True)
+
+    # Prevent the current terminal from leaking variable definitions to the
+    # terminal being tested. Amazingly, macOS does propagate the environment
+    # through AppleScript into activated applications.
+    os.environ.pop('TERM_PROGRAM', None)
+    os.environ.pop('TERM_PROGRAM_VERSION', None)
 
     if options.terminal:
         terminals = [Terminal.from_nickname(options.terminal)]

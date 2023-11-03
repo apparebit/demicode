@@ -1,4 +1,4 @@
-#!.venv/bin/python
+#!./venv/bin/python
 
 """
 Repeatedly show terminal size. Most terminals don't show the fixed-width grid

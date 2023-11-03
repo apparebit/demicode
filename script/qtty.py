@@ -1,4 +1,4 @@
-#!.venv/bin/python
+#!./venv/bin/python
 
 from pathlib import Path
 import sys

@@ -92,20 +92,20 @@ def inspect_bundle_id() -> tuple[None | str, None | str]:
 def report_terminal_version(
     renderer: None | Renderer = None
 ) -> tuple[None | str, None | str]:
-    t1, v1 = inspect_env_variables()
-    if t1 and v1:
-        return t1, v1
-
     renderer = Renderer.new() if renderer is None else renderer
-    t2, v2 = inspect_xtversion(renderer)
-    if t2 and v2:
-        return t2, v2
+    t, v = inspect_xtversion(renderer)
+    if t and v:
+        return t, v
 
-    t3, v3 = inspect_bundle_id()
-    if t3 and v3:
-        return t3, v3
+    t, v = inspect_bundle_id()
+    if t and v:
+        return t, v
 
-    return t1 or t2 or t3 or None, v1 or v2 or v3 or None
+    t, v = inspect_env_variables()
+    if t and v:
+        return t, v
+
+    return None, None
 
 
 def join_terminal_version(terminal: None | str, version: None | str) -> str:

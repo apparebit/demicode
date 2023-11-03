@@ -23,7 +23,7 @@ requires = ["flit_core >=3.4"]
 build-backend = "flit_core.buildapi"
 
 [tool.pyright]
-include = ["demicode/*.py", "test/*.py", "util/*.py", "runtest.py"]
+include = ["demicode/*.py", "test/*.py", "script/*.py", "runtest.py"]
 typeCheckingMode = "strict"
 venv = ".venv"
 pythonVersion = "3.11"

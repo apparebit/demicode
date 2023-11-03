@@ -228,7 +228,7 @@ def show_statistics(
 
     # ----------------------------------------------------------------------------------
 
-    renderer.link('https://github.com/apparebit/demicode/blob/boss/docs/props.md')
+    renderer.link('https://github.com/apparebit/demicode/blob/boss/doc/props.md')
     renderer.newline()
 
 _VERSION_STRIDE = 6

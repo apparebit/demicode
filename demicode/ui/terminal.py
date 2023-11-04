@@ -1,35 +1,103 @@
+from collections.abc import Iterator
+import dataclasses
 import os
 import subprocess
 import sys
-from typing import TextIO
+from typing import ClassVar, Self, TextIO
 
 from .render import Renderer
 
 
-_CANONICAL_NAME = {
-    'org.alacritty': 'Alacritty',
-    'Hyper': 'Hyper',
-    'co.zeit.hyper': 'Hyper',
-    'iTerm2': 'iTerm2',
-    'iTerm.app': 'iTerm2',
-    'com.googlecode.iterm2': 'iTerm2',
-    'kitty': 'Kitty',
-    'net.kovidgoyal.kitty': 'Kitty',
-    'rio': 'Rio',
-    'com.raphaelamorim.rio': 'Rio',
-    'Apple_Terminal': 'Terminal.app',
-    'com.apple.Terminal': 'Terminal.app',
-    'vscode': 'Visual Studio Code',
-    'WarpTerminal': 'Warp',
-    'dev.warp.Warp-Stable': 'Warp',
-    'WezTerm': 'WezTerm',
-    'com.github.wez.wezterm': 'WezTerm',
-}
+@dataclasses.dataclass(frozen=True, slots=True)
+class Terminal:
+    # The application name as it appears in the main menu, usable in AppleScript
+    name: str
+    # The macOS bundle identifier
+    bundle: str
+    # A humane nickname, lowercase only
+    nickname: str
+    # The identifier for AppleScript `activate` commands if different from name
+    activation: str
+
+    @property
+    def display(self) -> str:
+        """Get the terminal's display name."""
+        if self.bundle == 'com.microsoft.VSCode':
+            return self.activation
+        return self.name
+
+    _registry: ClassVar[None | dict[str, Self]] = None
+
+    @classmethod
+    def registry(cls) -> dict[str, Self]:
+        if cls._registry is None:
+            cls._registry = {}
+
+            for names in (
+                # The first other name is an informal name for human use.
+                # The second other name typically appears in TERM_PROGRAM.
+                ('Alacritty', 'org.alacritty'),
+                ('Hyper', 'co.zeit.hyper'),
+                ('iTerm2', 'com.googlecode.iterm2', 'iterm', 'iTerm.app'),
+                ('kitty', 'net.kovidgoyal.kitty'),
+                ('Rio', 'com.raphaelamorim.rio'),
+                ('Terminal', 'com.apple.Terminal', 'terminalapp', 'Apple_Terminal'),
+                ('Code', 'com.microsoft.VSCode', 'vscode'),
+                ('Warp', 'dev.warp.Warp-Stable', 'warp', 'WarpTerminal'),
+                ('WezTerm', 'com.github.wez.wezterm'),
+            ):
+                for n in names:
+                    assert n not in cls._registry, f'ambiguous terminal identifier {n}'
+                name, bundle, *others = names
+
+                nickname = others[0] if others else name.lower()
+                assert nickname not in cls._registry,\
+                    f'ambiguous terminal identifier {nickname}'
+
+                activation = (
+                    'iTerm' if name == 'iTerm2' else
+                    'Visual Studio Code' if name == 'Code' else
+                    name
+                )
+                assert activation not in cls._registry,\
+                    f'ambiguous terminal identifier {activation}'
+
+                terminal = cls(name, bundle, nickname, activation)
+                cls._registry[name] = terminal
+                cls._registry[bundle] = terminal
+                for n in others:
+                    cls._registry[n] = terminal
+
+        return cls._registry
+
+    def is_iterm(self) -> bool:
+        return self.bundle == 'com.googlecode.iterm2'
+
+    def is_vscode(self) -> bool:
+        return self.bundle == 'com.microsoft.VSCode'
+
+    @classmethod
+    def all(cls) -> Iterator[Self]:
+        seen: set[Self] = set()
+        for terminal in cls.registry().values():
+            if terminal in seen:
+                continue
+            seen.add(terminal)
+            yield terminal
+
+    @classmethod
+    def resolve_name(cls, ident: str) -> str:
+        terminal = cls.registry().get(ident)
+        return terminal.display if terminal else ident
+
+    @classmethod
+    def resolve(cls, ident: str) -> Self:
+        return cls.registry()[ident]
 
 
 def inspect_env_variables() -> tuple[None | str, None | str]:
     if (terminal := os.getenv('TERM_PROGRAM')):
-        terminal = _CANONICAL_NAME.get(terminal, terminal)
+        terminal = Terminal.resolve_name(terminal)
     version = os.getenv('TERM_PROGRAM_VERSION')
     return terminal or None, version or None
 
@@ -60,13 +128,13 @@ def inspect_xtversion(
         terminal, version = parts
 
     t = terminal.decode('ascii')
-    return _CANONICAL_NAME.get(t, t), version.decode('ascii')
+    return Terminal.resolve_name(t), version.decode('ascii')
 
 
 def inspect_bundle_id() -> tuple[None | str, None | str]:
     if not (bundle_id := os.getenv('__CFBundleIdentifier')):
         return None, None
-    terminal = _CANONICAL_NAME.get(bundle_id, bundle_id)
+    terminal = Terminal.resolve_name(bundle_id)
 
     paths = subprocess.run(
         ["mdfind", f"kMDItemCFBundleIdentifier == '{bundle_id}'"],
@@ -99,6 +167,9 @@ def report_terminal_version(
 
     t, v = inspect_bundle_id()
     if t and v:
+        # The bundle version is horribly outdated.
+        if t == 'Warp':
+            v = os.getenv('TERM_PROGRAM_VERSION')
         return t, v
 
     t, v = inspect_env_variables()

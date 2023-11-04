@@ -1,11 +1,18 @@
 #!./venv/bin/python
 
+"""
+Illustrate fixed-width rendering issues for nine different terminal emulators by
+producing screenshots that are ready for publication. In addition to depending
+on the Pillow package for image manipulation, this script makes extensive use of
+AppleScript for controlling other applications and the `screencapture` command
+line tool for taking screenshots. As a result, it only runs on macOS.
+"""
+
 import sys
 if sys.platform != 'darwin':
     raise NotImplementedError('script currently supports macOS only!')
 
 import argparse
-import dataclasses
 import os
 from pathlib import Path
 import subprocess
@@ -13,6 +20,9 @@ from textwrap import dedent
 from typing import Any, Self, TypeAlias
 
 from PIL import Image, ImageChops
+
+sys.path.insert(0, str(Path.cwd()))
+from demicode.ui.terminal import Terminal as BaseTerminal
 
 
 Rect: TypeAlias = tuple[int, int, int, int]
@@ -58,15 +68,22 @@ def _run_applescript(script: str, **kwargs: Any) -> subprocess.CompletedProcess[
 
 
 _DEBUG_COLOR = False
+_SIDE_MARGIN = 45
+_LEFT_VSCODE_MARGIN = 110
+_TRIM_PADDING = 10
 _PROBES = 5
 
 
 def _is_red_pixel(r: int, g: int, b: int) -> bool:
-    # iTerm renders the red as #E74025
+    # iTerm renders the red as #E74025. It apparently is the most non-red.
     return r > 0xE0 and g < 0x48 and b < 0x30
 
 
-def _between_bars(im: Image.Image) -> tuple[None | Rect, None | Rect]:
+def _between_bars(
+    im: Image.Image,
+    left_margin: int = _SIDE_MARGIN,
+    right_margin: int = _SIDE_MARGIN,
+) -> tuple[None | Rect, None | Rect]:
     step = im.width // (_PROBES + 1)
 
     def is_red_bar(y: int) -> bool:
@@ -110,9 +127,9 @@ def _between_bars(im: Image.Image) -> tuple[None | Rect, None | Rect]:
 
     r1 = r2 = None
     if upper1 is not None and lower1 is not None:
-        r1 = 45, upper1, im.width - 45, lower1
+        r1 = left_margin, upper1, im.width - right_margin, lower1
     if upper2 is not None and lower2 is not None:
-        r2 = 45, upper2, im.width - 45, lower2
+        r2 = left_margin, upper2, im.width - right_margin, lower2
     return r1, r2
 
 
@@ -133,47 +150,7 @@ def _trim(im: Image.Image) -> None | tuple[int, int, int, int]:
 # --------------------------------------------------------------------------------------
 
 
-_NAME_2_TERM: 'dict[str, Terminal]' = {}
-_BUNDLE_2_TERM: 'dict[str, Terminal]' = {}
-_NICK_2_TERM: 'dict[str, Terminal]' = {}
-_ALL_TERMINALS: 'list[Terminal]' = []
-_PADDING = 10
-
-@dataclasses.dataclass(frozen=True, slots=True)
-class Terminal:
-    name: str
-    bundle: str
-    nickname: str
-
-    @classmethod
-    def of(cls, name: str, bundle: str, nickname: str) -> Self:
-        if name in _NAME_2_TERM or bundle in _BUNDLE_2_TERM:
-            raise ValueError(f'cannot use {name} or {bundle}')
-
-        terminal = cls(name, bundle, nickname)
-        _NAME_2_TERM[name] = terminal
-        _BUNDLE_2_TERM[bundle] = terminal
-        _NICK_2_TERM[nickname] = terminal
-        _ALL_TERMINALS.append(terminal)
-        return terminal
-
-    @classmethod
-    def from_name(cls, name: str) -> Self:
-        if name not in _NAME_2_TERM:
-            raise ValueError(f'unknown terminal name {name}')
-        return _NAME_2_TERM[name]
-
-    @classmethod
-    def from_bundle(cls, bundle: str) -> Self:
-        if bundle not in _BUNDLE_2_TERM:
-            raise ValueError(f'unknown terminal bundle {bundle}')
-        return _BUNDLE_2_TERM[bundle]
-
-    @classmethod
-    def from_nickname(cls, nickname: str) -> Self:
-        if nickname not in _NICK_2_TERM:
-            raise ValueError(f'unknown terminal nickname {nickname}')
-        return _NICK_2_TERM[nickname]
+class Terminal(BaseTerminal):
 
     def is_current(self) -> None | bool:
         if (current_bundle := os.getenv('__CFBundleIdentifier')):
@@ -181,12 +158,36 @@ class Terminal:
         return None
 
     def activate(self) -> Self:
-        name = 'iTerm' if self.name == 'iTerm2' else self.name
-        _run_applescript(f'activate application "{name}"')
+        _run_applescript(f'activate application "{self.activation}"')
+        return self
+
+    def _prepare_vscode(self) -> Self:
+        assert self.is_vscode()
+        _run_applescript(f"""
+            tell application "System Events"
+                tell application process "{self.name}"
+                    keystroke "p" using {{shift down, command down}}
+                    delay 0.5
+                    keystroke "View Close Primary Side Bar"
+                    keystroke return
+                    delay 1
+
+                    keystroke "p" using {{shift down, command down}}
+                    delay 0.5
+                    keystroke "Terminal Create New Terminal in Editor Area"
+                    keystroke return
+                    delay 2
+                end tell
+            end tell
+        """)
         return self
 
     def make_frontmost(self) -> Self:
-        if self.name == 'iTerm2':
+        if self.is_vscode():
+            self._prepare_vscode()
+            return self
+
+        if self.is_iterm():
             actions = ['keystroke "1" using {option down, command down}', 'delay 1']
         else:
             actions = ['set frontmost to true', '']
@@ -275,10 +276,10 @@ class Terminal:
         self,
         demicode: str | Path,
         screenshot: str | Path
-    ) -> Self:
-        isrunner = self.is_current()
+    ) -> None | Path:
+        screenshot = Path(screenshot)
 
-        if isrunner:
+        if self.is_current():
             # This terminal is running this script. Don't activate or quit.
             # Just run badterm.py directly.
             assert demicode == Path.cwd()
@@ -287,23 +288,24 @@ class Terminal:
 
             print('    ⊙ Capture screenshot')
             self.screenshot(screenshot)
+            return screenshot
 
-        else:
-            print(f'    ⊙ Activate {self.name}')
-            self.activate()
-            self.make_frontmost()
-            self.change_dir(demicode)
-            self.exec('./venv/bin/python -m demicode.ui.terminal -a')
+        print(f'    ⊙ Activate {self.name}')
+        self.activate()
+        self.make_frontmost()
+        self.change_dir(demicode)
 
-            print(f'    ⊙ Instigate {self.name} to print dash-integral')
-            self.exec('./script/badterm.py')
+        print(f'    ⊙ Instigate {self.name} to print dash-integral')
+        self.exec('./script/badterm.py')
 
-            print(f'    ⊙ Capture screenshot of {self.name}')
-            self.screenshot(screenshot)
+        print(f'    ⊙ Capture screenshot of {self.name}')
+        self.screenshot(screenshot)
 
+        if not self.is_vscode():
             print(f'    ⊙ Quit {self.name}')
             self.quit()
-        return self
+
+        return screenshot
 
     def split_dash_integral(self, raw_screenshot: str | Path) -> tuple[Path, Path]:
         with Image.open(raw_screenshot) as im:
@@ -312,7 +314,8 @@ class Terminal:
 
             # Get rectangles between red horizontal bars
             print('    ⊙ Scan for red horizontal bars')
-            r1, r2 = _between_bars(im)
+            left_margin = _LEFT_VSCODE_MARGIN if self.is_vscode() else _SIDE_MARGIN
+            r1, r2 = _between_bars(im, left_margin)
             assert r1 is not None
             assert r2 is not None
 
@@ -331,10 +334,10 @@ class Terminal:
                 assert rect2 is not None
 
                 print(f'    ⊙ Trim white space: {_format_xywh(*rect2)}')
-                rect2 = _grow_rect(rect2, _PADDING)
+                rect2 = _grow_rect(rect2, _TRIM_PADDING)
                 wim = wim.crop(rect2)
 
-                image_size = _format_wh(wim.width, wim.height)
+                image_size = _format_wh(*wim.size)
                 print(f'    ⊙ Save image #{2 - first}:    {image_size}')
                 path = Path(raw_screenshot).with_name(
                     f'dash-integral-{self.nickname}-{2 - first}.png'
@@ -349,17 +352,6 @@ class Terminal:
             assert p1 is not None
             assert p2 is not None
             return p1, p2
-
-
-ALACRITTY = Terminal.of('Alacritty', 'org.alacritty', 'alacritty')
-HYPER = Terminal.of('Hyper', 'co.zeit.hyper', 'hyper')
-ITERM = Terminal.of('iTerm2', 'com.googlecode.iterm2', 'iterm')
-KITTY = Terminal.of('kitty', 'net.kovidgoyal.kitty', 'kitty')
-RIO = Terminal.of('Rio', 'com.raphaelamorim.rio', 'rio')
-TERMINAL_APP = Terminal.of('Terminal', 'com.apple.Terminal', 'terminalapp')
-VS_CODE = Terminal.of('Visual Studio Code', 'com.microsoft.VSCode', 'vscode')
-WARP = Terminal.of('Warp', 'dev.warp.Warp-Stable', 'warp')
-WEZTERM = Terminal.of('WezTerm', 'com.github.wez.wezterm', 'wezterm')
 
 
 def main() -> None:
@@ -381,24 +373,16 @@ def main() -> None:
     os.environ.pop('TERM_PROGRAM_VERSION', None)
 
     if options.terminal:
-        terminals = [Terminal.from_nickname(options.terminal)]
+        terminals = iter([Terminal.resolve(options.terminal)])
     else:
-        terminals = _ALL_TERMINALS
+        terminals = Terminal.all()
 
     for terminal in terminals:
         print(f'\x1b[1m{terminal.name} ({terminal.bundle})\x1b[0m')
-        screenshot_path = screenshot_dir / terminal.screenshot_name('dash-integral')
-        if terminal.name == 'Visual Studio Code':
-            if not screenshot_path.exists():
-                print('Run "script/badterm.py" in Visual Studio Code\'s terminal')
-                print(
-                    'and save screenshot to '
-                    '"doc/screenshot/dash-integral-vscode-raw.png"'
-                )
-                continue
-        else:
-            terminal.capture_dash_integral(demicode_root, screenshot_path)
-        terminal.split_dash_integral(screenshot_path)
+        screenshot = screenshot_dir / terminal.screenshot_name('dash-integral')
+        screenshot = terminal.capture_dash_integral(demicode_root, screenshot)
+        if screenshot is not None:
+            terminal.split_dash_integral(screenshot)
 
 
 if __name__ == '__main__':

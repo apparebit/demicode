@@ -10,21 +10,41 @@ from .render import Renderer
 
 @dataclasses.dataclass(frozen=True, slots=True)
 class Terminal:
-    # The application name as it appears in the main menu, usable in AppleScript
+    """
+    The many names of a terminal.
+
+    This class captures the `name`, which is the same as the same as the one
+    appearing in the macOS menubar and thus suitable for use in AppleScript when
+    the application is already running.
+
+    Alas, since the application's on-disk name may differ, AppleScript may just
+    require a different name for activation. For example, 'Visual Studio Code'
+    is called just that on disk, but 'Code' in the menu bar. Thankfully,
+    AppleScript can also activate an application based on the `bundle`
+    identifier.
+
+    The nickname is a memorable, lowercase name intended to uniquely identify
+    the application on demicode's command line. It defaults to the terminal's
+    name in lower case, but requires a few explicit overrides.
+
+    For some terminals, a fourth name is registered, but only for looking up the
+    terminal record. It is the value of the TERM_PROGRAM environment variable if
+    different from all other names.
+    """
     name: str
-    # The macOS bundle identifier
     bundle: str
-    # A humane nickname, lowercase only
     nickname: str
-    # The identifier for AppleScript `activate` commands if different from name
-    activation: str
 
     @property
     def display(self) -> str:
-        """Get the terminal's display name."""
-        if self.bundle == 'com.microsoft.VSCode':
-            return self.activation
-        return self.name
+        return 'Visual Studio Code' if self.is_vscode() else self.name
+
+    def is_iterm(self) -> bool:
+        return self.bundle == 'com.googlecode.iterm2'
+
+    def is_vscode(self) -> bool:
+        return self.bundle == 'com.microsoft.VSCode'
+
 
     _registry: ClassVar[None | dict[str, Self]] = None
 
@@ -34,8 +54,8 @@ class Terminal:
             cls._registry = {}
 
             for names in (
-                # The first other name is an informal name for human use.
-                # The second other name typically appears in TERM_PROGRAM.
+                # A terminal's name and bundle identifier, optionally followed
+                # by the nickname and TERM_PROGRAM.
                 ('Alacritty', 'org.alacritty'),
                 ('Hyper', 'co.zeit.hyper'),
                 ('iTerm2', 'com.googlecode.iterm2', 'iterm', 'iTerm.app'),
@@ -54,27 +74,13 @@ class Terminal:
                 assert nickname not in cls._registry,\
                     f'ambiguous terminal identifier {nickname}'
 
-                activation = (
-                    'iTerm' if name == 'iTerm2' else
-                    'Visual Studio Code' if name == 'Code' else
-                    name
-                )
-                assert activation not in cls._registry,\
-                    f'ambiguous terminal identifier {activation}'
-
-                terminal = cls(name, bundle, nickname, activation)
+                terminal = cls(name, bundle, nickname)
                 cls._registry[name] = terminal
                 cls._registry[bundle] = terminal
                 for n in others:
                     cls._registry[n] = terminal
 
         return cls._registry
-
-    def is_iterm(self) -> bool:
-        return self.bundle == 'com.googlecode.iterm2'
-
-    def is_vscode(self) -> bool:
-        return self.bundle == 'com.microsoft.VSCode'
 
     @classmethod
     def all(cls) -> Iterator[Self]:
@@ -93,6 +99,9 @@ class Terminal:
     @classmethod
     def resolve(cls, ident: str) -> Self:
         return cls.registry()[ident]
+
+
+# --------------------------------------------------------------------------------------
 
 
 def inspect_env_variables() -> tuple[None | str, None | str]:
@@ -157,7 +166,7 @@ def inspect_bundle_id() -> tuple[None | str, None | str]:
     return terminal, None
 
 
-def report_terminal_version(
+def determine_terminal_and_version(
     renderer: None | Renderer = None
 ) -> tuple[None | str, None | str]:
     renderer = Renderer.new() if renderer is None else renderer
@@ -188,7 +197,7 @@ def join_terminal_version(terminal: None | str, version: None | str) -> str:
 
 
 def termid(renderer: None | Renderer = None) -> str:
-    return join_terminal_version(*report_terminal_version(renderer))
+    return join_terminal_version(*determine_terminal_and_version(renderer))
 
 
 if __name__ == '__main__':
@@ -207,7 +216,7 @@ if __name__ == '__main__':
             sys.exit(1)
 
     renderer = Renderer.new()
-    idn = join_terminal_version(*report_terminal_version(renderer))
+    idn = join_terminal_version(*determine_terminal_and_version(renderer))
     if show_all:
         id1 = join_terminal_version(*inspect_env_variables())
         id2 = join_terminal_version(*inspect_xtversion(renderer))
@@ -217,6 +226,7 @@ if __name__ == '__main__':
         print(f' combo: {idn}')
     else:
         print(idn)
+
 
 # --------------------------------------------------------------------------------------
 

@@ -30,6 +30,14 @@ class Terminal:
     For some terminals, a fourth name is registered, but only for looking up the
     terminal record. It is the value of the TERM_PROGRAM environment variable if
     different from all other names.
+
+    TODO: This module supports three methods for identifying a terminal at
+    runtime, based on the TERM_PROGRAM environment variable, the bundle
+    identifier available through the __CFBundleIdentifier environment variable,
+    and the XTVERSION control sequence. Unfortunately, only the third method is
+    not specific to macOS. However, support for XTVERSION, at least amongst
+    terminal emulators running on macOS, is sparse. We need more, cross-platform
+    methods.
     """
     name: str
     bundle: str

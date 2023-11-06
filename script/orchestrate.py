@@ -17,12 +17,17 @@ import os
 from pathlib import Path
 import subprocess
 from textwrap import dedent
-from typing import Any, Self, TypeAlias
+from typing import Any, Literal, Self, TypeAlias
 
 from PIL import Image, ImageChops
 
+# Fix Python path to include project root
 sys.path.insert(0, str(Path.cwd()))
+
 from demicode.ui.terminal import Terminal as BaseTerminal
+
+
+# --------------------------------------------------------------------------------------
 
 
 Rect: TypeAlias = tuple[int, int, int, int]
@@ -48,6 +53,9 @@ def _format_xywh(x1: int, y1: int, x2: int, y2: int) -> str:
     return f'{x1:5,d}×{y1:5,d}, {x2-x1:5,d}×{y2-y1:5,d}'
 
 
+# --------------------------------------------------------------------------------------
+
+
 def _run_applescript(script: str, **kwargs: Any) -> subprocess.CompletedProcess[bytes]:
     result = subprocess.run(
         ['osascript', '-s', 's', '-'],
@@ -58,6 +66,7 @@ def _run_applescript(script: str, **kwargs: Any) -> subprocess.CompletedProcess[
 
     if result.returncode != 0:
         print('AppleScript failed:')
+        print(result.stdout)
         print(result.stderr)
         result.check_returncode()
 
@@ -79,7 +88,7 @@ def _is_red_pixel(r: int, g: int, b: int) -> bool:
     return r > 0xE0 and g < 0x48 and b < 0x30
 
 
-def _between_bars(
+def _find_regions_between_bars(
     im: Image.Image,
     left_margin: int = _SIDE_MARGIN,
     right_margin: int = _SIDE_MARGIN,
@@ -140,7 +149,7 @@ def _without_transparency(im: Image.Image) -> Image.Image:
     return bg.convert('RGB')
 
 
-def _trim(im: Image.Image) -> None | tuple[int, int, int, int]:
+def _find_content_bbox(im: Image.Image) -> None | tuple[int, int, int, int]:
     bg = Image.new(im.mode, im.size, im.getpixel((10, 10)))  # type: ignore
     diff = ImageChops.difference(im, bg)
     diff = ImageChops.add(diff, diff, 2.0, -3)
@@ -148,6 +157,11 @@ def _trim(im: Image.Image) -> None | tuple[int, int, int, int]:
 
 
 # --------------------------------------------------------------------------------------
+
+
+PayloadType: TypeAlias = Literal[
+    'dash-integral', 'spaced-dash-integral', 'arab-ligature'
+]
 
 
 class Terminal(BaseTerminal):
@@ -158,7 +172,11 @@ class Terminal(BaseTerminal):
         return None
 
     def activate(self) -> Self:
-        _run_applescript(f'activate application "{self.activation}"')
+        _run_applescript(f"""\
+            tell application id "{self.bundle}"
+                activate
+            end tell
+        """)
         return self
 
     def _prepare_vscode(self) -> Self:
@@ -204,7 +222,7 @@ class Terminal(BaseTerminal):
         """)
         return self
 
-    def change_dir(self, cwd: str | Path) -> Self:
+    def change_dir(self, cwd: Path) -> Self:
         _run_applescript(f"""
             tell application "System Events"
                 tell application process "{self.name}"
@@ -251,7 +269,7 @@ class Terminal(BaseTerminal):
     def screenshot_name(self, prefix: str) -> str:
         return f'{prefix}-{self.nickname}-raw.png'
 
-    def screenshot(self, path: str | Path) -> Self:
+    def screenshot(self, path: Path) -> Self:
         subprocess.run([
             'screencapture', '-m',
             '-R', ','.join(str(n) for n in self.window_rect_xywh()),
@@ -272,19 +290,15 @@ class Terminal(BaseTerminal):
 
     # ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~
 
-    def capture_dash_integral(
-        self,
-        demicode: str | Path,
-        screenshot: str | Path
+    def capture_output(
+            self, demicode: Path, payload: PayloadType, screenshot: Path,
     ) -> None | Path:
-        screenshot = Path(screenshot)
-
         if self.is_current():
             # This terminal is running this script. Don't activate or quit.
             # Just run badterm.py directly.
             assert demicode == Path.cwd()
-            print('    ⊙ Print dash-integral')
-            subprocess.run(['./script/badterm.py'], check=True)
+            print(f'    ⊙ Display {payload}')
+            subprocess.run(['./script/badterm.py', payload], check=True)
 
             print('    ⊙ Capture screenshot')
             self.screenshot(screenshot)
@@ -295,8 +309,8 @@ class Terminal(BaseTerminal):
         self.make_frontmost()
         self.change_dir(demicode)
 
-        print(f'    ⊙ Instigate {self.name} to print dash-integral')
-        self.exec('./script/badterm.py')
+        print(f'    ⊙ Make {self.name} display {payload}')
+        self.exec(f'./script/badterm.py {payload}')
 
         print(f'    ⊙ Capture screenshot of {self.name}')
         self.screenshot(screenshot)
@@ -307,22 +321,28 @@ class Terminal(BaseTerminal):
 
         return screenshot
 
-    def split_dash_integral(self, raw_screenshot: str | Path) -> tuple[Path, Path]:
+    def crop_output(
+        self, demicode: Path, payload: PayloadType, raw_screenshot: Path
+    ) -> tuple[Path, None | Path]:
         with Image.open(raw_screenshot) as im:
             if im.mode == 'RGBA':
                 im = _without_transparency(im)
 
             # Get rectangles between red horizontal bars
-            print('    ⊙ Scan for red horizontal bars')
+            print(f'    ⊙ Scan "{raw_screenshot.relative_to(demicode)}" for red bars')
             left_margin = _LEFT_VSCODE_MARGIN if self.is_vscode() else _SIDE_MARGIN
-            r1, r2 = _between_bars(im, left_margin)
-            assert r1 is not None
-            assert r2 is not None
+            r1, r2 = _find_regions_between_bars(im, left_margin)
+
+            if r1 is None:
+                raise AssertionError('could not identify region between red bars')
+            to_scan = [r1]
+            if r2 is not None:
+                to_scan.append(r2)
 
             p1: None | Path = None
             p2: None | Path = None
 
-            for rect1 in (r1, r2):
+            for rect1 in to_scan:
                 first = rect1 == r1
                 if first:
                     print(f'{" " * (6 + 17)}     \x1b[3mx     y      w     h\x1b[0m')
@@ -330,7 +350,7 @@ class Terminal(BaseTerminal):
                 print(f'    ⊙ Extract image #{2 - first}: {_format_xywh(*rect1)}')
                 wim = im.copy() if first else im
                 wim = wim.crop(rect1)
-                rect2 = _trim(wim)
+                rect2 = _find_content_bbox(wim)
                 assert rect2 is not None
 
                 print(f'    ⊙ Trim white space: {_format_xywh(*rect2)}')
@@ -339,8 +359,8 @@ class Terminal(BaseTerminal):
 
                 image_size = _format_wh(*wim.size)
                 print(f'    ⊙ Save image #{2 - first}:    {image_size}')
-                path = Path(raw_screenshot).with_name(
-                    f'dash-integral-{self.nickname}-{2 - first}.png'
+                path = raw_screenshot.with_name(
+                    f'{payload}-{self.nickname}{"" if first else "-2"}.png'
                 )
                 wim.save(path)
 
@@ -350,20 +370,35 @@ class Terminal(BaseTerminal):
                     p2 = path
 
             assert p1 is not None
-            assert p2 is not None
+            if r2 is not None:
+                assert p2 is not None
             return p1, p2
 
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument('--terminal', '-t')
+    parser.add_argument(
+        '--terminal', '-t',
+        choices=[
+            'alactritty', 'hyper', 'iterm', 'kitty', 'rio', 'terminalapp', 'vscode',
+            'warp', 'wezterm',
+        ],
+        help='run only the selected terminal'
+    )
+    parser.add_argument(
+        '--payload', '-p',
+        choices=['dash-integral', 'spaced-dash-integral', 'arab-ligature'],
+        default='dash-integral',
+        help='select the payload to display',
+    )
     options = parser.parse_args()
 
-    demicode_root = Path.cwd()
-    assert (demicode_root / 'demicode').is_dir()
-    assert (demicode_root / 'doc').is_dir()
-    assert (demicode_root / 'script').is_dir()
-    screenshot_dir = demicode_root / 'doc' / 'screenshot'
+    project_root = Path.cwd()
+    msg = 'tool must run in root of demicode project'
+    assert (project_root / 'demicode').is_dir(), msg
+    assert (project_root / 'doc').is_dir(), msg
+    assert (project_root / 'script').is_dir(), msg
+    screenshot_dir = project_root / 'doc' / 'screenshot'
     screenshot_dir.mkdir(parents=True, exist_ok=True)
 
     # Prevent the current terminal from leaking variable definitions to the
@@ -379,10 +414,12 @@ def main() -> None:
 
     for terminal in terminals:
         print(f'\x1b[1m{terminal.name} ({terminal.bundle})\x1b[0m')
-        screenshot = screenshot_dir / terminal.screenshot_name('dash-integral')
-        screenshot = terminal.capture_dash_integral(demicode_root, screenshot)
+        screenshot = screenshot_dir / terminal.screenshot_name(options.payload)
+        screenshot = terminal.capture_output(project_root, options.payload, screenshot)
         if screenshot is not None:
-            terminal.split_dash_integral(screenshot)
+            paths = terminal.crop_output(project_root, options.payload, screenshot)
+            if options.payload == 'dash-integral':
+                assert paths[1] is not None
 
 
 if __name__ == '__main__':

@@ -34,11 +34,13 @@ if __name__ == '__main__':
             println(f'    {path}')
         printbar('Current Directory')
         println(f'    {os.getcwd()}')
-        println()
+        printbar('Current Module')
+        println(f'    {__file__}')
+        println('\n')
 
         println(styled.heading(styled.pad('§1  Type Checking')))
         subprocess.run(['./node_modules/.bin/pyright'], check=True)
-        println()
+        println('\n')
 
         println(styled.heading(styled.pad('§2  Unit Testing')))
         runner = unittest.main(

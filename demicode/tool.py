@@ -14,7 +14,7 @@ import traceback
 from types import TracebackType
 from typing import Callable
 
-from .benchmark import Probe, report_page_rendering, TerminalSizeChecker
+from .benchmark import Probe, report_page_rendering
 from .db.codegen import generate_code
 from .db.codepoint import CodePoint, CodePointSequence
 from .db.ucd import UnicodeCharacterDatabase
@@ -465,7 +465,7 @@ def process(options: argparse.Namespace, renderer: Renderer) -> int:
     if options.inspect_latency:
         incrementally = False
         in_grid = False
-        probe = Probe(validator=TerminalSizeChecker(renderer.output))
+        probe = Probe(renderer.output)
         read_action = probe.get_page_action
     else:
         incrementally = options.incrementally

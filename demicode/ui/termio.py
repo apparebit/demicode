@@ -207,9 +207,12 @@ class TermIO:
             remaining -= self._output.write(text[-remaining:])
         return self
 
-    def emit(self, *parts: int | str) -> Self:
-        """Write the stringified and joined parts to the terminal. Do not flush."""
-        return self.write(''.join(str(p) for p in parts))
+    def emit(self, *esc_parts: int | str) -> Self:
+        """
+        Write the stringified and joined escape sequence to the terminal. Do not
+        flush. This method must not be used for content, only escape sequences.
+        """
+        return self.write(''.join(str(p) for p in esc_parts))
 
     def flush(self) -> Self:
         """Flush the output."""
@@ -375,7 +378,7 @@ class TermIO:
         """Mark a hyperlink."""
         # https://gist.github.com/egmontkob/eb114294efbcd5adb1944c9f3cb5feda
         code = f'8;id={id};' if id else '8;;'
-        return self.emit(OSC, code, href, ST, text, OSC, '8;;', ST)
+        return self.emit(OSC, code, href, ST).write(text).emit(OSC, '8;;', ST)
 
     # iTerm
     # OSC 1337 ; StealFocus ST
@@ -398,6 +401,16 @@ class TermIO:
     #   OSC 133 ; D [; exitcode] ST  Mark execution finished
 
     #   OSC 1337 ; SetMark ST  set mark to left of line   ctrl/cmd up/down
+
+    # https://gitlab.freedesktop.org/Per_Bothner/specifications/blob/master/proposals/semantic-prompts.md
+
+    #   OCS 6 ; FILE_URL ST  document    (Terminal.app)
+    #   OSC 7 ; FILE_URL ST  working directory   (Terminal.app)
+
+    # https://wezfurlong.org/wezterm/escape-sequences.html#operating-system-command-sequences
+
+    #   OSC 9;9; CWD ST (ConEmu)
+    # https://conemu.github.io/en/AnsiEscapeCodes.html#ConEmu_specific_OSC
 
     # ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~
 

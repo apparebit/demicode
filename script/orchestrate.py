@@ -175,57 +175,46 @@ class Terminal(BaseTerminal):
         _run_applescript(f"""\
             tell application id "{self.bundle}"
                 activate
+                delay 4
             end tell
         """)
-        return self
-
-    def _prepare_vscode(self) -> Self:
-        assert self.is_vscode()
-        _run_applescript(f"""
-            tell application "System Events"
-                tell application process "{self.name}"
-                    keystroke "p" using {{shift down, command down}}
-                    delay 0.5
-                    keystroke "View Close Primary Side Bar"
-                    keystroke return
-                    delay 1
-
-                    keystroke "p" using {{shift down, command down}}
-                    delay 0.5
-                    keystroke "Terminal Create New Terminal in Editor Area"
-                    keystroke return
-                    delay 2
-                end tell
-            end tell
-        """)
-        return self
-
-    def make_frontmost(self) -> Self:
-        if self.is_vscode():
-            self._prepare_vscode()
-            return self
 
         if self.is_iterm():
-            actions = ['keystroke "1" using {option down, command down}', 'delay 1']
-        else:
-            actions = ['set frontmost to true', '']
-
-        _run_applescript(f"""
-            tell application "System Events"
-                tell application process "{self.name}"
-                    delay 3
-                    {actions[0]}
-                    {actions[1]}
-                    delay 1
+            # Use keyboard shortcut to bring iTerm window to front
+            _run_applescript(f"""
+                tell application "System Events"
+                    tell process (name of application id "{self.bundle}")
+                        keystroke "1" using {{option down, command down}}
+                        delay 2
+                    end tell
                 end tell
-            end tell
-        """)
+            """)
+
+        elif self.is_vscode():
+            # Use keyboard shortcuts to make terminal window semi-presentable
+            _run_applescript(f"""
+                tell application "System Events"
+                    tell process (name of application id "{self.bundle}")
+                        keystroke "p" using {{shift down, command down}}
+                        delay 0.5
+                        keystroke "View Close Primary Side Bar"
+                        keystroke return
+                        delay 1
+
+                        keystroke "p" using {{shift down, command down}}
+                        delay 0.5
+                        keystroke "Terminal Create New Terminal in Editor Area"
+                        keystroke return
+                        delay 2
+                    end tell
+                end tell
+            """)
         return self
 
     def change_dir(self, cwd: Path) -> Self:
         _run_applescript(f"""
             tell application "System Events"
-                tell application process "{self.name}"
+                tell process (name of application id "{self.bundle}")
                     keystroke "cd {cwd}"
                     keystroke return
                     delay 1
@@ -237,7 +226,7 @@ class Terminal(BaseTerminal):
     def exec(self, cmd: str) -> Self:
         _run_applescript(f"""\
             tell application "System Events"
-                tell application process "{self.name}"
+                tell process (name of application id "{self.bundle}")
                     keystroke "{cmd}"
                     keystroke return
                     delay 2
@@ -249,20 +238,18 @@ class Terminal(BaseTerminal):
     def window_rect_xywh(self) -> tuple[int, int, int, int]:
         result = _run_applescript(f"""
             tell application "System Events"
-                tell application process "{self.name}"
-                    set aWindow to its first window
-                    set aPosition to value of attribute "AXPosition" of aWindow
-                    set aSize to value of attribute "AXSize" of aWindow
-
-                    set TID to AppleScript's text item delimiters
-                    set AppleScript's text item delimiters to ","
-                    set aString to (aPosition & aSize) as text
-                    set AppleScript's text item delimiters to TID
-
-                    return aString
+                tell process (name of application id "{self.bundle}")
+                    set {{theX, theY}} to position of its first window
+                    set {{theW, theH}} to size of its first window
+                    return {{theX, ",", theY, ",", theW, ",", theH}} as text
                 end tell
             end tell
         """)
+
+        # set aWindow to its first window
+        # set {{theX, theY}} to value of attribute "AXPosition" of aWindow
+        # set {{theW, theH}} to value of attribute "AXSize" of aWindow
+        # return {{theX, ",", theY, ",", theW, ",", theH}} as text
 
         return _parse_rect(result.stdout.decode('utf8'))
 
@@ -281,7 +268,7 @@ class Terminal(BaseTerminal):
         # Directly telling the terminal to quit fails for Kitty
         _run_applescript(f"""\
             tell application "System Events"
-                tell application process "{self.name}"
+                tell process (name of application id "{self.bundle}")
                     keystroke "q" using command down
                 end tell
             end tell
@@ -306,7 +293,6 @@ class Terminal(BaseTerminal):
 
         print(f'    ⊙ Activate {self.name}')
         self.activate()
-        self.make_frontmost()
         self.change_dir(demicode)
 
         print(f'    ⊙ Make {self.name} display {payload}')

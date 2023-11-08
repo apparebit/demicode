@@ -108,6 +108,19 @@ class StyledStream:
     def tight_width(self) -> int:
         return min(self.width, TIGHT_WIDTH)
 
+    def _hn(self, dash: str, length: int, text: str) -> str:
+        length = self.tight_width - 4 - length - 1
+        return f'\n{dash * 3} {text} {dash * length}'
+
+    def h0(self, text: str) -> str:
+        return self._hn('═', len(text), self.strong(text))
+
+    def h1(self, text: str) -> str:
+        return self._hn('━', len(text), self.strong(text))
+
+    def h2(self, text: str) -> str:
+        return self._hn('─', len(text), self.italic(text))
+
     def sgr(self, ps: str, text: str) -> str:
         return f'\x1b[{ps}m{text}\x1b[0m' if self.isatty else text
 
@@ -122,6 +135,9 @@ class StyledStream:
 
     def light(self, text: str) -> str:
         return self.sgr('38;5;243', text)
+
+    def italic(self, text: str) -> str:
+        return self.sgr('3', text)
 
     def err(self, text: str) -> str:
         return self.sgr('38;5;88', text)
@@ -176,18 +192,19 @@ def print_summary(stream: TextIO) -> ResultPrinter:
         failures: list[BrokenTest],
         errors: list[BrokenTest],
     ) -> None:
-        stream.write('\n\n')
-        for test, trace in failures:
-            print1('FAIL', test, trace)
-        for test, trace in errors:
-            print1('ERROR', test, trace)
+        stream.write('\n')
 
         broken = len(failures) + len(errors)
-        stream.write(
-            styled.failure(styled.pad(f'{broken} out of {tests} tests failed!'))
-            if broken
-            else styled.success(styled.pad(f'All {tests} tests passed!'))
-        )
+        if broken:
+            stream.write('\n')
+            for test, trace in failures:
+                print1('FAIL', test, trace)
+            for test, trace in errors:
+                print1('ERROR', test, trace)
+
+            stream.write(styled.h0(f'{broken}/{tests} Tests Failed'))
+        else:
+            stream.write(styled.h0(f'All {tests} Tests Passed!'))
         stream.write('\n\n')
         stream.flush()
 

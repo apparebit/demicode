@@ -91,7 +91,7 @@ class testunit:
         )
 
 
-TIGHT_WIDTH = 40
+TIGHT_WIDTH = 70
 
 
 class StyledStream:

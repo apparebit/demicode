@@ -1,11 +1,12 @@
 #!./venv/bin/python
 
+import os
 import subprocess
 import sys
 import traceback
 import unittest
 
-from test.runtime import ResultAdapter, StyledStream
+from test.runtime import ResultAdapter, StyledStream, TIGHT_WIDTH
 
 
 if __name__ == '__main__':
@@ -19,9 +20,24 @@ if __name__ == '__main__':
         stream.write('\n')
         stream.flush()
 
+    def printbar(title: str) -> None:
+        println()
+        count = TIGHT_WIDTH - 4 - len(title) - 1
+        println(f'─── {styled.sgr("3", title)} {"─" * count}')
+
     try:
+        println(styled.heading(styled.pad('§0  Setup')))
+        printbar('Python')
+        println(f'    {sys.executable}')
+        printbar('Python Path')
+        for path in sys.path:
+            println(f'    {path}')
+        printbar('Current Directory')
+        println(f'    {os.getcwd()}')
+        println()
+
         println(styled.heading(styled.pad('§1  Type Checking')))
-        subprocess.run('./node_modules/.bin/pyright', check=True)
+        subprocess.run(['./node_modules/.bin/pyright'], check=True)
         println()
 
         println(styled.heading(styled.pad('§2  Unit Testing')))

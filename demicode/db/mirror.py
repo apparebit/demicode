@@ -259,7 +259,7 @@ class Manifest:
     def to_dict(self) -> dict[str, object]:
         return {
             'schema': self.schema,
-            'mirror': str(self.mirror),
+            'mirror': str(self.mirror.name),
             'ucd': str(self.ucd),
             'versions': [str(v) for v in self.versions],
             'cldr': self.cldr.to_dict(),
@@ -268,14 +268,18 @@ class Manifest:
 
     @classmethod
     def from_file(cls, mirror: str | Path) -> Self:
-        mirror = Path(mirror)
+        mirror = Path(mirror).resolve()
         _check_mirror_path(mirror)
         manifest = _to_manifest_path(mirror)
 
         try:
             _logger.info('reading mirror manifest from "%s"', manifest)
             with open(manifest, mode='rb') as file:
-                return cls.from_dict(json.load(file))
+                data = json.load(file)
+            if mirror.name != data['mirror']:
+                raise ValueError(
+                    f'manifest names "{data["mirror"]}" as mirror, not "{mirror.name}"')
+            return cls.from_dict(data | {'mirror': str(mirror)})
         except:
             _logger.info('using void manifest instead of inaccessible "%s"', manifest)
             return cls(
@@ -305,7 +309,7 @@ class Manifest:
 
     @classmethod
     def from_origin(cls, mirror: str | Path) -> Self:
-        mirror = Path(mirror)
+        mirror = Path(mirror).resolve()
         _check_mirror_path(mirror)
         ucd = Manifest.retrieve_ucd_version()
         ts = datetime.now(timezone.utc)
@@ -363,7 +367,7 @@ class Manifest:
         mirror: str | Path,
         tick: None | Callable[[], None] = None
     ) -> Self:
-        mirror = Path(mirror)
+        mirror = Path(mirror).resolve()
 
         # If no manifest exists, previous will be a void manifest with a
         # timestamp surprisingly close to the start of the epoch.

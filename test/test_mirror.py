@@ -1,17 +1,13 @@
-from pathlib import Path
 import unittest
 
 from demicode.db.mirror import Mirror
 from demicode.db.version import Version, VersionError
 
 
-UCD_PATH = Path(__file__).parents[1] / 'ucd'
-
-
 class TestMirror(unittest.TestCase):
 
     def setUp(self) -> None:
-        self.mirror = Mirror(UCD_PATH)
+        self.mirror = Mirror('ucd')
 
     def test_files_url(self) -> None:
         with self.assertRaises(ValueError):

@@ -65,9 +65,9 @@ def _run_applescript(script: str, **kwargs: Any) -> subprocess.CompletedProcess[
     )
 
     if result.returncode != 0:
-        print('AppleScript failed:')
-        print(result.stdout)
-        print(result.stderr)
+        stdout = result.stdout.decode('utf8')
+        stderr = result.stderr.decode('utf8')
+        print(f'\x1b[1mAppleScript failed:\n{stdout}\n{stderr}\x1b[0m')
         result.check_returncode()
 
     return result
@@ -218,6 +218,7 @@ class Terminal(BaseTerminal):
                     end tell
                 end tell
             """)
+
         return self
 
     def change_dir(self, cwd: Path) -> Self:
@@ -286,10 +287,10 @@ class Terminal(BaseTerminal):
     ) -> None | Path:
         if self.is_current():
             # This terminal is running this script. Don't activate or quit.
-            # Just run badterm.py directly.
+            # Just run show.py directly.
             assert demicode == Path.cwd()
             print(f'    ⊙ Display {payload}')
-            subprocess.run(['./script/badterm.py', payload], check=True)
+            subprocess.run(['./script/show.py', payload], check=True)
 
             print('    ⊙ Capture screenshot')
             self.screenshot(screenshot)
@@ -300,7 +301,7 @@ class Terminal(BaseTerminal):
         self.change_dir(demicode)
 
         print(f'    ⊙ Make {self.name} display {payload}')
-        self.exec(f'./script/badterm.py {payload}')
+        self.exec(f'./script/show.py {payload}')
 
         print(f'    ⊙ Capture screenshot of {self.name}')
         self.screenshot(screenshot)
@@ -312,14 +313,14 @@ class Terminal(BaseTerminal):
         return screenshot
 
     def crop_output(
-        self, demicode: Path, payload: PayloadType, raw_screenshot: Path
+        self, demicode: Path, payload: PayloadType, screenshot: Path
     ) -> tuple[Path, None | Path]:
-        with Image.open(raw_screenshot) as im:
+        with Image.open(screenshot) as im:
             if im.mode == 'RGBA':
                 im = _without_transparency(im)
 
             # Get rectangles between red horizontal bars
-            print(f'    ⊙ Scan "{raw_screenshot.relative_to(demicode)}" for red bars')
+            print(f'    ⊙ Scan "{screenshot.relative_to(demicode)}" for red bars')
             left_margin = _LEFT_VSCODE_MARGIN if self.is_vscode() else _SIDE_MARGIN
             r1, r2 = _find_regions_between_bars(im, left_margin)
 
@@ -332,36 +333,34 @@ class Terminal(BaseTerminal):
             p1: None | Path = None
             p2: None | Path = None
 
-            for rect1 in to_scan:
-                first = rect1 == r1
-                if first:
-                    print(f'{" " * (6 + 17)}     \x1b[3mx     y      w     h\x1b[0m')
-
-                print(f'    ⊙ Extract image #{2 - first}: {_format_xywh(*rect1)}')
-                wim = im.copy() if first else im
+            for index, rect1 in enumerate(to_scan, start=1):
+                suffix = '  (xywh)' if index == 1 else ''
+                print(f'    ⊙ Extract image #{index}:  {_format_xywh(*rect1)}{suffix}')
+                wim = im.copy() if index == 1 else im
                 wim = wim.crop(rect1)
                 rect2 = _find_content_bbox(wim)
                 assert rect2 is not None
 
-                print(f'    ⊙ Trim white space: {_format_xywh(*rect2)}')
+                print(f'    ⊙ Trim white space:  {_format_xywh(*rect2)}')
                 rect2 = _grow_rect(rect2, _TRIM_PADDING)
                 wim = wim.crop(rect2)
 
                 image_size = _format_wh(*wim.size)
-                print(f'    ⊙ Save image #{2 - first}:    {image_size}')
-                path = raw_screenshot.with_name(
-                    f'{payload}-{self.nickname}{"" if first else "-2"}.png'
-                )
+                print(f'    ⊙ Save image #{index}:     {image_size}')
+                suffix = f'-{index}' if len(to_scan) == 2 else ''
+                path = screenshot.with_name(f'{payload}-{self.nickname}{suffix}.png')
                 wim.save(path)
 
-                if first:
+                if index == 1:
                     p1 = path
                 else:
                     p2 = path
 
-            assert p1 is not None
+            assert p1 is not None, 'could not extract first display string'
+            print(f'    ≫ "{p1.relative_to(demicode)}"')
             if r2 is not None:
-                assert p2 is not None
+                assert p2 is not None, 'could not extract second display string'
+                print(f'    ≫ "{p2.relative_to(demicode)}"')
             return p1, p2
 
 

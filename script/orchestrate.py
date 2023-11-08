@@ -171,6 +171,15 @@ class Terminal(BaseTerminal):
             return self.bundle == current_bundle
         return None
 
+    @property
+    def application(self) -> str:
+        if self.is_iterm():
+            return '"iTerm2"'
+        elif self.is_vscode():
+            return '"Code"'
+        else:
+            return f'(name of application id "{self.bundle}")'
+
     def activate(self) -> Self:
         _run_applescript(f"""\
             tell application id "{self.bundle}"
@@ -183,7 +192,7 @@ class Terminal(BaseTerminal):
             # Use keyboard shortcut to bring iTerm window to front
             _run_applescript(f"""
                 tell application "System Events"
-                    tell process (name of application id "{self.bundle}")
+                    tell process {self.application}
                         keystroke "1" using {{option down, command down}}
                         delay 2
                     end tell
@@ -194,7 +203,7 @@ class Terminal(BaseTerminal):
             # Use keyboard shortcuts to make terminal window semi-presentable
             _run_applescript(f"""
                 tell application "System Events"
-                    tell process (name of application id "{self.bundle}")
+                    tell process {self.application}
                         keystroke "p" using {{shift down, command down}}
                         delay 0.5
                         keystroke "View Close Primary Side Bar"
@@ -214,7 +223,7 @@ class Terminal(BaseTerminal):
     def change_dir(self, cwd: Path) -> Self:
         _run_applescript(f"""
             tell application "System Events"
-                tell process (name of application id "{self.bundle}")
+                tell process {self.application}
                     keystroke "cd {cwd}"
                     keystroke return
                     delay 1
@@ -226,7 +235,7 @@ class Terminal(BaseTerminal):
     def exec(self, cmd: str) -> Self:
         _run_applescript(f"""\
             tell application "System Events"
-                tell process (name of application id "{self.bundle}")
+                tell process {self.application}
                     keystroke "{cmd}"
                     keystroke return
                     delay 2
@@ -238,18 +247,13 @@ class Terminal(BaseTerminal):
     def window_rect_xywh(self) -> tuple[int, int, int, int]:
         result = _run_applescript(f"""
             tell application "System Events"
-                tell process (name of application id "{self.bundle}")
+                tell process {self.application}
                     set {{theX, theY}} to position of its first window
                     set {{theW, theH}} to size of its first window
                     return {{theX, ",", theY, ",", theW, ",", theH}} as text
                 end tell
             end tell
         """)
-
-        # set aWindow to its first window
-        # set {{theX, theY}} to value of attribute "AXPosition" of aWindow
-        # set {{theW, theH}} to value of attribute "AXSize" of aWindow
-        # return {{theX, ",", theY, ",", theW, ",", theH}} as text
 
         return _parse_rect(result.stdout.decode('utf8'))
 
@@ -268,7 +272,7 @@ class Terminal(BaseTerminal):
         # Directly telling the terminal to quit fails for Kitty
         _run_applescript(f"""\
             tell application "System Events"
-                tell process (name of application id "{self.bundle}")
+                tell process {self.application}
                     keystroke "q" using command down
                 end tell
             end tell

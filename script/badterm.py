@@ -72,7 +72,7 @@ def main() -> None:
     if options.payload == 'arab-ligature':
         payload1 = '\uFDFD'
     elif options.payload == 'spaced-dash-integral':
-        payload1 = ' {FAINT}█{RESET} '.join(mkprefix(w) for w in range(3))
+        payload1 = f' {FAINT}█{RESET} '.join(mkprefix(w) for w in range(3))
     elif options.payload == 'dash-integral':
         payload1 = mkprefix(0) + '\uFF0A𝔽𝕚𝕩𝕖𝕕-𝐖𝐢𝐝𝐭𝐡'
         payload2 = mkprefix(3) + f'{FAINT}█{RESET}\uFF0A{FAINT}█{RESET}𝔽𝕚𝕩𝕖𝕕-𝐖𝐢𝐝𝐭𝐡'

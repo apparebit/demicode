@@ -215,7 +215,7 @@ def configure_parser() -> argparse.ArgumentParser:
         help ='include representative sample of emoji'
     )
     cp_group.add_argument(
-        '--with-version-oracle',
+        '--with-version-oracle', '-o',
         action='store_true',
         help='include emoji that date supported Unicode version'
     )

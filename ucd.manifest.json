@@ -24,9 +24,9 @@
     "15.1.0"
   ],
   "cldr": {
-    "version": "43.1.0",
-    "annotations": "https://registry.npmjs.org/cldr-annotations-modern/-/cldr-annotations-modern-43.1.0.tgz",
-    "derived-annotations": "https://registry.npmjs.org/cldr-annotations-derived-modern/-/cldr-annotations-derived-modern-43.1.0.tgz"
+    "version": "44.0.1",
+    "annotations": "https://registry.npmjs.org/cldr-annotations-modern/-/cldr-annotations-modern-44.0.1.tgz",
+    "derived-annotations": "https://registry.npmjs.org/cldr-annotations-derived-modern/-/cldr-annotations-derived-modern-44.0.1.tgz"
   },
-  "timestamp": "2023-10-30T11:31:44.311942+00:00"
+  "timestamp": "2023-11-08T03:50:27.630307+00:00"
 }

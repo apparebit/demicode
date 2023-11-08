@@ -3,17 +3,15 @@ from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 import json
 import math
+import os
 import statistics
+import sys
 import time
-from typing import Callable, cast, NamedTuple, Self
+from typing import NamedTuple, Self, TextIO
 
 from .ui.action import Action
 from .ui.render import Renderer
-from .ui.terminal import (
-    join_terminal_version,
-    report_terminal_version,
-    TerminalSizeChecker,
-)
+from .ui.terminal import termid
 
 class Statistics(NamedTuple):
     """
@@ -55,9 +53,7 @@ class Statistics(NamedTuple):
 class Probe:
     """
     A probe for measuring latency. The probe accumulates measurements by label,
-    while also ensuring that the probed environment remains consistent. When
-    measuring page rendering latency, the probe should be created with a
-    `TerminalSizeChecker` as validator.
+    while also ensuring that the probed environment remains consistent.
     """
 
     PAGE_LINE_BY_LINE = 'page.line_by_line'
@@ -66,11 +62,13 @@ class Probe:
     def __init__(
         self,
         /,
+        output: TextIO = sys.__stdout__,
         required_readings: int = 21,
-        validator: Callable[[], None] = lambda: None
     ) -> None:
+
+        self._fileno = output.fileno()
+        self._size = os.get_terminal_size(self._fileno)
         self._required_readings = required_readings
-        self.validate = validator
         self._readings: dict[str, list[int]] = defaultdict(list)
 
         self._last_label = ''
@@ -79,6 +77,12 @@ class Probe:
     @property
     def required_readings(self) -> int:
         return self._required_readings
+
+    def validate(self) -> tuple[int, int]:
+        size2 = os.get_terminal_size(self._fileno)
+        if self._size != size2:
+            raise AssertionError(f'terminal size {self._size} changed to {size2}')
+        return size2
 
     @contextmanager
     def measure(self, label: str) -> Iterator[Self]:
@@ -158,16 +162,11 @@ def report_page_rendering(probe: Probe, renderer: Renderer) -> None:
     max_digits = integral_digits(max(*at_once, *line_by_line))
     precision = max_digits + max_digits // 3
 
-    terminal, terminal_version = report_terminal_version(renderer)
-    terminal_id = join_terminal_version(terminal, terminal_version)
-
-    probe.validate()
-    checker = cast(TerminalSizeChecker, probe.validate)
-    width = checker.width
-    height = checker.height
+    terminal = termid()
+    width, height = probe.validate()
 
     json_data = {
-        'terminal': {'name': terminal, 'version': terminal_version},
+        'terminal': terminal,
         'page-size': {'width': width, 'height': height},
         'ratio': ratio,
         'latency-unit': unit,
@@ -181,7 +180,7 @@ def report_page_rendering(probe: Probe, renderer: Renderer) -> None:
     renderer.writeln('\n')
 
     # Show human-readable report
-    renderer.strong(f'{terminal_id} Rendering {width}×{height} Page')
+    renderer.strong(f'{terminal} Rendering {width}×{height} Page')
     renderer.writeln('\n')
 
     renderer.faint(f'         {" ":>12} ')

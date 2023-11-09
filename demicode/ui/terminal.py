@@ -5,11 +5,25 @@ import subprocess
 import sys
 from typing import ClassVar, Self
 
-from .render import Renderer
+from .termio import TermIO
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
 class Terminal:
+    """
+    The many names of a terminal emulator:
+
+     - `name` is a concise but memorable identifier;
+     - `display` is the less concise version, at least for `VSCode`;
+     - `nickname` is the slightly more concise, lower case version;
+     - `bundle` serves as a unique ID on macOS, is reminiscent of DNS;
+     - `TERM_PROGRAM` may use an altogether different identifier, only used for
+       looking up the terminal's record;
+
+    On macOS, the bundle ID is available through the terminal's
+    __CFBundleIdentifier environment variable. Demicode relies on it for
+    uniquely identifying terminal applications, even when not running on macOS.
+    """
 
     name: str
     bundle: str
@@ -37,10 +51,10 @@ class Terminal:
                 ['Alacritty', 'org.alacritty'],
                 ['Hyper', 'co.zeit.hyper'],
                 ['iTerm2', 'com.googlecode.iterm2', 'iterm', 'iTerm.app'],
-                ['kitty', 'net.kovidgoyal.kitty'],
+                ['Kitty', 'net.kovidgoyal.kitty'],
                 ['Rio', 'com.raphaelamorim.rio'],
                 ['Terminal', 'com.apple.Terminal', 'terminalapp', 'Apple_Terminal'],
-                ['Code', 'com.microsoft.VSCode', 'vscode'],
+                ['VSCode', 'com.microsoft.VSCode'],
                 ['Warp', 'dev.warp.Warp-Stable', 'warp', 'WarpTerminal'],
                 ['WezTerm', 'com.github.wez.wezterm'],
             ]:
@@ -77,31 +91,17 @@ class Terminal:
 # --------------------------------------------------------------------------------------
 
 
-def inspect_env_variables() -> tuple[None | str, None | str]:
-    if (terminal := os.getenv('TERM_PROGRAM')):
-        terminal = Terminal.resolve_name(terminal)
-    version = os.getenv('TERM_PROGRAM_VERSION')
-    return terminal or None, version or None
-
-
-def inspect_xtversion(
-    renderer: None | Renderer = None
-) -> tuple[None | str, None | str]:
-    renderer = Renderer.new() if renderer is None else renderer
-
-    try:
-        response = renderer.query('[>q')
-    except (NotImplementedError, TimeoutError):
+def inspect_xtversion(termio: None | TermIO = None) -> tuple[None | str, None | str]:
+    termio = termio or TermIO()
+    with termio.cbreak_mode():
+        report = termio.request_terminal_version()
+    if report is None:
         return None, None
-    if not response.startswith(b'\x1BP>|') or not response.endswith(b'\x1B\\'):
-        return None, None
-
-    response = response[4:-2].decode('utf8')
-    if response[-1] == ')':
-        terminal, _, version = response.rpartition('(')
+    if report[-1] == ')':
+        terminal, _, version = report.rpartition('(')
         version = version[1:-1]
     else:
-        terminal, _, version = response.partition(' ')
+        terminal, _, version = report.partition(' ')
     return Terminal.resolve_name(terminal), version
 
 
@@ -131,11 +131,18 @@ def inspect_bundle_id() -> tuple[None | str, None | str]:
     return terminal, None
 
 
-def determine_terminal_and_version(
-    renderer: None | Renderer = None
+def inspect_env_variables() -> tuple[None | str, None | str]:
+    if (terminal := os.getenv('TERM_PROGRAM')):
+        terminal = Terminal.resolve_name(terminal)
+    version = os.getenv('TERM_PROGRAM_VERSION')
+    return terminal or None, version or None
+
+
+def determine_terminal_version(
+    termio: None | TermIO = None
 ) -> tuple[None | str, None | str]:
-    renderer = Renderer.new() if renderer is None else renderer
-    t, v = inspect_xtversion(renderer)
+    termio = termio or TermIO()
+    t, v = inspect_xtversion(termio)
     if t and v:
         return t, v
 
@@ -147,13 +154,10 @@ def determine_terminal_and_version(
         return t, v
 
     t, v = inspect_env_variables()
-    if t and v:
-        return t, v
-
-    return None, None
+    return t, v
 
 
-def join_terminal_and_version(terminal: None | str, version: None | str) -> str:
+def join_terminal_version(terminal: None | str, version: None | str) -> str:
     if terminal is None:
         return 'Unknown Terminal'
     if version is None:
@@ -161,8 +165,8 @@ def join_terminal_and_version(terminal: None | str, version: None | str) -> str:
     return f'{terminal} ({version})'
 
 
-def termid(renderer: None | Renderer = None) -> str:
-    return join_terminal_and_version(*determine_terminal_and_version(renderer))
+def termid(termio: None | TermIO = None) -> str:
+    return join_terminal_version(*determine_terminal_version(termio))
 
 
 if __name__ == '__main__':
@@ -180,14 +184,14 @@ if __name__ == '__main__':
             help()
             sys.exit(1)
 
-    renderer = Renderer.new()
-    idn = join_terminal_and_version(*determine_terminal_and_version(renderer))
+    termio = TermIO()
+    idn = join_terminal_version(*determine_terminal_version(termio))
     if show_all:
-        id1 = join_terminal_and_version(*inspect_env_variables())
-        id2 = join_terminal_and_version(*inspect_xtversion(renderer))
-        id3 = join_terminal_and_version(*inspect_bundle_id())
+        id1 = join_terminal_version(*inspect_xtversion(termio))
+        id2 = join_terminal_version(*inspect_bundle_id())
+        id3 = join_terminal_version(*inspect_env_variables())
         width = max(len(id1), len(id2), len(id3), len(idn)) + 8
-        print(f'   env: {id1}\n  ansi: {id2}\nbundle: {id3}\n{"─" * width}')
+        print(f'  ansi: {id1}\nbundle: {id2}\n   env: {id3}\n{"─" * width}')
         print(f' combo: {idn}')
     else:
         print(idn)

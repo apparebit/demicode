@@ -6,7 +6,7 @@ import sys
 
 sys.path.insert(0, '')
 
-from demicode.ui.terminal import determine_terminal_and_version
+from demicode.ui.terminal import determine_terminal_version
 
 
 CSI = '\x1b['
@@ -27,7 +27,7 @@ def mkbar() -> str:
 
 
 def mklabels() -> tuple[str, str]:
-    terminal, version = determine_terminal_and_version()
+    terminal, version = determine_terminal_version()
     if terminal is None:
         return 'Unknown Terminal', ''
     elif version is None:

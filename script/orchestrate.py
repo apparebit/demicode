@@ -258,8 +258,8 @@ class Terminal(BaseTerminal):
 
         return _parse_rect(result.stdout.decode('utf8'))
 
-    def screenshot_name(self, prefix: str) -> str:
-        return f'{prefix}-{self.nickname}-raw.png'
+    def screenshot_name(self, prefix: str, suffix: str = '') -> str:
+        return f'{prefix}-{self.name.lower()}{suffix}.png'
 
     def screenshot(self, path: Path) -> Self:
         subprocess.run([
@@ -316,6 +316,11 @@ class Terminal(BaseTerminal):
         self, demicode: Path, payload: PayloadType, screenshot: Path
     ) -> tuple[Path, None | Path]:
         with Image.open(screenshot) as im:
+            # Extract dpi and ICC profile before converting to alpha-less image
+            dpi = im.info.get('dpi')
+            profile = im.info.get('icc_profile')
+
+            # Convert to image without alpha channel
             if im.mode == 'RGBA':
                 im = _without_transparency(im)
 
@@ -348,8 +353,8 @@ class Terminal(BaseTerminal):
                 image_size = _format_wh(*wim.size)
                 print(f'    ⊙ Save image #{index}:     {image_size}')
                 suffix = f'-{index}' if len(to_scan) == 2 else ''
-                path = screenshot.with_name(f'{payload}-{self.nickname}{suffix}.png')
-                wim.save(path)
+                path = screenshot.with_name(self.screenshot_name(payload, suffix))
+                wim.save(path, dpi=dpi, icc_profile=profile)
 
                 if index == 1:
                     p1 = path
@@ -369,7 +374,7 @@ def main() -> None:
     parser.add_argument(
         '--terminal', '-t',
         choices=[
-            'alactritty', 'hyper', 'iterm', 'kitty', 'rio', 'terminalapp', 'vscode',
+            'alactritty', 'hyper', 'iterm', 'kitty', 'rio', 'terminal', 'vscode',
             'warp', 'wezterm',
         ],
         help='run only the selected terminal'
@@ -396,14 +401,33 @@ def main() -> None:
     os.environ.pop('TERM_PROGRAM', None)
     os.environ.pop('TERM_PROGRAM_VERSION', None)
 
+    # Determine the terminals requiring orchestration
     if options.terminal:
         terminals = iter([Terminal.resolve(options.terminal)])
     else:
         terminals = Terminal.all()
 
+    # Process current terminal last, make sure it doesn't show previous run.
+    todo: list[Terminal] = []
+    current: None | Terminal = None
     for terminal in terminals:
+        if terminal.is_current():
+            current = terminal
+        else:
+            todo.append(terminal)
+    if current:
+        todo.append(current)
+        if len(todo) <= 3:
+            try:
+                _, height = os.get_terminal_size()
+            except:
+                height = 60
+            print('\n' * height)
+
+    # Mr DeMille, the terminals are ready for their close-ups!
+    for terminal in todo:
         print(f'\x1b[1m{terminal.name} ({terminal.bundle})\x1b[0m')
-        screenshot = screenshot_dir / terminal.screenshot_name(options.payload)
+        screenshot = screenshot_dir / terminal.screenshot_name(options.payload, '-raw')
         screenshot = terminal.capture_output(project_root, options.payload, screenshot)
         if screenshot is not None:
             paths = terminal.crop_output(project_root, options.payload, screenshot)

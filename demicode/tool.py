@@ -24,6 +24,7 @@ from .selection import *
 from .statistics import collect_statistics, show_mirrored_versions, show_statistics
 from .ui.control import read_key_action, read_line_action
 from .ui.render import KeyPressReader, Renderer, Style
+from .ui.termio import TermIO
 from . import __version__
 
 
@@ -304,9 +305,15 @@ def configure_parser() -> argparse.ArgumentParser:
         help='display the tool version and exit'
     )
     about_tool_group.add_argument(
-        '--inspect-latency', '-T',
+        '--inspect-perf', '-T',
         action="store_true",
         help="determine page rendering latency and exit"
+    )
+    about_tool_group.add_argument(
+        '--inspect-perf-nonce',
+        dest='nonce',
+        action='store',
+        help='nonce that uniquely marks a benchmark run, for use in filenames',
     )
     about_tool_group.add_argument(
         '--inspect-ucd', '-U',
@@ -335,6 +342,8 @@ def run(arguments: Sequence[str]) -> int:
         level=logging.INFO if options.in_verbose else logging.WARNING,
     )
 
+    termio = TermIO()
+
     renderer = Renderer.new(
         styled=options.in_style,
         dark=options.in_dark_mode,
@@ -342,7 +351,7 @@ def run(arguments: Sequence[str]) -> int:
     )
 
     try:
-        return process(options, renderer)
+        return process(options, termio, renderer)
     except UserError as x:
         renderer.newline()
         renderer.emit_error(x.args[0])
@@ -360,7 +369,7 @@ def run(arguments: Sequence[str]) -> int:
         return 1
 
 
-def process(options: argparse.Namespace, renderer: Renderer) -> int:
+def process(options: argparse.Namespace, termio: TermIO, renderer: Renderer) -> int:
     # --------------------------------------------------------------- Prepare UCD
     try:
         ucd = UnicodeCharacterDatabase(
@@ -465,7 +474,7 @@ def process(options: argparse.Namespace, renderer: Renderer) -> int:
     if options.inspect_latency:
         incrementally = False
         in_grid = False
-        probe = Probe(renderer.output)
+        probe = Probe(termio)
         read_action = probe.get_page_action
     else:
         incrementally = options.incrementally
@@ -493,7 +502,7 @@ def process(options: argparse.Namespace, renderer: Renderer) -> int:
         incrementally = True
 
     if probe:
-        report_page_rendering(probe, renderer)
+        report_page_rendering(probe, options.nonce)
 
     # ---------------------------------------------------------------------- Done
     return 0

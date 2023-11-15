@@ -3,15 +3,14 @@ from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 import json
 import math
-import os
 import statistics
-import sys
 import time
-from typing import NamedTuple, Self, TextIO
+from typing import NamedTuple, Self
 
 from .ui.action import Action
 from .ui.render import Renderer
-from .ui.terminal import termid
+from .ui.terminal import Terminal
+from .ui.termio import TermIO
 
 class Statistics(NamedTuple):
     """
@@ -52,8 +51,9 @@ class Statistics(NamedTuple):
 
 class Probe:
     """
-    A probe for measuring latency. The probe accumulates measurements by label,
-    while also ensuring that the probed environment remains consistent.
+    A probe for measuring page rendering latency. This class tracks the state
+    necessary for repeatedly performing and measuring experiments. The overall
+    run has a label and each experiment has its own label.
     """
 
     PAGE_LINE_BY_LINE = 'page.line_by_line'
@@ -62,15 +62,13 @@ class Probe:
     def __init__(
         self,
         /,
-        output: TextIO = sys.__stdout__,
+        termio: None | TermIO = None,
         required_readings: int = 21,
     ) -> None:
-
-        self._fileno = output.fileno()
-        self._size = os.get_terminal_size(self._fileno)
+        self._termio = termio or TermIO()
+        self._termio.update_size()  # Lock in the terminal size
         self._required_readings = required_readings
         self._readings: dict[str, list[int]] = defaultdict(list)
-
         self._last_label = ''
         self._pages: dict[str, tuple[int, Action]] = {}
 
@@ -78,11 +76,8 @@ class Probe:
     def required_readings(self) -> int:
         return self._required_readings
 
-    def validate(self) -> tuple[int, int]:
-        size2 = os.get_terminal_size(self._fileno)
-        if self._size != size2:
-            raise AssertionError(f'terminal size {self._size} changed to {size2}')
-        return size2
+    def validate(self) -> None:
+        self._termio.check_size()
 
     @contextmanager
     def measure(self, label: str) -> Iterator[Self]:
@@ -114,8 +109,14 @@ class Probe:
     def statistics(self, label: str) -> Statistics:
         return Statistics.of(self.all_readings(label))
 
-    def get_page_action(self, renderer: Renderer) -> Action:
-        renderer.newline()
+    def get_page_action(self, _: Renderer) -> Action:
+        """
+        Determine demicode's next step for measurements with the last used
+        label. This method alternates between returning actions to go forward
+        and backward until enough measurements have been made. Thereafter, it
+        returns the action to terminate.
+        """
+        self._termio.write('\n')
 
         count, action = self._pages.get(self._last_label, (0, Action.BACKWARD))
         count += 1
@@ -146,7 +147,7 @@ def pick_factor_unit(num: int | float) -> tuple[float, str]:
         return 1E0, 'ns'
 
 
-def report_page_rendering(probe: Probe, renderer: Renderer) -> None:
+def report_page_rendering(probe: Probe, nonce: None | str) -> None:
     count = probe.count_readings(Probe.PAGE_AT_ONCE)
     count_line_by_line = probe.count_readings(Probe.PAGE_LINE_BY_LINE)
     assert count > 0
@@ -154,7 +155,7 @@ def report_page_rendering(probe: Probe, renderer: Renderer) -> None:
 
     at_once = probe.statistics(Probe.PAGE_AT_ONCE)
     line_by_line = probe.statistics(Probe.PAGE_LINE_BY_LINE)
-    ratio = line_by_line.mean / at_once.mean
+    slowdown = line_by_line.mean / at_once.mean
 
     factor, unit = pick_factor_unit(min(*at_once, *line_by_line))
     at_once = at_once.scale(factor)
@@ -162,46 +163,53 @@ def report_page_rendering(probe: Probe, renderer: Renderer) -> None:
     max_digits = integral_digits(max(*at_once, *line_by_line))
     precision = max_digits + max_digits // 3
 
-    terminal = termid()
-    width, height = probe.validate()
+    terminal = Terminal.current()
+    termio = probe._termio  # type: ignore
+    width, height = termio.width, termio.height
 
+    # Write JSON to disk
+    nonce = nonce or Terminal.nonce()
     json_data = {
-        'terminal': terminal,
+        'nonce': nonce,
+        'terminal': terminal.name,
         'page-size': {'width': width, 'height': height},
-        'ratio': ratio,
-        'latency-unit': unit,
-        'at-once': at_once._asdict(),
+        'mean-slowdown': slowdown,
+        'unit': unit,
+        'page-at-once': at_once._asdict(),
         'line-by-line': line_by_line._asdict(),
     }
 
-    # Show results as JSON
-    renderer.writeln('\n')
-    renderer.writeln(json.dumps(json_data, indent='  '))
-    renderer.writeln('\n')
+    path = terminal.filename('render-perf', nonce, '.json')
+    with open(path, mode='w', encoding='utf8') as file:
+        json.dump(json_data, file, indent='  ')
 
     # Show human-readable report
-    renderer.strong(f'{terminal} Rendering {width}×{height} Page')
-    renderer.writeln('\n')
+    termio.style(1).write(f'{termio} Rendering {width}×{height} Page').plain()
+    termio.writeln('\n')
 
-    renderer.faint(f'         {" ":>12} ')
+    termio.faint().write(f'         {" ":>12} ').plain().writeln()
     for label in ('min', 'mean', 'q50', 'q90', 'max'):
-        renderer.faint(f'  {label:>{precision}} {" " * len(unit)}')
-    renderer.newline()
+        (
+            termio
+            .faint()
+            .write(f'  {label:>{precision}} {" " * len(unit)}')
+            .plain()
+            .writeln()
+        )
+    termio.writeln()
 
     def show(label: str, statistics: Statistics) -> None:
-        renderer.faint(f'    {count:2d} × ')
-        renderer.write(f'{label:>12}:')
+        termio.faint().write(f'    {count:2d} × ').plain().write(f'{label:>12}:')
         for num in statistics:
-            renderer.write(f'  {num:{precision},.0f} {unit}')
-        renderer.newline()
-        renderer.flush()
+            termio.write(f'  {num:{precision},.0f} {unit}')
+        termio.writeln()
+        termio.flush()
 
     show('at-once', at_once)
     show('line-by-line', line_by_line)
-    renderer.newline()
+    termio.writeln()
 
-    ratio = line_by_line.mean / at_once.mean
-    renderer.writeln(
-        f'Rendering line-by-line is {ratio:.1f}× slower than page at-once!'
+    slowdown = line_by_line.mean / at_once.mean
+    termio.writeln(
+        f'Rendering line-by-line is {slowdown:.1f}× slower than page at-once!\n'
     )
-    renderer.newline()

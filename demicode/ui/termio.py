@@ -1,5 +1,5 @@
 from collections.abc import Iterator
-from contextlib import contextmanager
+from contextlib import contextmanager, suppress
 import enum
 import io
 import os
@@ -10,6 +10,12 @@ import termios
 import time
 import tty
 from typing import cast, ClassVar, Literal, Never, Self, TextIO
+
+
+__all__ = (
+    'BatchMode',
+    'TermIO',
+)
 
 
 CSI = '\x1b['
@@ -42,7 +48,7 @@ class BatchMode(enum.Enum):
 
 class TermIO:
     """
-    A higher-level interface to the terminal.
+    A higher-level interface for terminal I/O.
 
     In general, methods that write to the terminal do *not* flush the output.
     However, if a method name contains `request`, the method flushes the output
@@ -58,15 +64,22 @@ class TermIO:
     ) -> None:
         self._input = input or sys.stdin
         self._output = output or sys.stdout
-        assert self._input.isatty()
-        assert self._output.isatty()
 
-        #self._original_input_attr = termios.tcgetattr(self._input.fileno())
-        #self._original_output = self._output
+        # TODO: Consider saving terminal attributes via termios.tcgetattr()
 
         self.update_size()
         self._is_cbreak_mode = False
         self._buffer_level = 0
+
+    def check_tty_read(self) -> Self:
+        if not self._input.isatty():
+            raise AssertionError('input stream is not a TTY')
+        return self
+
+    def check_tty_write(self) -> Self:
+        if not self._output.isatty():
+            raise AssertionError('output stream is not a TTY')
+        return self
 
     @property
     def width(self) -> int:
@@ -76,19 +89,29 @@ class TermIO:
     def height(self) -> int:
         return self._height
 
-    def update_size(self) -> tuple[int, int]:
-        """Get the current terminal size."""
+    def determine_size(self) -> tuple[int, int]:
+        """Get terminal size without updating internal state."""
         if self._output != sys.__stdout__:
-            # Try os.get_terminal_size() for accurate answer
             try:
-                self._width, self._height = os.get_terminal_size(self._output.fileno())
-                return self._width, self._height
+                return os.get_terminal_size(self._output.fileno())
             except OSError:
                 pass
+        return shutil.get_terminal_size()
 
-        # Live with shutil.get_terminal_size()
-        self._width, self._height = shutil.get_terminal_size()
+    def update_size(self) -> tuple[int, int]:
+        """Update the terminal size."""
+        self._width, self._height = self.determine_size()
         return self._width, self._height
+
+    def check_size(self) -> Self:
+        """Validate that the terminal size has not changed."""
+        width, height = self.determine_size()
+        if self._width != width or self._height != height:
+            raise AssertionError(
+                f'terminal size changed from {self._width}×{self._height} '
+                f'to {width}×{height}'
+            )
+        return self
 
     # ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~
     # Basic Support for Reading
@@ -202,10 +225,19 @@ class TermIO:
 
     def write(self, text: str) -> Self:
         """Write out all of the text. Do not flush."""
-        remaining = len(text)
-        while remaining > 0:
-            remaining -= self._output.write(text[-remaining:])
+        # I have yet to find Python code using text streams that actually checks
+        # the number of characters written. A reality check won't hurt.
+        available = len(text)
+        written = self._output.write(text)
+        assert available == written
         return self
+
+    def writeln(self, text: None | str = None) -> Self:
+        """
+        Write the text followed by a newline character. That character may cause
+        the underlying stream to flush itself.
+        """
+        return self.write((text or '') + '\n')
 
     def emit(self, *esc_parts: int | str) -> Self:
         """
@@ -293,7 +325,7 @@ class TermIO:
                 shutil.copyfileobj(nested_output, saved_output)
 
     def is_buffering(self) -> bool:
-        """Determine whether this terminal control instance is buffering."""
+        """Determine whether this terminal is buffering."""
         return self._buffer_level > 0
 
     def get_buffer(self) -> str:
@@ -357,18 +389,28 @@ class TermIO:
         return self.emit(CSI, '2J')
 
     def linestart(self) -> Self:
+        """Move the cursor to the start of the current line."""
         return self.emit(CSI, 'G')
 
     def clearline(self) -> Self:
+        """Clear the current line."""
         return self.emit(CSI, '2K')
 
     def style(self, *parameters: int | Literal['']) -> Self:
         """Modify the style, including text appearance and colors."""
         return self.emit(CSI, ';'.join(str(p) for p in parameters), 'm')
 
-    def reset_style(self) -> Self:
-        """Reset the style."""
-        return self.style(0)
+    def plain(self) -> Self:
+        """Reset styles to plain."""
+        return self.emit(CSI, 'm')
+
+    def bold(self) -> Self:
+        """Set style to bold."""
+        return self.emit(CSI, '1m')
+
+    def faint(self) -> Self:
+        """Set style to faint"""
+        return self.emit(CSI, '2m')
 
     def bell(self) -> Self:
         """Ring terminal bell."""
@@ -448,7 +490,10 @@ class TermIO:
 
     @contextmanager
     def bracketed_paste(self) -> Iterator[Self]:
-        # https://gitlab.com/gnachman/iterm2/-/wikis/Paste-Bracketing
+        """
+        Enable [bracketed
+        pasting](https://gitlab.com/gnachman/iterm2/-/wikis/Paste-Bracketing).
+        """
         self.emit(CSI, '?2004h')
         try:
             yield self
@@ -461,7 +506,15 @@ class TermIO:
     TICKS_PER_BLINK: ClassVar[int] = 3
 
     def resize_interactively(self, width: int = -1, height: int = -1) -> Self:
-        if width != -1 or height != -1:
+        """
+        Help the user resize the terminal by displaying the current size. When
+        invoked with target width and height, this method returns once that
+        width and height have been reached. Otherwise, the user needs to cancel
+        resizing by pressing control-C.
+        """
+        if width == -1 or height == -1:
+            width = height = -1
+        else:
             assert width >= 20
             assert height >= 5
 
@@ -472,13 +525,16 @@ class TermIO:
         ticks = -1
         cursor = ' '
 
-        with self.alternate_screen(), self.hidden_cursor():
+        with suppress(KeyboardInterrupt), self.alternate_screen(), self.hidden_cursor():
             self.home().clear()
             if width == -1:
-                self.write('\n    The terminal size is:\n\n')
+                self.write(
+                    '\n    Please adjust the terminal size until you are satisfied.'
+                    '\n    Then hit control-C to exit.\n\n'
+                )
             else:
                 self.write(
-                    f'\n    Please adjust the terminal size to {width}x{height}:\n\n')
+                    f'\n    Please adjust the terminal size to {width}x{height}.\n\n')
             self.flush()
 
             while True:
@@ -495,3 +551,4 @@ class TermIO:
 
                 self.linestart().clearline().write(f'        {w}x{h} {cursor}').flush()
                 time.sleep(1 / self.TICKS_PER_SECOND)
+        return self

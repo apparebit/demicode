@@ -6,7 +6,7 @@ import sys
 
 sys.path.insert(0, '')
 
-from demicode.ui.terminal import determine_terminal_version
+from demicode.ui.terminal import Terminal
 
 
 CSI = '\x1b['
@@ -27,15 +27,14 @@ def mkbar() -> str:
 
 
 def mklabels() -> tuple[str, str]:
-    terminal, version = determine_terminal_version()
-    if terminal is None:
-        return 'Unknown Terminal', ''
-    elif version is None:
-        return terminal, ''
-    elif len((combined := f'{terminal} ({version})')) <= WIDTH:
+    terminal = Terminal.current()
+    if terminal.version is None:
+        return terminal.long_name, ''
+    combined = f'{terminal.long_name} ({terminal.version})'
+    if len(combined) <= WIDTH:
         return combined, ''
     else:
-        return terminal, version
+        return terminal.long_name, terminal.version
 
 
 def mkprefix(spaces: int) -> str:

@@ -310,7 +310,7 @@ def configure_parser() -> argparse.ArgumentParser:
         help="determine page rendering latency and exit"
     )
     about_tool_group.add_argument(
-        '--inspect-perf-nonce',
+        '--inspect-perf-nonce', '-N',
         dest='nonce',
         action='store',
         help='nonce that uniquely marks a benchmark run, for use in filenames',
@@ -425,7 +425,7 @@ def process(options: argparse.Namespace, termio: TermIO, renderer: Renderer) -> 
         codepoints.append(sorted(ucd.with_keycap))
 
     # Non-standard selections
-    if options.with_arrows or options.inspect_latency:
+    if options.with_arrows or options.inspect_perf:
         codepoints.append(ARROWS)
     if options.with_chevrons:
         codepoints.append(CHEVRONS)
@@ -437,7 +437,7 @@ def process(options: argparse.Namespace, termio: TermIO, renderer: Renderer) -> 
         codepoints.append(TASTE_OF_EMOJI)
     if options.with_version_oracle:
         codepoints.append(VERSION_ORACLE)
-    if options.with_curation or options.inspect_latency:
+    if options.with_curation or options.inspect_perf:
         codepoints.append(MAD_DASH)
         codepoints.append(TASTE_OF_EMOJI)
         codepoints.append(LINGCHI)
@@ -466,12 +466,12 @@ def process(options: argparse.Namespace, termio: TermIO, renderer: Renderer) -> 
             or with "-h" to see all options.
         """))
 
-    if options.inspect_latency:
+    if options.inspect_perf:
         codepoints.extend(codepoints)
         codepoints.extend(codepoints)
 
     # ------------------------------------------------------- Display code points
-    if options.inspect_latency:
+    if options.inspect_perf:
         incrementally = False
         in_grid = False
         probe = Probe(termio)

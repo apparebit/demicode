@@ -30,11 +30,11 @@ class TestTerminal(unittest.TestCase):
             )
 
         with t.buffer():
-            t.home().clear()
+            t.home().erase_screen()
             self.assertEqual(t.get_buffer(), join(CSI, ';H', CSI, '2J'))
 
         with t.buffer():
-            t.linestart().clearline()
+            t.cursor_at_line_start().erase_line()
             self.assertEqual(t.get_buffer(), join(CSI, 'G', CSI, '2K'))
 
         with t.buffer():

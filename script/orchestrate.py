@@ -13,10 +13,13 @@ if sys.platform != 'darwin':
     raise NotImplementedError('script currently supports macOS only!')
 
 import argparse
+import json
 import os
 from pathlib import Path
 import subprocess
 from textwrap import dedent
+import time
+import traceback
 from typing import Any, Literal, Self, TypeAlias
 
 from PIL import Image, ImageChops
@@ -192,7 +195,7 @@ class Terminal(BaseTerminal):
             # Use keyboard shortcut to bring iTerm window to front
             _run_applescript(f"""
                 tell application "System Events"
-                    tell process {self.application}
+                    tell (some process whose bundle identifier is "{self.bundle}")
                         keystroke "1" using {{option down, command down}}
                         delay 2
                     end tell
@@ -200,10 +203,17 @@ class Terminal(BaseTerminal):
             """)
 
         elif self.is_vscode():
-            # Use keyboard shortcuts to make terminal window semi-presentable
+            # Screenshot analysis expects a red bar across much of the image.
+            # The primary side bar and split editors get in the way of that.
             _run_applescript(f"""
                 tell application "System Events"
-                    tell process {self.application}
+                    tell (some process whose bundle identifier is "{self.bundle}")
+                        keystroke "p" using {{shift down, command down}}
+                        delay 0.5
+                        keystroke "View Close All Editors"
+                        keystroke return
+                        delay 1
+
                         keystroke "p" using {{shift down, command down}}
                         delay 0.5
                         keystroke "View Close Primary Side Bar"
@@ -224,7 +234,7 @@ class Terminal(BaseTerminal):
     def change_dir(self, cwd: Path) -> Self:
         _run_applescript(f"""
             tell application "System Events"
-                tell process {self.application}
+                tell (some process whose bundle identifier is "{self.bundle}")
                     keystroke "cd {cwd}"
                     keystroke return
                     delay 1
@@ -236,7 +246,7 @@ class Terminal(BaseTerminal):
     def exec(self, cmd: str) -> Self:
         _run_applescript(f"""\
             tell application "System Events"
-                tell process {self.application}
+                tell (some process whose bundle identifier is "{self.bundle}")
                     keystroke "{cmd}"
                     keystroke return
                     delay 2
@@ -248,7 +258,7 @@ class Terminal(BaseTerminal):
     def window_rect_xywh(self) -> tuple[int, int, int, int]:
         result = _run_applescript(f"""
             tell application "System Events"
-                tell process {self.application}
+                tell (some process whose bundle identifier is "{self.bundle}")
                     set {{theX, theY}} to position of its first window
                     set {{theW, theH}} to size of its first window
                     return {{theX, ",", theY, ",", theW, ",", theH}} as text
@@ -273,7 +283,7 @@ class Terminal(BaseTerminal):
         # Directly telling the terminal to quit fails for Kitty
         _run_applescript(f"""\
             tell application "System Events"
-                tell process {self.application}
+                tell (some process whose bundle identifier is "{self.bundle}")
                     keystroke "q" using command down
                 end tell
             end tell
@@ -368,6 +378,41 @@ class Terminal(BaseTerminal):
                 print(f'    ≫ "{p2.relative_to(demicode)}"')
             return p1, p2
 
+    def benchmark(self, demicode: Path, nonce: str) -> dict[str, object]:
+        if not self.is_current():
+            print(f'    ⊙ Activate {self.name}')
+            self.activate()
+            self.change_dir(demicode)
+
+        print(f'    ⊙ Prepare for benchmark')
+        path = Path(f'{self.name.lower()}-render-perf-{nonce}.json')
+        if path.exists():
+            path.unlink()
+
+        print(f'    ⊙ Start benchmark')
+        if self.is_current():
+            subprocess.run(['python', '-m', 'demicode', '-T', '-N', nonce], check=True)
+        else:
+            self.exec(f'python -m demicode -T -N {nonce}')
+
+        print(f'    ⊙ Wait for completion')
+        for _ in range(20):
+            if path.exists():
+                break
+            time.sleep(1)
+        if not path.exists():
+            raise FileNotFoundError(path)
+
+        print('    ⊙ Read results')
+        with open(path, mode='rb') as file:
+            results = json.load(file)
+
+        if not self.is_vscode():
+            print(f'    ⊙ Quit {self.name}')
+            self.quit()
+
+        return results
+
 
 def main() -> None:
     parser = argparse.ArgumentParser()
@@ -385,15 +430,18 @@ def main() -> None:
         default='dash-integral',
         help='select the payload to display',
     )
+    parser.add_argument(
+        '--benchmark',
+        help='benchmark terminal performance'
+    )
     options = parser.parse_args()
 
+    # Check that we are running in right directory.
     project_root = Path.cwd()
     msg = 'tool must run in root of demicode project'
     assert (project_root / 'demicode').is_dir(), msg
     assert (project_root / 'doc').is_dir(), msg
     assert (project_root / 'script').is_dir(), msg
-    screenshot_dir = project_root / 'doc' / 'screenshot'
-    screenshot_dir.mkdir(parents=True, exist_ok=True)
 
     # Prevent the current terminal from leaking variable definitions to the
     # terminal being tested. Amazingly, macOS does propagate the environment
@@ -403,7 +451,9 @@ def main() -> None:
 
     # Determine the terminals requiring orchestration
     if options.terminal:
-        terminals = iter([Terminal.resolve(options.terminal)])
+        if (t := Terminal.resolve(options.terminal)) is None:
+            raise ValueError(f'unknown terminal "{options.terminal}"')
+        terminals = iter([t])
     else:
         terminals = Terminal.all()
 
@@ -424,6 +474,32 @@ def main() -> None:
                 height = 60
             print('\n' * height)
 
+    # -------------------------
+    # Collect Performance Stats
+    # -------------------------
+
+    if options.benchmark:
+        nonce = Terminal.nonce()
+        all_stats = {}
+
+        for terminal in todo:
+            stats = terminal.benchmark(project_root, nonce)
+            all_stats[terminal.name] = stats
+
+        path = project_root / f'perf-{nonce}.json'
+        with open(path, mode='w', encoding='utf8') as file:
+            json.dump(all_stats, file)
+
+        print(f'Combined results written to {path}')
+        return
+
+    # -------------------
+    # Collect Screenshots
+    # -------------------
+
+    screenshot_dir = project_root / 'doc' / 'screenshot'
+    screenshot_dir.mkdir(parents=True, exist_ok=True)
+
     # Mr DeMille, the terminals are ready for their close-ups!
     for terminal in todo:
         print(f'\x1b[1m{terminal.name} ({terminal.bundle})\x1b[0m')
@@ -436,4 +512,7 @@ def main() -> None:
 
 
 if __name__ == '__main__':
-    main()
+    try:
+        main()
+    except Exception as x:
+        traceback.print_exception(x)

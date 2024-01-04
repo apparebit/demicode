@@ -32,6 +32,9 @@ class Terminal:
             display = f'{display} ({self.version})'
         return display
 
+    def __str__(self) -> str:
+        return self.display
+
     def is_versioned(self) -> bool:
         return self.version is not None
 
@@ -45,7 +48,7 @@ class Terminal:
         return self.bundle == 'com.googlecode.iterm2'
 
     def is_unknown(self) -> bool:
-        return self.bundle == 'known.unknown'
+        return self.bundle == 'unknown.unknown'
 
     def is_vscode(self) -> bool:
         return self.bundle == 'com.microsoft.VSCode'
@@ -58,7 +61,7 @@ class Terminal:
     @classmethod
     def unknown(cls) -> Self:
         if cls._unknown is None:
-            cls._unknown = cls('--unknown--', 'known.unknown')
+            cls._unknown = cls('someterm', 'unknown.unknown')
         return cls._unknown
 
     _registry: ClassVar[None | dict[str, Self]] = None
@@ -69,22 +72,28 @@ class Terminal:
             cls._registry = {}
 
             for names in (
-                # An application's name, its macOS bundle ID, any other names:
-                #   - Alacritty and WezTerm use a different reverse-DNS name
-                #     for Linux desktops
+                # A terminal's display name, its macOS bundle ID, and any other
+                # names:
+                #   - Alacritty and WezTerm have different reverse-DNS names for
+                #     Linux desktops. We include them as aliases.
                 #   - iTerm's latest version is 3.4.22, but somehow the '2' is
                 #     sticky at least in the main menu
-                #   - Terminal.app is just a nickname whereas Apple_Terminal
-                #     appears in the TERM_PROGRAM environment variable
-                #   - Visual Studio Code is VSCode's full name
-                #   - WarpTerminal appears in TERM_PROGRAM
+                #   - Apple's Terminal application uses "Terminal" in the
+                #     menubar and "Apple_Terminal" in the TERM_PROGRAM
+                #     environment variable. The former is too generic and the
+                #     latter awkward, so we use "Terminal.app" instead.
+                #   - Visual Studio Code uses the generic "Code" in the menubar
+                #     and "Visual Studio Code" on disk. The former is too
+                #     generic and the latter a mouthful, so we use "VSCode"
+                #     instead.
+                #   - Warp uses "WarpTerminal" in TERM_PROGRAM.
                 ('Alacritty', 'org.alacritty', 'org.alacritty.Alacritty'),
                 ('Hyper', 'co.zeit.hyper'),
                 ('iTerm', 'com.googlecode.iterm2', 'iTerm2'),
                 ('Kitty', 'net.kovidgoyal.kitty'),
                 ('Rio', 'com.raphaelamorim.rio'),
-                ('Terminal', 'com.apple.Terminal', 'Terminal.app', 'Apple_Terminal'),
-                ('VSCode', 'com.microsoft.VSCode', 'Visual Studio Code'),
+                ('Terminal.app', 'com.apple.Terminal', 'Terminal', 'Apple_Terminal'),
+                ('VSCode', 'com.microsoft.VSCode', 'Code', 'Visual Studio Code'),
                 ('Warp', 'dev.warp.Warp-Stable', 'WarpTerminal'),
                 ('WezTerm', 'com.github.wez.wezterm', 'org.wezfurlong.wezterm'),
             ):
@@ -92,6 +101,7 @@ class Terminal:
                 for key, name in zip(keys, names):
                     if key in cls._registry:
                         raise AssertionError(f'duplicate terminal name {name}')
+
                 terminal = cls(*names[:2])
                 for key in keys:
                     cls._registry[key] = terminal
@@ -108,23 +118,17 @@ class Terminal:
             yield terminal
 
     @classmethod
-    def resolve_name(cls, ident: str) -> str:
-        terminal = cls.registry().get(ident.casefold())
-        return terminal.long_name if terminal else ident
-
-    @classmethod
-    def resolve(cls, ident: str) -> Self:
-        terminal = cls.registry().get(ident.casefold())
-        return terminal if terminal else cls(ident, ident)
-
+    def resolve(cls, ident: str) -> None | Self:
+        return cls.registry().get(ident.casefold())
 
     # ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~
 
     @classmethod
     def from_bundle_id(cls) -> None | Self:
         """Resolve the terminal name based on the macOS bundle identifier"""
-        bundle = os.getenv('__CFBundleIdentifier')
-        return cls.resolve(bundle) if bundle else None
+        if (bundle := os.getenv('__CFBundleIdentifier')) is None:
+            return None
+        return cls.resolve(bundle)
 
     def with_bundle_version(self) -> Self:
         """Add in the terminal version based on the macOS bundle identifier."""
@@ -152,21 +156,13 @@ class Terminal:
         Resolve the terminal name and version based on the macOS bundle
         identifier.
         """
-        t = cls.from_bundle_id()
-        if t is None:
+        if (terminal := cls.from_bundle_id()) is None:
             return None
-        return t.with_env_version() if t.is_warp() else t.with_bundle_version()
+        if terminal.is_warp():
+            return terminal.with_env_version()
+        return terminal.with_bundle_version()
 
     # ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~
-
-    @classmethod
-    def from_env_name(cls) -> None | Self:
-        """
-        Resolve the terminal name based on the `TERM_PROGRAM` environment
-        variable.
-        """
-        program = os.getenv('TERM_PROGRAM')
-        return cls.resolve(program) if program else None
 
     def with_env_version(self) -> Self:
         """
@@ -182,8 +178,11 @@ class Terminal:
         Resolve the terminal name and version based on the `TERM_PROGRAM` and
         `TERM_PROGRAM_VERSION` environment variables.
         """
-        terminal = cls.from_env_name()
-        return terminal.with_env_version() if terminal else None
+        if (program := os.getenv('TERM_PROGRAM')) is None:
+            return None
+        if (terminal := cls.resolve(program)) is None:
+            return None
+        return terminal.with_env_version()
 
     # ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~
 
@@ -203,10 +202,11 @@ class Terminal:
             return None
         if report[-1] == ')':
             name, _, version = report.rpartition('(')
-            version = version[1:-1]
+            version = version[:-1]
         else:
             name, _, version = report.partition(' ')
-        terminal = cls.resolve(name)
+        if (terminal := cls.resolve(name)) is None:
+            return None
         return terminal.with_version(version) if version else terminal
 
     # ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~
@@ -214,12 +214,13 @@ class Terminal:
     @classmethod
     def current(cls, termio: None | TermIO = None) -> Self:
         """Resolve the terminal name and version."""
-        return (
-            cls.from_xtversion(termio)
-            or cls.from_bundle()
-            or cls.from_env()
-            or cls.unknown()
-        )
+        if (terminal := cls.from_xtversion(termio)) is not None:
+            return terminal
+        if (terminal := cls.from_bundle()) is not None:
+            return terminal
+        if (terminal := cls.from_env()) is not None:
+            return terminal
+        return cls.unknown()
 
     # ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~
 

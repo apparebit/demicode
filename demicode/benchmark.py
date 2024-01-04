@@ -77,7 +77,7 @@ class Probe:
         return self._required_readings
 
     def validate(self) -> None:
-        self._termio.check_size()
+        self._termio.check_same_size()
 
     @contextmanager
     def measure(self, label: str) -> Iterator[Self]:
@@ -179,12 +179,12 @@ def report_page_rendering(probe: Probe, nonce: None | str) -> None:
         'line-by-line': line_by_line._asdict(),
     }
 
-    path = terminal.filename('render-perf', nonce, '.json')
+    path = f'{terminal.name.lower()}-render-perf-{nonce}.json'
     with open(path, mode='w', encoding='utf8') as file:
         json.dump(json_data, file, indent='  ')
 
     # Show human-readable report
-    termio.style(1).write(f'{termio} Rendering {width}×{height} Page').plain()
+    termio.style(1).write(f'{terminal}: Rendering {width}×{height} Page').plain()
     termio.writeln('\n')
 
     termio.faint().write(f'         {" ":>12} ').plain().writeln()
@@ -213,3 +213,5 @@ def report_page_rendering(probe: Probe, nonce: None | str) -> None:
     termio.writeln(
         f'Rendering line-by-line is {slowdown:.1f}× slower than page at-once!\n'
     )
+
+    termio.writeln().writeln(f'Results have been written to "{path}"')

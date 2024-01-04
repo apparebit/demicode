@@ -9,7 +9,7 @@ import sys
 import termios
 import time
 import tty
-from typing import cast, ClassVar, Literal, Never, Self, TextIO
+from typing import Callable, cast, ClassVar, Literal, Never, Self, TextIO
 
 
 __all__ = (
@@ -23,10 +23,6 @@ bCSI = b'\x1b['
 DCS = '\x1bP'
 OSC = '\x1b]'
 ST = '\x1b\\'
-
-
-def join(*fragments: str) -> str:
-    return ''.join(fragments)
 
 
 class BatchMode(enum.Enum):
@@ -45,10 +41,9 @@ class BatchMode(enum.Enum):
     def is_disabled(self) -> bool:
         return self is not BatchMode.ENABLED
 
-
 class TermIO:
     """
-    A higher-level interface for terminal I/O.
+    A convenient interface for terminal I/O.
 
     In general, methods that write to the terminal do *not* flush the output.
     However, if a method name contains `request`, the method flushes the output
@@ -60,26 +55,15 @@ class TermIO:
     def __init__(
         self,
         input: None | TextIO = None,
-        output: None | TextIO = None
+        output: None | TextIO = None,
     ) -> None:
-        self._input = input or sys.stdin
-        self._output = output or sys.stdout
+        self._input = input or sys.__stdin__
+        self._output = output or sys.__stderr__
+        self._width, self._height = self.query_size()
 
-        # TODO: Consider saving terminal attributes via termios.tcgetattr()
-
-        self.update_size()
-        self._is_cbreak_mode = False
+        # TODO: Consider querying terminal attributes via termios.tcgetattr()
+        self._cbreak_mode = False
         self._buffer_level = 0
-
-    def check_tty_read(self) -> Self:
-        if not self._input.isatty():
-            raise AssertionError('input stream is not a TTY')
-        return self
-
-    def check_tty_write(self) -> Self:
-        if not self._output.isatty():
-            raise AssertionError('output stream is not a TTY')
-        return self
 
     @property
     def width(self) -> int:
@@ -89,23 +73,20 @@ class TermIO:
     def height(self) -> int:
         return self._height
 
-    def determine_size(self) -> tuple[int, int]:
-        """Get terminal size without updating internal state."""
-        if self._output != sys.__stdout__:
-            try:
-                return os.get_terminal_size(self._output.fileno())
-            except OSError:
-                pass
-        return shutil.get_terminal_size()
+    def query_size(self) -> tuple[int, int]:
+        """Get the current terminal size without changing internal state."""
+        try:
+            return os.get_terminal_size(self._output.fileno())
+        except OSError:
+            return 80, 24
 
     def update_size(self) -> tuple[int, int]:
-        """Update the terminal size."""
-        self._width, self._height = self.determine_size()
+        self._width, self._height = self.query_size()
         return self._width, self._height
 
-    def check_size(self) -> Self:
+    def check_same_size(self) -> Self:
         """Validate that the terminal size has not changed."""
-        width, height = self.determine_size()
+        width, height = self.query_size()
         if self._width != width or self._height != height:
             raise AssertionError(
                 f'terminal size changed from {self._width}×{self._height} '
@@ -116,12 +97,12 @@ class TermIO:
     # ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~
     # Basic Support for Reading
 
-    def is_break_mode(self) -> bool:
+    def is_cbreak_mode(self) -> bool:
         """
         Determine whether the terminal is in cbreak mode, which is necessary for
         reading the reports resulting from requests.
         """
-        return self._is_cbreak_mode
+        return self._cbreak_mode
 
     @contextmanager
     def cbreak_mode(self) -> Iterator[Self]:
@@ -130,22 +111,26 @@ class TermIO:
         strokes. This mode is necessary for reading the reports resulting from
         requests.
         """
-        if self._is_cbreak_mode:
-            raise ValueError(f'terminal already is in cbreak mode')
+        if sys.platform == 'win32':
+            raise AssertionError('Windows does not support cbreak mode')
+        if self._cbreak_mode:
+            raise AssertionError('terminal already is in cbreak mode')
 
         fileno = self._input.fileno()
         settings = termios.tcgetattr(fileno)
-        self._is_cbreak_mode = True
+        self._cbreak_mode = True
         tty.setcbreak(fileno)
         try:
             yield self
         finally:
             termios.tcsetattr(fileno, termios.TCSADRAIN, settings)
-            self._is_cbreak_mode = False
+            self._cbreak_mode = False
 
     def check_cbreak_mode(self) -> Self:
         """Check that the terminal is in cbreak mode."""
-        if not self._is_cbreak_mode:
+        if sys.platform == 'win32':
+            raise AssertionError('Windows does not support cbreak mode')
+        if not self._cbreak_mode:
             raise AssertionError('terminal not in cbreak mode')
         return self
 
@@ -223,28 +208,34 @@ class TermIO:
     # ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~
     # Basic Support for Writing
 
-    def write(self, text: str) -> Self:
-        """Write out all of the text. Do not flush."""
+    def _write(self, text: str) -> Self:
         # I have yet to find Python code using text streams that actually checks
         # the number of characters written. A reality check won't hurt.
-        available = len(text)
-        written = self._output.write(text)
-        assert available == written
+        expected = len(text)
+        actual = self._output.write(text)
+        assert expected == actual
         return self
+
+    def write(self, text: str) -> Self:
+        """Write out all of the text. Do not flush."""
+        return self._write(text)
 
     def writeln(self, text: None | str = None) -> Self:
         """
         Write the text followed by a newline character. That character may cause
         the underlying stream to flush itself.
         """
-        return self.write((text or '') + '\n')
+        if text:
+            self._write(text)
+        return self._write('\n')
 
-    def emit(self, *esc_parts: int | str) -> Self:
+    def escape(self, *parts: int | str) -> Self:
         """
         Write the stringified and joined escape sequence to the terminal. Do not
         flush. This method must not be used for content, only escape sequences.
         """
-        return self.write(''.join(str(p) for p in esc_parts))
+        self._write(''.join(str(p) for p in parts))
+        return self
 
     def flush(self) -> Self:
         """Flush the output."""
@@ -260,9 +251,15 @@ class TermIO:
         does flush the output. It returns `None` upon timing out. The terminal
         must be in cbreak mode.
         """
-        self.check_cbreak_mode().emit(*query).flush()
         try:
-            return self.read_escape()
+            return (
+                self
+                .check_not_buffering()
+                .check_cbreak_mode()
+                .escape(*query)
+                .flush()
+                .read_escape()
+            )
         except TimeoutError:
             return None
 
@@ -292,7 +289,7 @@ class TermIO:
 
     def request_terminal_version(self) -> None | str:
         """Request a report with the terminal version."""
-        return self.request_text(CSI, '>q', prefix=join(DCS, '>|'), suffix=ST)
+        return self.request_text(CSI, '>q', prefix=''.join([DCS, '>|']), suffix=ST)
 
     def request_cursor_position(self) -> None | tuple[int, int]:
         """Request a report with the cursor position in (x, y) order."""
@@ -300,7 +297,17 @@ class TermIO:
         return None if len(numbers) != 2 else (numbers[1], numbers[0])
 
     # ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~
-    # Buffering and Batching Writes
+    # Buffering
+
+    def is_buffering(self) -> bool:
+        """Determine whether this terminal is buffering."""
+        return self._buffer_level > 0
+
+    def check_not_buffering(self) -> Self:
+        """Check that this terminal is not currently buffering."""
+        if self._buffer_level > 0:
+            raise AssertionError("terminal is buffering when it shouldn't")
+        return self
 
     @contextmanager
     def buffer(self) -> Iterator[Self]:
@@ -324,10 +331,6 @@ class TermIO:
             if not nested_output.closed:
                 shutil.copyfileobj(nested_output, saved_output)
 
-    def is_buffering(self) -> bool:
-        """Determine whether this terminal is buffering."""
-        return self._buffer_level > 0
-
     def get_buffer(self) -> str:
         """Get the current buffer contents."""
         if not self.is_buffering():
@@ -344,6 +347,9 @@ class TermIO:
         self._output = io.StringIO()
         return self
 
+    # ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~
+    # Batching
+
     @contextmanager
     def batch(self) -> Iterator[Self]:
         """
@@ -351,11 +357,11 @@ class TermIO:
         any updates until the with block is finished. Use `request_batch_mode()`
         to determine whether a terminal supports batching.
         """
-        self.emit(CSI, '?2026h').flush()
+        self.escape(CSI, '?2026h').flush()
         try:
             yield self
         finally:
-            self.emit(CSI, '?2026l').flush()
+            self.escape(CSI, '?2026l').flush()
 
     def request_batch_mode(self) -> BatchMode:
         """Request the current batch mode."""
@@ -370,57 +376,66 @@ class TermIO:
     # ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~
     # Positioning the Cursor, Erasing Content, and Styling Content
 
-    def set_cursor_column(self, column: int | Literal[''] = '') -> Self:
-        """Set the cursor column."""
-        return self.emit(CSI, column, 'G')
-
-    def set_cursor_position(
-        self, row: int | Literal[''] = '', column: int | Literal[''] = ''
-    ) -> Self:
-        """Set the cursor position."""
-        return self.emit(CSI, row, ';', column, 'H')
+    def pipe(self, callback: Callable[[Self], None | Self]) -> Self:
+        """Invoke the callback on this terminal I/O instance."""
+        result = callback(self)
+        return result if isinstance(result, TermIO) else self
 
     def home(self) -> Self:
         """Set cursor position to (1, 1)."""
-        return self.emit(CSI, ';H')
+        return self.escape(CSI, ';H')
 
-    def clear(self) -> Self:
-        """Erase the display."""
-        return self.emit(CSI, '2J')
+    def cursor_position(
+        self, row: int | Literal[''] = '', column: int | Literal[''] = ''
+    ) -> Self:
+        """Set the cursor position."""
+        return self.escape(CSI, row, ';', column, 'H')
 
-    def linestart(self) -> Self:
+    def cursor_at_column(self, column: int | Literal[''] = '') -> Self:
+        """Set the cursor column."""
+        return self.escape(CSI, column, 'G')
+
+    def cursor_at_line_start(self) -> Self:
         """Move the cursor to the start of the current line."""
-        return self.emit(CSI, 'G')
+        return self.escape(CSI, 'G')
 
-    def clearline(self) -> Self:
+    def erase_screen(self) -> Self:
+        """Erase the display."""
+        return self.escape(CSI, '2J')
+
+    def erase_line(self) -> Self:
         """Clear the current line."""
-        return self.emit(CSI, '2K')
+        return self.escape(CSI, '2K')
 
-    def style(self, *parameters: int | Literal['']) -> Self:
+    def style(self, *parameters: int | str) -> Self:
         """Modify the style, including text appearance and colors."""
-        return self.emit(CSI, ';'.join(str(p) for p in parameters), 'm')
+        return self.escape(CSI, ';'.join(str(p) for p in parameters), 'm')
 
     def plain(self) -> Self:
         """Reset styles to plain."""
-        return self.emit(CSI, 'm')
+        return self.escape(CSI, 'm')
 
     def bold(self) -> Self:
         """Set style to bold."""
-        return self.emit(CSI, '1m')
+        return self.escape(CSI, '1m')
 
     def faint(self) -> Self:
         """Set style to faint"""
-        return self.emit(CSI, '2m')
+        return self.escape(CSI, '2m')
+
+    def italic(self) -> Self:
+        """Set style to italic."""
+        return self.escape(CSI, '3m')
 
     def bell(self) -> Self:
         """Ring terminal bell."""
-        return self.emit('\a')
+        return self.escape('\a')
 
     def link(self, text: str, href: str, id: None | str = None) -> Self:
         """Mark a hyperlink."""
         # https://gist.github.com/egmontkob/eb114294efbcd5adb1944c9f3cb5feda
         code = f'8;id={id};' if id else '8;;'
-        return self.emit(OSC, code, href, ST).write(text).emit(OSC, '8;;', ST)
+        return self.escape(OSC, code, href, ST).write(text).escape(OSC, '8;;', ST)
 
     # iTerm
     # OSC 1337 ; StealFocus ST
@@ -464,29 +479,29 @@ class TermIO:
         during exit.
         """
         # Save window title on stack, then update window title
-        self.emit(CSI, '22;2t', OSC, '0;', title, ST).flush()
+        self.escape(CSI, '22;2t', OSC, '0;', title, ST).flush()
         try:
             yield self
         finally:
-            self.emit(CSI, '23;2t').flush()
+            self.escape(CSI, '23;2t').flush()
 
     @contextmanager
     def alternate_screen(self) -> Iterator[Self]:
         """Switch to the terminal's alternate (unbuffered) screen."""
-        self.emit(CSI, '?1049h').flush()
+        self.escape(CSI, '?1049h').flush()
         try:
             yield self
         finally:
-            self.emit(CSI, '?1049l').flush()
+            self.escape(CSI, '?1049l').flush()
 
     @contextmanager
     def hidden_cursor(self) -> Iterator[Self]:
         """Make cursor invisible."""
-        self.emit(CSI, '?25l')
+        self.escape(CSI, '?25l')
         try:
             yield self
         finally:
-            self.emit(CSI, '?25h')
+            self.escape(CSI, '?25h')
 
     @contextmanager
     def bracketed_paste(self) -> Iterator[Self]:
@@ -494,11 +509,11 @@ class TermIO:
         Enable [bracketed
         pasting](https://gitlab.com/gnachman/iterm2/-/wikis/Paste-Bracketing).
         """
-        self.emit(CSI, '?2004h')
+        self.escape(CSI, '?2004h')
         try:
             yield self
         finally:
-            self.emit(CSI, '?2004l')
+            self.escape(CSI, '?2004l')
 
     # ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~
 
@@ -522,11 +537,11 @@ class TermIO:
         if w == width and h == height:
             return self
 
-        ticks = -1
-        cursor = ' '
+        ticks = 0
+        cursor = '█'
 
         with suppress(KeyboardInterrupt), self.alternate_screen(), self.hidden_cursor():
-            self.home().clear()
+            self.home().erase_screen()
             if width == -1:
                 self.write(
                     '\n    Please adjust the terminal size until you are satisfied.'
@@ -538,17 +553,34 @@ class TermIO:
             self.flush()
 
             while True:
+                # Update terminal size
                 w, h = self.update_size()
                 if w == width and h == height:
                     return self
 
-                w = f'{CSI}{"38;5;244" if w ==  width else "1"}m{w:3d}{CSI}0m'
-                h = f'{CSI}{"38;5;244" if h == height else "1"}m{h:3d}{CSI}0m'
-
+                # Simulate blinking cursor
                 ticks += 1
-                if ticks % self.TICKS_PER_BLINK == 0:
+                if ticks == self.TICKS_PER_BLINK:
+                    ticks = 0
                     cursor = '█' if cursor == ' ' else ' '
 
-                self.linestart().clearline().write(f'        {w}x{h} {cursor}').flush()
+                # Update size display
+                (
+                    self
+                    .cursor_at_line_start()
+                    .erase_line()
+                    .write('        ')
+                    .style('38;5;244' if w == width else '1')
+                    .write(f'{w:3d}')
+                    .plain()
+                    .write('x')
+                    .style('38;5;244' if h == height else '1')
+                    .write(f'{h:3d}')
+                    .plain()
+                    .write(' {cursor}')
+                    .flush()
+                )
+
+                # Nap a little
                 time.sleep(1 / self.TICKS_PER_SECOND)
         return self

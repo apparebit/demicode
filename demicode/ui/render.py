@@ -31,27 +31,27 @@ from .darkmode import is_darkmode
 # Basic Support for Styling Output
 
 
-_CSI = '\x1b['
-_OSC = '\x1b]'
-_ST = '\x1b\\'
+_CSI = "\x1b["
+_OSC = "\x1b]"
+_ST = "\x1b\\"
 
 
 def _SGR(code: str) -> str:
     """Format Select Graphic Rendition."""
-    return f'{_CSI}{code}m'
+    return f"{_CSI}{code}m"
 
 
 def _CHA(column: int | str) -> str:
     """Format Cursor Horizontal Absolute (an editor function)."""
-    return f'{_CSI}{column}G'
+    return f"{_CSI}{column}G"
 
 
 def _bg(color: int | str) -> str:
-    return f'48;5;{color}'
+    return f"48;5;{color}"
 
 
 def _fg(color: int | str) -> str:
-    return f'38;5;{color}'
+    return f"38;5;{color}"
 
 
 @dataclass(frozen=True, slots=True)
@@ -72,7 +72,7 @@ class Theme:
         blot_obstruction: str,
         faint: str,
         error: str,
-    ) -> 'Theme':
+    ) -> "Theme":
         return cls(
             _SGR(legend),
             _SGR(heading),
@@ -84,39 +84,39 @@ class Theme:
 
 
 class Style:
-    RESET = _SGR('0')
-    BOLD = _SGR('1')
-    ITALIC = _SGR('3')
+    RESET = _SGR("0")
+    BOLD = _SGR("1")
+    ITALIC = _SGR("3")
 
     LIGHT = (
-        Theme.of(_bg(252), _fg('246;3'), _bg(254), _fg(244), _fg(246), _fg('160;1')),
-        Theme.of(_bg(252), _fg('246;3'), _bg(220), _fg(244), _fg(246), _fg('160;1')),
-        Theme.of(_bg(252), _fg('246;3'), _bg(220), _fg(202), _fg(246), _fg('160;1')),
+        Theme.of(_bg(252), _fg("246;3"), _bg(254), _fg(244), _fg(246), _fg("160;1")),
+        Theme.of(_bg(252), _fg("246;3"), _bg(220), _fg(244), _fg(246), _fg("160;1")),
+        Theme.of(_bg(252), _fg("246;3"), _bg(220), _fg(202), _fg(246), _fg("160;1")),
     )
 
     DARK = (
-        Theme.of(_bg(240), _fg('245;3'), _bg(238), _fg(243), _fg(245), _fg('88;1')),
-        Theme.of(_bg(240), _fg('245;3'), _bg(53),  _fg(243), _fg(245), _fg('88;1')),
-        Theme.of(_bg(240), _fg('245;3'), _bg(53),  _fg(93),  _fg(245), _fg('88;1')),
+        Theme.of(_bg(240), _fg("245;3"), _bg(238), _fg(243), _fg(245), _fg("88;1")),
+        Theme.of(_bg(240), _fg("245;3"), _bg(53), _fg(243), _fg(245), _fg("88;1")),
+        Theme.of(_bg(240), _fg("245;3"), _bg(53), _fg(93), _fg(245), _fg("88;1")),
     )
 
     @classmethod
     def bold(cls, text: str) -> str:
-        return f'{cls.BOLD}{text}{cls.RESET}'
+        return f"{cls.BOLD}{text}{cls.RESET}"
 
     @classmethod
     def italic(cls, text: str) -> str:
-        return f'{cls.ITALIC}{text}{cls.RESET}'
+        return f"{cls.ITALIC}{text}{cls.RESET}"
 
     @classmethod
     def link(cls, href: str, text: None | str = None) -> str:
         text = href if text is None else text
-        return f'{_OSC}8;;{href}{_ST}{text}{_OSC}8;;{_ST}'
+        return f"{_OSC}8;;{href}{_ST}{text}{_OSC}8;;{_ST}"
 
 
 class Padding(StrEnum):
-    BACKGROUND = ' '
-    FOREGROUND = '█'
+    BACKGROUND = " "
+    FOREGROUND = "█"
 
 
 # --------------------------------------------------------------------------------------
@@ -134,9 +134,9 @@ class KeyPressReader(Iterator[bytes], metaclass=ABCMeta):
     cbreak mode.
     """
 
-    PLATFORM_SUPPORTED = sys.platform in ('darwin', 'linux')
+    PLATFORM_SUPPORTED = sys.platform in ("darwin", "linux")
 
-    __slots__ = ('_input',)
+    __slots__ = ("_input",)
 
     def __init__(self, input: TextIO) -> None:
         self._input = input
@@ -174,7 +174,7 @@ class KeyPressReader(Iterator[bytes], metaclass=ABCMeta):
             return b
 
         def bad_byte(b: int) -> Never:
-            raise MalformedEscape(f'unexpected key code 0x{b:02X}')
+            raise MalformedEscape(f"unexpected key code 0x{b:02X}")
 
         b = next_byte()
         if b != 0x1B:
@@ -212,13 +212,11 @@ class KeyPressReader(Iterator[bytes], metaclass=ABCMeta):
 
 
 if KeyPressReader.PLATFORM_SUPPORTED:
-
     import select
     import termios
     import tty
 
     class UnixKeyPressReader(KeyPressReader):
-
         __slots__ = ()
 
         def read(self, *, timeout: float = 0, length: int = 3) -> bytes:
@@ -235,14 +233,13 @@ if KeyPressReader.PLATFORM_SUPPORTED:
 
 
 class Renderer:
-
     MAX_WIDTH = 140
 
     def __init__(self, input: TextIO, output: TextIO, theme: Theme) -> None:
         self._input = input
         self._output = output
         self._interactive = (
-            os.getenv('CI') != 'true' and input.isatty() and output.isatty()
+            os.getenv("CI") != "true" and input.isatty() and output.isatty()
         )
         self._theme = theme
         self.refresh()
@@ -252,10 +249,10 @@ class Renderer:
         *,
         input: None | TextIO = None,
         output: None | TextIO = None,
-        styled:  None | bool = None,
+        styled: None | bool = None,
         dark: None | bool = None,
         intensity: None | int = None,
-    ) -> 'Renderer':
+    ) -> "Renderer":
         """
         Create a new renderer. By default, the renderer uses standard input and
         output. It styles the output if `output` is a TTY, and it uses a theme
@@ -274,7 +271,7 @@ class Renderer:
             intensity = 0
 
         constructor = StyledRenderer if styled else Renderer
-        theme = getattr(Style, 'DARK' if dark else 'LIGHT')[min(2, max(0, intensity))]
+        theme = getattr(Style, "DARK" if dark else "LIGHT")[min(2, max(0, intensity))]
         return constructor(input, output, theme)
 
     # ----------------------------------------------------------------------------------
@@ -356,7 +353,7 @@ class Renderer:
 
         @contextmanager
         def reader(self) -> Iterator[KeyPressReader]:
-            raise NotImplementedError('Renderer.reader()')
+            raise NotImplementedError("Renderer.reader()")
 
     # ----------------------------------------------------------------------------------
     # Format Text
@@ -366,7 +363,7 @@ class Renderer:
             width = self.width
         if len(text) <= width:
             return text.ljust(width) if fill else text
-        return text[:width - 1] + '…'
+        return text[: width - 1] + "…"
 
     # ----------------------------------------------------------------------------------
     # Output Formatted Text
@@ -375,7 +372,7 @@ class Renderer:
         pass
 
     def newline(self) -> None:
-        self._output.write('\n')
+        self._output.write("\n")
 
     def faint(self, text: str) -> None:
         self._output.write(text)
@@ -405,7 +402,7 @@ class Renderer:
     def beep(self) -> None:
         pass
 
-    def tick(self) ->  None:
+    def tick(self) -> None:
         """Visibly track progress for long-running, interactive tasks."""
         pass
 
@@ -432,22 +429,22 @@ class Renderer:
     def clear_buffer(self) -> None:
         """Erase output buffered so far."""
         if not isinstance(self._output, io.StringIO):
-            raise TypeError('renderer is not buffering')
+            raise TypeError("renderer is not buffering")
         self._output = io.StringIO()
 
-    def write(self, text: str = '') -> None:
+    def write(self, text: str = "") -> None:
         """Output the text. This method does not flush the output."""
         if text:
             self._output.write(str(text))
 
-    def writeln(self, text: str = '') -> None:
+    def writeln(self, text: str = "") -> None:
         """
         Output the text followed by a newline. This method flushes the output
         stream. If that is undesired, consider `buffering()`.
         """
         if text:
             self._output.write(str(text))
-        self._output.write('\n')
+        self._output.write("\n")
         self._output.flush()
 
     def flush(self) -> None:
@@ -466,18 +463,18 @@ class StyledRenderer(Renderer):
     def window_title(self, text: str) -> Iterator[None]:
         """Update the window title."""
         if self.is_interactive:
-            self._output.write(f'{_CSI}22;0t{_OSC}0;{text}{_ST}')
+            self._output.write(f"{_CSI}22;0t{_OSC}0;{text}{_ST}")
             self._output.flush()
         try:
             yield
         finally:
             if self.is_interactive:
-                self._output.write(f'{_OSC}0;{_ST}{_CSI}23;0t')
+                self._output.write(f"{_OSC}0;{_ST}{_CSI}23;0t")
                 self._output.flush()
 
     def query(self, query: str) -> bytes:
-        if not query.startswith('\x1B'):
-            query = f'\x1B{query}'
+        if not query.startswith("\x1B"):
+            query = f"\x1B{query}"
         with self.reader() as reader:
             self._output.write(query)
             self._output.flush()
@@ -485,17 +482,17 @@ class StyledRenderer(Renderer):
 
     def get_position(self) -> None | tuple[int, int]:
         """Get current cursor position. This method flushes output."""
-        response = self.query(f'{_CSI}6n')
-        if not response.startswith(b'\x1B[') or not response.endswith(b'R'):
+        response = self.query(f"{_CSI}6n")
+        if not response.startswith(b"\x1B[") or not response.endswith(b"R"):
             return None
-        row, _, column = response[2:-1].partition(b';')
+        row, _, column = response[2:-1].partition(b";")
         return int(row), int(column)
 
     def adjust_column(self, column: int) -> None:
         self._output.write(_CHA(column))
 
-    def faint(self, text:str) -> None:
-        self._output.write(f'{self._theme.faint}{text}{Style.RESET}')
+    def faint(self, text: str) -> None:
+        self._output.write(f"{self._theme.faint}{text}{Style.RESET}")
 
     def em(self, text: str) -> None:
         self._output.write(Style.italic(text))
@@ -507,34 +504,38 @@ class StyledRenderer(Renderer):
         self._output.write(Style.link(href, text))
 
     def emit_legend(self, text: str) -> None:
-        self._output.write(f'{self._theme.legend}{text}{Style.RESET}')
+        self._output.write(f"{self._theme.legend}{text}{Style.RESET}")
 
     def emit_heading(self, text: str) -> None:
-        self._output.write(f'{self._theme.heading}{text}{Style.RESET}')
+        self._output.write(f"{self._theme.heading}{text}{Style.RESET}")
 
     def emit_blot(self, text: str, padding: Padding, width: int) -> None:
-        self._output.write(''.join([
-            text,
-            (
-                self._theme.blot_highlight
-                if padding is Padding.BACKGROUND
-                else self._theme.blot_obstruction
-            ),
-            padding.value * width,
-            Style.RESET
-        ]))
+        self._output.write(
+            "".join(
+                [
+                    text,
+                    (
+                        self._theme.blot_highlight
+                        if padding is Padding.BACKGROUND
+                        else self._theme.blot_obstruction
+                    ),
+                    padding.value * width,
+                    Style.RESET,
+                ]
+            )
+        )
 
     def emit_error(self, text: str) -> None:
         """Emit the error text. This method flushes output."""
-        self._output.write(f'{self._theme.error}{text}{Style.RESET}')
+        self._output.write(f"{self._theme.error}{text}{Style.RESET}")
         self._output.flush()
 
     def beep(self) -> None:
         """Ring the terminal's bell. This method flushes output."""
-        self._output.write('\a')
+        self._output.write("\a")
         self._output.flush()
 
     def tick(self) -> None:
         if self.is_interactive:
-            self._output.write('•')
+            self._output.write("•")
             self._output.flush()

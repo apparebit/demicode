@@ -24,7 +24,7 @@ from test.grapheme_clusters import GRAPHEME_CLUSTER_BREAKS
 
 
 PROPERTY_COUNTS: dict[str, dict[PropertyId, tuple[int, int, int]]] = {
-    '15.0': {
+    "15.0": {
         BinaryProperty.Default_Ignorable_Code_Point: (4_174, 27, 17),
         BinaryProperty.Emoji: (1_424, 404, 151),
         BinaryProperty.Emoji_Component: (146, 10, 10),
@@ -42,7 +42,7 @@ PROPERTY_COUNTS: dict[str, dict[PropertyId, tuple[int, int, int]]] = {
         Indic_Syllabic_Category: (4_639, 922, 775),
         Script: (149_251, 2_191, 952),
     },
-    '15.1': {
+    "15.1": {
         BinaryProperty.Default_Ignorable_Code_Point: (4_174, 27, 17),
         BinaryProperty.Emoji: (1_424, 404, 151),
         BinaryProperty.Emoji_Component: (146, 10, 10),
@@ -69,28 +69,33 @@ CHARACTER_DATA = (
         category=General_Category.Other_Punctuation,
         east_asian_width=East_Asian_Width.Narrow,
         age=Age.V1_1,
-        name='NUMBER SIGN',
+        name="NUMBER SIGN",
         block=Block.Basic_Latin,
-        flags=frozenset([BinaryProperty.Emoji, BinaryProperty.Emoji_Component])
+        flags=frozenset([BinaryProperty.Emoji, BinaryProperty.Emoji_Component]),
     ),
     CharacterData(
         codepoint=CodePoint.of(0x26A1),
         category=General_Category.Other_Symbol,
         east_asian_width=East_Asian_Width.Wide,
         age=Age.V4_0,
-        name='HIGH VOLTAGE SIGN',
+        name="HIGH VOLTAGE SIGN",
         block=Block.Miscellaneous_Symbols,
-        flags=frozenset([BinaryProperty.Emoji, BinaryProperty.Emoji_Presentation,
-                         BinaryProperty.Extended_Pictographic])
+        flags=frozenset(
+            [
+                BinaryProperty.Emoji,
+                BinaryProperty.Emoji_Presentation,
+                BinaryProperty.Extended_Pictographic,
+            ]
+        ),
     ),
     CharacterData(
         codepoint=CodePoint.of(0x2763),
         category=General_Category.Other_Symbol,
         east_asian_width=East_Asian_Width.Neutral,
         age=Age.V1_1,
-        name='HEAVY HEART EXCLAMATION MARK ORNAMENT',
+        name="HEAVY HEART EXCLAMATION MARK ORNAMENT",
         block=Block.Dingbats,
-        flags=frozenset([BinaryProperty.Emoji, BinaryProperty.Extended_Pictographic])
+        flags=frozenset([BinaryProperty.Emoji, BinaryProperty.Extended_Pictographic]),
     ),
     CharacterData(  # An unassigned code point that is an extended pictograph
         codepoint=CodePoint.of(0x1F2FF),
@@ -99,7 +104,7 @@ CHARACTER_DATA = (
         age=Age.Unassigned,
         name=None,
         block=Block.Enclosed_Ideographic_Supplement,
-        flags=frozenset([BinaryProperty.Extended_Pictographic])
+        flags=frozenset([BinaryProperty.Extended_Pictographic]),
     ),
 )
 
@@ -107,39 +112,41 @@ CHARACTER_DATA = (
 @dataclass
 class ClusterBreakVisualizer:
     """Helper class to visualize grapheme cluster breaking failures."""
+
     ucd: UnicodeCharacterDatabase
-    codepoints: tuple[int,...]
-    actual: tuple[int,...]
-    expected: tuple[int,...]
+    codepoints: tuple[int, ...]
+    actual: tuple[int, ...]
+    expected: tuple[int, ...]
 
     def __str__(self) -> str:
         def ref(cp: int) -> Grapheme_Cluster_Break:
             return self.ucd.grapheme_cluster(CodePoint(cp))
 
         # Format code points and grapheme cluster properties, with space in between.
-        codepoints = [*chain.from_iterable(
-            ['', f'U+{cp:04X}/{ref(cp)}'] for cp in self.codepoints)
+        codepoints = [
+            *chain.from_iterable(
+                ["", f"U+{cp:04X}/{ref(cp)}"] for cp in self.codepoints
+            )
         ]
-        codepoints.append('')
+        codepoints.append("")
 
         # Add markers for actual and expected breaks
         for index in self.actual:
             index *= 2
-            codepoints[index] = 'a'
+            codepoints[index] = "a"
         for index in self.expected:
             index *= 2
-            codepoints[index] = codepoints[index] + 'e'
+            codepoints[index] = codepoints[index] + "e"
 
         # Return as string
-        return ' '.join(codepoints)
+        return " ".join(codepoints)
 
 
 class TestProperty(unittest.TestCase):
-
     def test_known_versions(self):
         for version in Version.all_supported():
             with self.subTest(version=version):
-                ucd = UnicodeCharacterDatabase('ucd', version)
+                ucd = UnicodeCharacterDatabase("ucd", version)
                 self.assertEqual(ucd.version, version)
 
                 # Check that data is usable by looking up properties.
@@ -147,19 +154,18 @@ class TestProperty(unittest.TestCase):
                 self.assertEqual(data.category, General_Category.Other_Symbol)
                 self.assertEqual(data.east_asian_width, East_Asian_Width.Ambiguous)
                 self.assertEqual(data.age, Age.V1_1)
-                self.assertEqual(data.name, 'FULL BLOCK')
+                self.assertEqual(data.name, "FULL BLOCK")
                 self.assertEqual(data.block, Block.Block_Elements)
 
                 self.assertEqual(
-                    ucd.resolve(CodePoint.FULL_BLOCK, Canonical_Combining_Class),
-                    0)
+                    ucd.resolve(CodePoint.FULL_BLOCK, Canonical_Combining_Class), 0
+                )
                 self.assertEqual(
                     ucd.resolve(CodePoint.FULL_BLOCK, Indic_Syllabic_Category),
                     Indic_Syllabic_Category.Other,
                 )
                 self.assertEqual(
-                    ucd.resolve(CodePoint.FULL_BLOCK, Script),
-                    Script.Common
+                    ucd.resolve(CodePoint.FULL_BLOCK, Script), Script.Common
                 )
 
     def check_property_value_counts(
@@ -181,9 +187,9 @@ class TestProperty(unittest.TestCase):
         return property_value_counts
 
     def test_counts(self) -> None:
-        for version in ('15.0', '15.1'):
+        for version in ("15.0", "15.1"):
             with self.subTest(version=version):
-                ucd = UnicodeCharacterDatabase('ucd', version)
+                ucd = UnicodeCharacterDatabase("ucd", version)
                 ucd.validate()
                 expected_counts = PROPERTY_COUNTS[version]
                 points1 = self.check_property_value_counts(expected_counts, ucd)
@@ -193,22 +199,22 @@ class TestProperty(unittest.TestCase):
 
                 self.assertDictEqual(points1, points2)
 
-    def test_character_data(self) ->  None:
-        ucd = UnicodeCharacterDatabase('ucd', '15.0')
+    def test_character_data(self) -> None:
+        ucd = UnicodeCharacterDatabase("ucd", "15.0")
 
         for expected_data in CHARACTER_DATA:
             actual_data = ucd.lookup(expected_data.codepoint)
             self.assertEqual(actual_data, expected_data)
 
     def test_grapheme_cluster_breaks(self) -> None:
-        for version in ('15.0', '15.1'):
+        for version in ("15.0", "15.1"):
             with self.subTest(version=version):
-                ucd = UnicodeCharacterDatabase('ucd', version)
+                ucd = UnicodeCharacterDatabase("ucd", version)
                 for codepoints, expected in GRAPHEME_CLUSTER_BREAKS[version].items():
                     sequence = CodePointSequence.of(*codepoints)
                     actual = tuple(ucd.grapheme_cluster_breaks(sequence))
                     self.assertTupleEqual(
                         actual,
                         expected,
-                        ClusterBreakVisualizer(ucd, codepoints, actual, expected)
+                        ClusterBreakVisualizer(ucd, codepoints, actual, expected),
                     )

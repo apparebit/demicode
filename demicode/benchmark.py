@@ -12,6 +12,7 @@ from .ui.render import Renderer
 from .ui.terminal import Terminal
 from .ui.termio import TermIO
 
+
 class Statistics(NamedTuple):
     """
     Basic statistics over a series of readings. Included quantities are minimum,
@@ -19,14 +20,14 @@ class Statistics(NamedTuple):
     percentile values are *not* interpolated, but measured values.
     """
 
-    min: int|float
-    mean: int|float
-    q50: int|float
-    q90: int|float
-    max: int|float
+    min: int | float
+    mean: int | float
+    q50: int | float
+    q90: int | float
+    max: int | float
 
     @classmethod
-    def of(cls, readings: Sequence[int | float]) -> 'Statistics':
+    def of(cls, readings: Sequence[int | float]) -> "Statistics":
         readings = sorted(readings)
         count = len(readings)
 
@@ -38,7 +39,7 @@ class Statistics(NamedTuple):
 
         return cls(min, mean, q50, q90, max)
 
-    def scale(self, factor: float) -> 'Statistics':
+    def scale(self, factor: float) -> "Statistics":
         """Scale all values by dividing them with the factor."""
         return type(self)(
             self.min / factor,
@@ -56,8 +57,8 @@ class Probe:
     run has a label and each experiment has its own label.
     """
 
-    PAGE_LINE_BY_LINE = 'page.line_by_line'
-    PAGE_AT_ONCE = 'page.at_once'
+    PAGE_LINE_BY_LINE = "page.line_by_line"
+    PAGE_AT_ONCE = "page.at_once"
 
     def __init__(
         self,
@@ -69,7 +70,7 @@ class Probe:
         self._termio.update_size()  # Lock in the terminal size
         self._required_readings = required_readings
         self._readings: dict[str, list[int]] = defaultdict(list)
-        self._last_label = ''
+        self._last_label = ""
         self._pages: dict[str, tuple[int, Action]] = {}
 
     @property
@@ -116,7 +117,7 @@ class Probe:
         and backward until enough measurements have been made. Thereafter, it
         returns the action to terminate.
         """
-        self._termio.write('\n')
+        self._termio.write("\n")
 
         count, action = self._pages.get(self._last_label, (0, Action.BACKWARD))
         count += 1
@@ -138,13 +139,13 @@ def integral_digits(num: int | float) -> int:
 def pick_factor_unit(num: int | float) -> tuple[float, str]:
     digits = integral_digits(num)
     if digits >= 12:
-        return 1E9, 's'
+        return 1e9, "s"
     elif digits >= 9:
-        return 1E6, 'ms'
+        return 1e6, "ms"
     elif digits >= 6:
-        return 1E3, 'µs'
+        return 1e3, "µs"
     else:
-        return 1E0, 'ns'
+        return 1e0, "ns"
 
 
 def report_page_rendering(probe: Probe, nonce: None | str) -> None:
@@ -170,28 +171,27 @@ def report_page_rendering(probe: Probe, nonce: None | str) -> None:
     # Write JSON to disk
     nonce = nonce or Terminal.nonce()
     json_data = {
-        'nonce': nonce,
-        'terminal': terminal.name,
-        'page-size': {'width': width, 'height': height},
-        'mean-slowdown': slowdown,
-        'unit': unit,
-        'page-at-once': at_once._asdict(),
-        'line-by-line': line_by_line._asdict(),
+        "nonce": nonce,
+        "terminal": terminal.name,
+        "page-size": {"width": width, "height": height},
+        "mean-slowdown": slowdown,
+        "unit": unit,
+        "page-at-once": at_once._asdict(),
+        "line-by-line": line_by_line._asdict(),
     }
 
-    path = f'{terminal.name.lower()}-render-perf-{nonce}.json'
-    with open(path, mode='w', encoding='utf8') as file:
-        json.dump(json_data, file, indent='  ')
+    path = f"{terminal.name.lower()}-render-perf-{nonce}.json"
+    with open(path, mode="w", encoding="utf8") as file:
+        json.dump(json_data, file, indent="  ")
 
     # Show human-readable report
-    termio.style(1).write(f'{terminal}: Rendering {width}×{height} Page').plain()
-    termio.writeln('\n')
+    termio.style(1).write(f"{terminal}: Rendering {width}×{height} Page").plain()
+    termio.writeln("\n")
 
     termio.faint().write(f'         {" ":>12} ').plain().writeln()
-    for label in ('min', 'mean', 'q50', 'q90', 'max'):
+    for label in ("min", "mean", "q50", "q90", "max"):
         (
-            termio
-            .faint()
+            termio.faint()
             .write(f'  {label:>{precision}} {" " * len(unit)}')
             .plain()
             .writeln()
@@ -199,19 +199,19 @@ def report_page_rendering(probe: Probe, nonce: None | str) -> None:
     termio.writeln()
 
     def show(label: str, statistics: Statistics) -> None:
-        termio.faint().write(f'    {count:2d} × ').plain().write(f'{label:>12}:')
+        termio.faint().write(f"    {count:2d} × ").plain().write(f"{label:>12}:")
         for num in statistics:
-            termio.write(f'  {num:{precision},.0f} {unit}')
+            termio.write(f"  {num:{precision},.0f} {unit}")
         termio.writeln()
         termio.flush()
 
-    show('at-once', at_once)
-    show('line-by-line', line_by_line)
+    show("at-once", at_once)
+    show("line-by-line", line_by_line)
     termio.writeln()
 
     slowdown = line_by_line.mean / at_once.mean
     termio.writeln(
-        f'Rendering line-by-line is {slowdown:.1f}× slower than page at-once!\n'
+        f"Rendering line-by-line is {slowdown:.1f}× slower than page at-once!\n"
     )
 
     termio.writeln().writeln(f'Results have been written to "{path}"')

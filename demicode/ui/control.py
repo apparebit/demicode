@@ -4,33 +4,30 @@ from .render import KeyPressReader, Renderer
 from .action import Action
 
 
-__all__ = (
-    'read_key_action',
-    'read_line_action'
+__all__ = ("read_key_action", "read_line_action")
+
+
+_KEY_HINTS: tuple[str, ...] = (
+    " \u2B05 | ‹q›uit | \u2B95  ",
+    " \u2B05 | e‹x›it | \u2B95  ",
+    " \u2B05 | ‹escape› | \u2B95  ",
+    " \u2B05 | ‹control-c› | \u2B95  ",
 )
 
 
-_KEY_HINTS: tuple[str,...] = (
-    ' \u2B05 | ‹q›uit | \u2B95  ',
-    ' \u2B05 | e‹x›it | \u2B95  ',
-    ' \u2B05 | ‹escape› | \u2B95  ',
-    ' \u2B05 | ‹control-c› | \u2B95  ',
+_LINE_HINTS: tuple[str, ...] = (
+    " [ ‹p›revious | ‹q›uit | ‹n›ext ] ‹return› ",
+    " [ ‹p›revious | ‹q›uit | ‹f›orward ] ‹return› ",
+    " [ ‹b›ackward | ‹q›uit | ‹f›orward ] ‹return› ",
+    " [ ‹b›ackward | ‹q›uit | ‹n›ext ] ‹return› ",
+    " [ ‹b›ackward | e‹x›it | ‹n›ext ] ‹return› ",
+    " [ ‹b›ackward | e‹x›it | ‹f›orward ] ‹return› ",
+    " [ ‹p›revious | e‹x›it | ‹f›orward ] ‹return› ",
+    " [ ‹p›revious | e‹x›it | ‹n›ext ] ‹return› ",
 )
 
 
-_LINE_HINTS: tuple[str,...] = (
-    ' [ ‹p›revious | ‹q›uit | ‹n›ext ] ‹return› ',
-    ' [ ‹p›revious | ‹q›uit | ‹f›orward ] ‹return› ',
-    ' [ ‹b›ackward | ‹q›uit | ‹f›orward ] ‹return› ',
-    ' [ ‹b›ackward | ‹q›uit | ‹n›ext ] ‹return› ',
-    ' [ ‹b›ackward | e‹x›it | ‹n›ext ] ‹return› ',
-    ' [ ‹b›ackward | e‹x›it | ‹f›orward ] ‹return› ',
-    ' [ ‹p›revious | e‹x›it | ‹f›orward ] ‹return› ',
-    ' [ ‹p›revious | e‹x›it | ‹n›ext ] ‹return› ',
-)
-
-
-def _pick_hint(hints: tuple[str,...]) -> str:
+def _pick_hint(hints: tuple[str, ...]) -> str:
     """Live a little! 🤪"""
     return hints[int(time.time()) % len(hints)]
 
@@ -43,11 +40,11 @@ if KeyPressReader.PLATFORM_SUPPORTED:
         if nib_length == 3:
             # For cursor keys leading two bytes are 0x1B 0x5B
             key = nib[2]
-            if key == 0x44: # Cursor left
+            if key == 0x44:  # Cursor left
                 return Action.BACKWARD
-            if key == 0x43: # Cursor right
+            if key == 0x43:  # Cursor right
                 return Action.FORWARD
-            if key == 0x5A: # Shift-Tab
+            if key == 0x5A:  # Shift-Tab
                 return Action.BACKWARD
         elif nib_length == 1:
             key = nib[0]
@@ -94,11 +91,11 @@ def read_line_action(renderer: Renderer, /) -> Action:
         s = input().lower()
     except KeyboardInterrupt:
         return Action.TERMINATE
-    if s in ('q', 'quit', 'x', 'exit'):
+    if s in ("q", "quit", "x", "exit"):
         return Action.TERMINATE
-    if s in ('', ' ', '\t', 'n', 'next', 'f', 'forward'):
+    if s in ("", " ", "\t", "n", "next", "f", "forward"):
         return Action.FORWARD
-    if s in ('p', 'prev', 'previous', 'b', 'back', 'backward'):
+    if s in ("p", "prev", "previous", "b", "back", "backward"):
         return Action.BACKWARD
 
     return Action.ERROR

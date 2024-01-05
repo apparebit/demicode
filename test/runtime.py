@@ -32,11 +32,11 @@ class testunit:
 
     @property
     def is_subtest(self) -> bool:
-        return self.testcase.__class__.__name__ == '_SubTest'
+        return self.testcase.__class__.__name__ == "_SubTest"
 
     @property
     def base(self) -> unittest.TestCase:
-        return getattr(self.testcase, 'test_case', self.testcase)
+        return getattr(self.testcase, "test_case", self.testcase)
 
     @property
     def module(self) -> str:
@@ -53,15 +53,15 @@ class testunit:
     @property
     def message(self) -> str:
         """Get the message for subtests and an empty string otherwise."""
-        msg = getattr(self.testcase, '_message', '')
+        msg = getattr(self.testcase, "_message", "")
         # Sigh, `_message` may have `_subtest_msg_sentinel` as value, which is
         # an arbitrary object. Avoid accessing more private state like so:
-        return msg if isinstance(msg, str) else ''
+        return msg if isinstance(msg, str) else ""
 
     @property
     def params(self) -> dict[str, object]:
         """Get the parameters for subtests and empty dictionary otherwise."""
-        return getattr(self.testcase, 'params', {})
+        return getattr(self.testcase, "params", {})
 
     @property
     def invocation(self) -> str:
@@ -70,15 +70,15 @@ class testunit:
         identifier for the specific test case, which may be a subtest.
         """
         try:
-            message = json.dumps(self.message) if self.message else ''
+            message = json.dumps(self.message) if self.message else ""
         except:
-            print('***', self.message)
-            message = ''
-        params = ', '.join(f'{k}={v}' for k, v in self.params.items())
-        between = f'{message}, {params}' if message and params else message + params
+            print("***", self.message)
+            message = ""
+        params = ", ".join(f"{k}={v}" for k, v in self.params.items())
+        between = f"{message}, {params}" if message and params else message + params
         if self.is_subtest and not between:
-            between = '<subtest>'
-        return f'{self.method}({between})'
+            between = "<subtest>"
+        return f"{self.method}({between})"
 
     def is_success(self, err: None | OptExcInfo) -> bool:
         return err is None or err[0] is None
@@ -95,7 +95,6 @@ TIGHT_WIDTH = 70
 
 
 class StyledStream:
-
     def __init__(self, stream: TextIO) -> None:
         self.stream = stream
         self.isatty = stream.isatty()
@@ -110,43 +109,43 @@ class StyledStream:
 
     def _hn(self, dash: str, length: int, text: str) -> str:
         length = self.tight_width - 4 - length - 1
-        return f'\n{dash * 3} {text} {dash * length}'
+        return f"\n{dash * 3} {text} {dash * length}"
 
     def h0(self, text: str) -> str:
-        return self._hn('═', len(text), self.strong(text))
+        return self._hn("═", len(text), self.strong(text))
 
     def h1(self, text: str) -> str:
-        return self._hn('━', len(text), self.strong(text))
+        return self._hn("━", len(text), self.strong(text))
 
     def h2(self, text: str) -> str:
-        return self._hn('─', len(text), self.italic(text))
+        return self._hn("─", len(text), self.italic(text))
 
     def sgr(self, ps: str, text: str) -> str:
-        return f'\x1b[{ps}m{text}\x1b[0m' if self.isatty else text
+        return f"\x1b[{ps}m{text}\x1b[0m" if self.isatty else text
 
     def pad(self, text: str) -> str:
         return text.ljust(self.tight_width) if self.isatty else text
 
     def heading(self, text: str) -> str:
-        return self.sgr('1;48;5;153', text)
+        return self.sgr("1;48;5;153", text)
 
     def strong(self, text: str) -> str:
-        return self.sgr('1', text)
+        return self.sgr("1", text)
 
     def light(self, text: str) -> str:
-        return self.sgr('38;5;243', text)
+        return self.sgr("38;5;243", text)
 
     def italic(self, text: str) -> str:
-        return self.sgr('3', text)
+        return self.sgr("3", text)
 
     def err(self, text: str) -> str:
-        return self.sgr('38;5;88', text)
+        return self.sgr("38;5;88", text)
 
     def failure(self, text: str) -> str:
-        return self.sgr('1;38;5;255;48;5;88', text)
+        return self.sgr("1;38;5;255;48;5;88", text)
 
     def success(self, text: str) -> str:
-        return self.sgr('1;48;5;119', text)
+        return self.sgr("1;48;5;119", text)
 
 
 BrokenTest: TypeAlias = tuple[testunit, str]
@@ -161,15 +160,15 @@ def track_progress(stream: TextIO) -> ProgressTracker:
         nonlocal columns
 
         if test.is_success(err):
-            stream.write('⋅' if test.is_subtest else '•')
+            stream.write("⋅" if test.is_subtest else "•")
         elif test.is_failure(err):
-            stream.write('f' if test.is_subtest else 'F')
+            stream.write("f" if test.is_subtest else "F")
         else:
-            stream.write('e' if test.is_subtest else 'E')
+            stream.write("e" if test.is_subtest else "E")
 
         columns += 1
         if columns >= TIGHT_WIDTH:
-            stream.write('\n')
+            stream.write("\n")
             columns = 0
 
         stream.flush()
@@ -182,37 +181,36 @@ def print_summary(stream: TextIO) -> ResultPrinter:
 
     def print1(label: str, test: testunit, trace: str) -> None:
         lines = trace.splitlines()
-        stream.write(styled.strong(f'{label}: {test.source_file}: {test.invocation}'))
-        stream.write('\n')
-        stream.write(styled.light('\n'.join(f'    {l}' for l in lines[:-1])))
-        stream.write(f'\n    {styled.err(lines[-1])}\n\n')
+        stream.write(styled.strong(f"{label}: {test.source_file}: {test.invocation}"))
+        stream.write("\n")
+        stream.write(styled.light("\n".join(f"    {l}" for l in lines[:-1])))
+        stream.write(f"\n    {styled.err(lines[-1])}\n\n")
 
     def print_summary(
         tests: int,
         failures: list[BrokenTest],
         errors: list[BrokenTest],
     ) -> None:
-        stream.write('\n')
+        stream.write("\n")
 
         broken = len(failures) + len(errors)
         if broken:
-            stream.write('\n')
+            stream.write("\n")
             for test, trace in failures:
-                print1('FAIL', test, trace)
+                print1("FAIL", test, trace)
             for test, trace in errors:
-                print1('ERROR', test, trace)
+                print1("ERROR", test, trace)
 
-            stream.write(styled.h0(f'{broken}/{tests} Tests Failed'))
+            stream.write(styled.h0(f"{broken}/{tests} Tests Failed"))
         else:
-            stream.write(styled.h0(f'All {tests} Tests Passed!'))
-        stream.write('\n\n')
+            stream.write(styled.h0(f"All {tests} Tests Passed!"))
+        stream.write("\n\n")
         stream.flush()
 
     return print_summary
 
 
 class ResultAdapter(unittest.TestResult if TYPE_CHECKING else object):
-
     def __init__(
         self,
         stream: TextIO,
@@ -235,7 +233,7 @@ class ResultAdapter(unittest.TestResult if TYPE_CHECKING else object):
         self._printer = print_summary(stream) if printer is None else printer
 
     def __getattr__(self, name: str) -> Any:
-        if name.startswith('_') or not hasattr(self._result, name):
+        if name.startswith("_") or not hasattr(self._result, name):
             raise AttributeError(name)
         return getattr(self._result, name)
 

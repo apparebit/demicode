@@ -44,7 +44,7 @@ def make_presentable(
         if isinstance(datum, str):
             if not datum:
                 continue
-            if datum[0] == '\u0001':
+            if datum[0] == "\u0001":
                 if headings:
                     yield Presentation.HEADING, datum
                 continue
@@ -74,10 +74,10 @@ def make_presentable(
 # --------------------------------------------------------------------------------------
 
 
-LEGEND_BLOT = ' 123   123  '
-LEGEND_PROPS = 'Sz Code Pt  VS Ct Wd Other Properties            Age'
-LEGEND_NAME = 'Name'
-LEGEND = f'{LEGEND_BLOT} {LEGEND_PROPS} {LEGEND_NAME}'
+LEGEND_BLOT = " 123   123  "
+LEGEND_PROPS = "Sz Code Pt  VS Ct Wd Other Properties            Age"
+LEGEND_NAME = "Name"
+LEGEND = f"{LEGEND_BLOT} {LEGEND_PROPS} {LEGEND_NAME}"
 
 BLOT_WIDTH = len(LEGEND_BLOT)
 PROPS_WIDTH = len(LEGEND_PROPS)
@@ -86,6 +86,7 @@ AGE_WIDTH = 5
 LEGEND_MIN_WIDTH = len(LEGEND)
 FIXED_WIDTH = BLOT_WIDTH + 1 + PROPS_WIDTH + 1
 NAME_MIN_WIDTH = len(LEGEND_NAME)
+
 
 def _name_width(width: int) -> int:
     if width <= LEGEND_MIN_WIDTH:
@@ -100,9 +101,10 @@ def format_legend(renderer: Renderer) -> str:
 
 def emit_heading(heading: str, renderer: Renderer) -> None:
     """Format the heading without the initial \\u0001 (Start of Heading)."""
-    if heading[0] != '\u0001':
+    if heading[0] != "\u0001":
         raise ValueError(
-            f'string "{heading}" is not a valid heading, which starts with U+0001')
+            f'string "{heading}" is not a valid heading, which starts with U+0001'
+        )
 
     # Measure length before adding decorative elements.
     heading = heading[1:]
@@ -136,15 +138,12 @@ def emit_blot(
     presentation, codepoints = presentation.normalize(codepoints)
 
     if not ucd.is_grapheme_cluster(codepoints):
-        display = '···'
+        display = "···"
         width = 3
     elif codepoints.is_singleton():
         codepoint = codepoints.to_singleton()
-        if (
-            ucd.resolve(codepoint, General_Category)
-            is General_Category.Unassigned
-        ):
-            display = '···'
+        if ucd.resolve(codepoint, General_Category) is General_Category.Unassigned:
+            display = "···"
             width = 3
         else:
             display = presentation.apply(codepoints.to_singleton())
@@ -161,10 +160,10 @@ def emit_blot(
     # Render Character Blots
     renderer.adjust_column(start_column + 1)
     renderer.emit_blot(display, Padding.BACKGROUND, 3 - width)
-    renderer.write(' ')
+    renderer.write(" ")
     renderer.adjust_column(start_column + 7)
     renderer.emit_blot(display, Padding.FOREGROUND, 3 - width)
-    renderer.write(' ' if renderer.has_style else '   ')
+    renderer.write(" " if renderer.has_style else "   ")
 
 
 def emit_info(
@@ -177,72 +176,78 @@ def emit_info(
 ) -> None:
     """Format information about the code points."""
     renderer.adjust_column(len(LEGEND_BLOT) + 1 + 1)
-    renderer.write('   ' if size == -1 else f'{size: 2d} ')
+    renderer.write("   " if size == -1 else f"{size: 2d} ")
 
     # For code points, if they have implicit presentation, switch to single code
     # point and presentation instead. Otherwise, display the code points, plus
     # age and name for emoji sequences, plus disclaimer for non-grapheme-clusters.
     presentation, codepoints = presentation.normalize(codepoints)
     if not codepoints.is_singleton():
-        renderer.write(renderer.fit(
-            repr(codepoints), width=PROPS_WIDTH - SIZE_WIDTH - AGE_WIDTH - 1, fill=True
-        ))
+        renderer.write(
+            renderer.fit(
+                repr(codepoints),
+                width=PROPS_WIDTH - SIZE_WIDTH - AGE_WIDTH - 1,
+                fill=True,
+            )
+        )
 
         # Account for non-grapheme-clusters and emoji sequences.
         name = age = None
         if not ucd.is_grapheme_cluster(codepoints):
             name = renderer.fit(
-                f'Not a grapheme cluster in UCD {ucd.version.in_short_format()}',
-                width=_name_width(renderer.width)
+                f"Not a grapheme cluster in UCD {ucd.version.in_short_format()}",
+                width=_name_width(renderer.width),
             )
-            renderer.write(' ' * (AGE_WIDTH + 1))
-            renderer.write(' ')
+            renderer.write(" " * (AGE_WIDTH + 1))
+            renderer.write(" ")
             renderer.faint(name)
             return
 
         name, age = ucd.emoji_sequence_data(codepoints)
         if age:
-            renderer.write(f' {age.in_emoji_format():>{AGE_WIDTH}}')
+            renderer.write(f" {age.in_emoji_format():>{AGE_WIDTH}}")
         elif name:
-            renderer.write(' ' * (AGE_WIDTH + 1))
+            renderer.write(" " * (AGE_WIDTH + 1))
         if name:
-            renderer.write(f' {renderer.fit(name, width=_name_width(renderer.width))}')
+            renderer.write(f" {renderer.fit(name, width=_name_width(renderer.width))}")
         return
 
     # A single code point: Display detailed metadata including presentation.
     codepoint = codepoints.to_singleton()
     unidata = ucd.lookup(codepoint)
 
-    renderer.write(f'{codepoint!r:<8s} ')
+    renderer.write(f"{codepoint!r:<8s} ")
     vs = presentation.variation_selector
-    renderer.write(f'{vs - CodePoint.VARIATION_SELECTOR_1 + 1:>2} ' if vs>0 else '   ')
+    renderer.write(
+        f"{vs - CodePoint.VARIATION_SELECTOR_1 + 1:>2} " if vs > 0 else "   "
+    )
     renderer.write(unidata.category.value)
-    renderer.write(f' {unidata.east_asian_width:<2} ')
-    flags = ' '.join(f.value for f in unidata.flags)
+    renderer.write(f" {unidata.east_asian_width:<2} ")
+    flags = " ".join(f.value for f in unidata.flags)
     renderer.write(renderer.fit(flags, width=25, fill=True))
 
     name = age = None
     if presentation is not Presentation.TEXT:
         name, age = ucd.emoji_sequence_data(presentation.apply(codepoint))
 
-    age_display = '' if unidata.age is Age.Unassigned else str(unidata.age)
+    age_display = "" if unidata.age is Age.Unassigned else str(unidata.age)
     age_display = age.in_emoji_format() if age else age_display
-    renderer.write(f' {age_display:>{AGE_WIDTH}} ')
+    renderer.write(f" {age_display:>{AGE_WIDTH}} ")
 
     if unidata.category is General_Category.Unassigned:
         name = renderer.fit(
-            f'Unassigned in UCD {ucd.version.in_short_format()}',
-            width=_name_width(renderer.width)
+            f"Unassigned in UCD {ucd.version.in_short_format()}",
+            width=_name_width(renderer.width),
         )
         renderer.faint(name)
         return
 
-    name = name or unidata.name or ''
-    block = unidata.block or ''
+    name = name or unidata.name or ""
+    block = unidata.block or ""
     if name and block:
-        name = name + ' '
+        name = name + " "
     if block:
-        name = f'{name}({block})'
+        name = f"{name}({block})"
     renderer.write(renderer.fit(name, width=_name_width(renderer.width)))
 
 
@@ -300,12 +305,13 @@ def emit_lines(
         renderer.flush()
 
     if probe:
-        renderer.write(f'[{ probe.latest_reading(label):,} ns]')
+        renderer.write(f"[{ probe.latest_reading(label):,} ns]")
 
     return lines_printed
 
 
 GRID_COLUMN_WIDTH = 16
+
 
 def grid_column(index: int) -> int:
     return index * GRID_COLUMN_WIDTH + 2
@@ -320,7 +326,7 @@ def emit_grid(
 ) -> None:
     """Emit the compact, grid-like representation for all code points."""
     # Ensure that every loop iteration consumes more code points
-    #stream = iter(data)
+    # stream = iter(data)
 
     for count, (presentation, codepoints) in enumerate(
         itertools.islice(stream, column_count)
@@ -353,7 +359,7 @@ def display(
     action = Action.FORWARD
 
     with renderer.window_title(
-        f'[ Demicode {__version__} • Unicode {ucd.version.in_short_format()} ]'
+        f"[ Demicode {__version__} • Unicode {ucd.version.in_short_format()} ]"
     ):
         while True:
             renderer.refresh()

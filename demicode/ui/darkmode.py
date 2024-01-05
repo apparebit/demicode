@@ -13,11 +13,11 @@ import sys
 
 def is_darkmode() -> None | bool:
     try:
-        if sys.platform in ('win32', 'cygwin'):
+        if sys.platform in ("win32", "cygwin"):
             return _is_darkmode_windows()
-        elif sys.platform == 'darwin':
+        elif sys.platform == "darwin":
             return _is_darkmode_macos()
-        elif sys.platform == 'linux':
+        elif sys.platform == "linux":
             return _is_darkmode_linux()
         else:
             return False
@@ -30,11 +30,10 @@ def _is_darkmode_windows() -> bool:
 
     with winreg.OpenKey(  # type: ignore[attr-defined]
         winreg.HKEY_CURRENT_USER,  # type: ignore[attr-defined]
-        "Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize"
+        "Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
     ) as key:  # type: ignore
         return not winreg.QueryValueEx(  # type: ignore[attr-defined]
-            key,
-            "AppsUseLightTheme"
+            key, "AppsUseLightTheme"
         )[0]
 
 
@@ -43,7 +42,7 @@ def _is_darkmode_macos() -> bool:
 
     # Use DEVNULL so that output of command isn't shown
     return not subprocess.run(
-        ['defaults', 'read', '-g', 'AppleInterfaceStyle'],
+        ["defaults", "read", "-g", "AppleInterfaceStyle"],
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     ).returncode
@@ -53,14 +52,14 @@ def _is_darkmode_linux() -> bool:
     import subprocess
 
     result = subprocess.run(
-        ['gsettings', 'get', 'org.gnome.desktop.interface', 'color-scheme'],
+        ["gsettings", "get", "org.gnome.desktop.interface", "color-scheme"],
         capture_output=True,
-        encoding='utf8',
+        encoding="utf8",
     )
-    if result.stdout == '':
+    if result.stdout == "":
         result = subprocess.run(
-            ['gsettings', 'get', 'org.gnome.desktop.interface', 'gtk-theme'],
+            ["gsettings", "get", "org.gnome.desktop.interface", "gtk-theme"],
             capture_output=True,
-            encoding='utf8',
+            encoding="utf8",
         )
-    return result.stdout.strip().strip("'").endswith('-dark')
+    return result.stdout.strip().strip("'").endswith("-dark")

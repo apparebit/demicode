@@ -9,8 +9,9 @@ line tool for taking screenshots. As a result, it only runs on macOS.
 """
 
 import sys
-if sys.platform != 'darwin':
-    raise NotImplementedError('script currently supports macOS only!')
+
+if sys.platform != "darwin":
+    raise NotImplementedError("script currently supports macOS only!")
 
 import argparse
 import json
@@ -35,12 +36,13 @@ from demicode.ui.terminal import Terminal as BaseTerminal
 
 Rect: TypeAlias = tuple[int, int, int, int]
 
+
 def _parse_rect(s: str) -> Rect:
-    if s.endswith('\n'):
+    if s.endswith("\n"):
         s = s[:-1]
     if s.startswith('"') and s.endswith('"'):
         s = s[1:-1]
-    n1, n2, n3, n4 = s.split(',')
+    n1, n2, n3, n4 = s.split(",")
     return int(n1), int(n2), int(n3), int(n4)
 
 
@@ -53,7 +55,7 @@ def _format_wh(w: int, h: int) -> str:
 
 
 def _format_xywh(x1: int, y1: int, x2: int, y2: int) -> str:
-    return f'{x1:5,d}×{y1:5,d}, {x2-x1:5,d}×{y2-y1:5,d}'
+    return f"{x1:5,d}×{y1:5,d}, {x2-x1:5,d}×{y2-y1:5,d}"
 
 
 # --------------------------------------------------------------------------------------
@@ -61,16 +63,16 @@ def _format_xywh(x1: int, y1: int, x2: int, y2: int) -> str:
 
 def _run_applescript(script: str, **kwargs: Any) -> subprocess.CompletedProcess[bytes]:
     result = subprocess.run(
-        ['osascript', '-s', 's', '-'],
-        input=dedent(script).encode('utf8'),   # sets stdin to PIPE
-        capture_output=True,           # sets stdout, stderr to PIPE
+        ["osascript", "-s", "s", "-"],
+        input=dedent(script).encode("utf8"),  # sets stdin to PIPE
+        capture_output=True,  # sets stdout, stderr to PIPE
         **kwargs,
     )
 
     if result.returncode != 0:
-        stdout = result.stdout.decode('utf8')
-        stderr = result.stderr.decode('utf8')
-        print(f'\x1b[1mAppleScript failed:\n{stdout}\n{stderr}\x1b[0m')
+        stdout = result.stdout.decode("utf8")
+        stderr = result.stderr.decode("utf8")
+        print(f"\x1b[1mAppleScript failed:\n{stdout}\n{stderr}\x1b[0m")
         result.check_returncode()
 
     return result
@@ -104,8 +106,8 @@ def _find_regions_between_bars(
             color = im.getpixel(pixel)  # type: ignore
             if _DEBUG_COLOR:
                 print(
-                    f'probe {x:2d}×{step}={pixel[0]:4d}, {pixel[1]:4d}: '
-                    f'#{color[0]:02x}{color[1]:02x}{color[2]:02x}'
+                    f"probe {x:2d}×{step}={pixel[0]:4d}, {pixel[1]:4d}: "
+                    f"#{color[0]:02x}{color[1]:02x}{color[2]:02x}"
                 )
             if not _is_red_pixel(*color):  # type: ignore
                 return False
@@ -146,10 +148,10 @@ def _find_regions_between_bars(
 
 
 def _without_transparency(im: Image.Image) -> Image.Image:
-    assert im.mode == 'RGBA'
-    bg = Image.new('RGBA', im.size, 'WHITE')
+    assert im.mode == "RGBA"
+    bg = Image.new("RGBA", im.size, "WHITE")
     bg.paste(im, (0, 0), im)
-    return bg.convert('RGB')
+    return bg.convert("RGB")
 
 
 def _find_content_bbox(im: Image.Image) -> None | tuple[int, int, int, int]:
@@ -163,14 +165,13 @@ def _find_content_bbox(im: Image.Image) -> None | tuple[int, int, int, int]:
 
 
 PayloadType: TypeAlias = Literal[
-    'dash-integral', 'spaced-dash-integral', 'arab-ligature'
+    "dash-integral", "spaced-dash-integral", "arab-ligature"
 ]
 
 
 class Terminal(BaseTerminal):
-
     def is_current(self) -> None | bool:
-        if (current_bundle := os.getenv('__CFBundleIdentifier')):
+        if current_bundle := os.getenv("__CFBundleIdentifier"):
             return self.bundle == current_bundle
         return None
 
@@ -184,28 +185,33 @@ class Terminal(BaseTerminal):
             return f'(name of application id "{self.bundle}")'
 
     def activate(self) -> Self:
-        _run_applescript(f"""\
+        _run_applescript(
+            f"""\
             tell application id "{self.bundle}"
                 activate
                 delay 4
             end tell
-        """)
+        """
+        )
 
         if self.is_iterm():
             # Use keyboard shortcut to bring iTerm window to front
-            _run_applescript(f"""
+            _run_applescript(
+                f"""
                 tell application "System Events"
                     tell (some process whose bundle identifier is "{self.bundle}")
                         keystroke "1" using {{option down, command down}}
                         delay 2
                     end tell
                 end tell
-            """)
+            """
+            )
 
         elif self.is_vscode():
             # Screenshot analysis expects a red bar across much of the image.
             # The primary side bar and split editors get in the way of that.
-            _run_applescript(f"""
+            _run_applescript(
+                f"""
                 tell application "System Events"
                     tell (some process whose bundle identifier is "{self.bundle}")
                         keystroke "p" using {{shift down, command down}}
@@ -227,12 +233,14 @@ class Terminal(BaseTerminal):
                         delay 2
                     end tell
                 end tell
-            """)
+            """
+            )
 
         return self
 
     def change_dir(self, cwd: Path) -> Self:
-        _run_applescript(f"""
+        _run_applescript(
+            f"""
             tell application "System Events"
                 tell (some process whose bundle identifier is "{self.bundle}")
                     keystroke "cd {cwd}"
@@ -240,11 +248,13 @@ class Terminal(BaseTerminal):
                     delay 1
                 end tell
             end tell
-        """)
+        """
+        )
         return self
 
     def exec(self, cmd: str) -> Self:
-        _run_applescript(f"""\
+        _run_applescript(
+            f"""\
             tell application "System Events"
                 tell (some process whose bundle identifier is "{self.bundle}")
                     keystroke "{cmd}"
@@ -252,11 +262,13 @@ class Terminal(BaseTerminal):
                     delay 2
                 end tell
             end tell
-        """)
+        """
+        )
         return self
 
     def window_rect_xywh(self) -> tuple[int, int, int, int]:
-        result = _run_applescript(f"""
+        result = _run_applescript(
+            f"""
             tell application "System Events"
                 tell (some process whose bundle identifier is "{self.bundle}")
                     set {{theX, theY}} to position of its first window
@@ -264,60 +276,71 @@ class Terminal(BaseTerminal):
                     return {{theX, ",", theY, ",", theW, ",", theH}} as text
                 end tell
             end tell
-        """)
+        """
+        )
 
-        return _parse_rect(result.stdout.decode('utf8'))
+        return _parse_rect(result.stdout.decode("utf8"))
 
-    def screenshot_name(self, prefix: str, suffix: str = '') -> str:
-        return f'{prefix}-{self.name.lower()}{suffix}.png'
+    def screenshot_name(self, prefix: str, suffix: str = "") -> str:
+        return f"{prefix}-{self.name.lower()}{suffix}.png"
 
     def screenshot(self, path: Path) -> Self:
-        subprocess.run([
-            'screencapture', '-m',
-            '-R', ','.join(str(n) for n in self.window_rect_xywh()),
-            str(path),
-        ], check=True)
+        subprocess.run(
+            [
+                "screencapture",
+                "-m",
+                "-R",
+                ",".join(str(n) for n in self.window_rect_xywh()),
+                str(path),
+            ],
+            check=True,
+        )
         return self
 
     def quit(self) -> Self:
         # Directly telling the terminal to quit fails for Kitty
-        _run_applescript(f"""\
+        _run_applescript(
+            f"""\
             tell application "System Events"
                 tell (some process whose bundle identifier is "{self.bundle}")
                     keystroke "q" using command down
                 end tell
             end tell
-        """)
+        """
+        )
         return self
 
     # ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~
 
     def capture_output(
-            self, demicode: Path, payload: PayloadType, screenshot: Path,
+        self,
+        demicode: Path,
+        payload: PayloadType,
+        screenshot: Path,
     ) -> None | Path:
         if self.is_current():
             # This terminal is running this script. Don't activate or quit.
             # Just run show.py directly.
             assert demicode == Path.cwd()
-            print(f'    ⊙ Display {payload}')
-            subprocess.run(['./script/show.py', payload], check=True)
+            print(f"    ⊙ Display {payload}")
+            subprocess.run(["./script/show.py", payload], check=True)
 
-            print('    ⊙ Capture screenshot')
+            print("    ⊙ Capture screenshot")
             self.screenshot(screenshot)
             return screenshot
 
-        print(f'    ⊙ Activate {self.name}')
+        print(f"    ⊙ Activate {self.name}")
         self.activate()
         self.change_dir(demicode)
 
-        print(f'    ⊙ Make {self.name} display {payload}')
-        self.exec(f'./script/show.py {payload}')
+        print(f"    ⊙ Make {self.name} display {payload}")
+        self.exec(f"./script/show.py {payload}")
 
-        print(f'    ⊙ Capture screenshot of {self.name}')
+        print(f"    ⊙ Capture screenshot of {self.name}")
         self.screenshot(screenshot)
 
         if not self.is_vscode():
-            print(f'    ⊙ Quit {self.name}')
+            print(f"    ⊙ Quit {self.name}")
             self.quit()
 
         return screenshot
@@ -327,11 +350,11 @@ class Terminal(BaseTerminal):
     ) -> tuple[Path, None | Path]:
         with Image.open(screenshot) as im:
             # Extract dpi and ICC profile before converting to alpha-less image
-            dpi = im.info.get('dpi')
-            profile = im.info.get('icc_profile')
+            dpi = im.info.get("dpi")
+            profile = im.info.get("icc_profile")
 
             # Convert to image without alpha channel
-            if im.mode == 'RGBA':
+            if im.mode == "RGBA":
                 im = _without_transparency(im)
 
             # Get rectangles between red horizontal bars
@@ -340,7 +363,7 @@ class Terminal(BaseTerminal):
             r1, r2 = _find_regions_between_bars(im, left_margin)
 
             if r1 is None:
-                raise AssertionError('could not identify region between red bars')
+                raise AssertionError("could not identify region between red bars")
             to_scan = [r1]
             if r2 is not None:
                 to_scan.append(r2)
@@ -349,20 +372,20 @@ class Terminal(BaseTerminal):
             p2: None | Path = None
 
             for index, rect1 in enumerate(to_scan, start=1):
-                suffix = '  (xywh)' if index == 1 else ''
-                print(f'    ⊙ Extract image #{index}:  {_format_xywh(*rect1)}{suffix}')
+                suffix = "  (xywh)" if index == 1 else ""
+                print(f"    ⊙ Extract image #{index}:  {_format_xywh(*rect1)}{suffix}")
                 wim = im.copy() if index == 1 else im
                 wim = wim.crop(rect1)
                 rect2 = _find_content_bbox(wim)
                 assert rect2 is not None
 
-                print(f'    ⊙ Trim white space:  {_format_xywh(*rect2)}')
+                print(f"    ⊙ Trim white space:  {_format_xywh(*rect2)}")
                 rect2 = _grow_rect(rect2, _TRIM_PADDING)
                 wim = wim.crop(rect2)
 
                 image_size = _format_wh(*wim.size)
-                print(f'    ⊙ Save image #{index}:     {image_size}')
-                suffix = f'-{index}' if len(to_scan) == 2 else ''
+                print(f"    ⊙ Save image #{index}:     {image_size}")
+                suffix = f"-{index}" if len(to_scan) == 2 else ""
                 path = screenshot.with_name(self.screenshot_name(payload, suffix))
                 wim.save(path, dpi=dpi, icc_profile=profile)
 
@@ -371,31 +394,31 @@ class Terminal(BaseTerminal):
                 else:
                     p2 = path
 
-            assert p1 is not None, 'could not extract first display string'
+            assert p1 is not None, "could not extract first display string"
             print(f'    ≫ "{p1.relative_to(demicode)}"')
             if r2 is not None:
-                assert p2 is not None, 'could not extract second display string'
+                assert p2 is not None, "could not extract second display string"
                 print(f'    ≫ "{p2.relative_to(demicode)}"')
             return p1, p2
 
     def benchmark(self, demicode: Path, nonce: str) -> dict[str, object]:
         if not self.is_current():
-            print(f'    ⊙ Activate {self.name}')
+            print(f"    ⊙ Activate {self.name}")
             self.activate()
             self.change_dir(demicode)
 
-        print(f'    ⊙ Prepare for benchmark')
-        path = Path(f'{self.name.lower()}-render-perf-{nonce}.json')
+        print(f"    ⊙ Prepare for benchmark")
+        path = Path(f"{self.name.lower()}-render-perf-{nonce}.json")
         if path.exists():
             path.unlink()
 
-        print(f'    ⊙ Start benchmark')
+        print(f"    ⊙ Start benchmark")
         if self.is_current():
-            subprocess.run(['python', '-m', 'demicode', '-T', '-N', nonce], check=True)
+            subprocess.run(["python", "-m", "demicode", "-T", "-N", nonce], check=True)
         else:
-            self.exec(f'python -m demicode -T -N {nonce}')
+            self.exec(f"python -m demicode -T -N {nonce}")
 
-        print(f'    ⊙ Wait for completion')
+        print(f"    ⊙ Wait for completion")
         for _ in range(20):
             if path.exists():
                 break
@@ -403,12 +426,12 @@ class Terminal(BaseTerminal):
         if not path.exists():
             raise FileNotFoundError(path)
 
-        print('    ⊙ Read results')
-        with open(path, mode='rb') as file:
+        print("    ⊙ Read results")
+        with open(path, mode="rb") as file:
             results = json.load(file)
 
         if not self.is_vscode():
-            print(f'    ⊙ Quit {self.name}')
+            print(f"    ⊙ Quit {self.name}")
             self.quit()
 
         return results
@@ -417,37 +440,43 @@ class Terminal(BaseTerminal):
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        '--terminal', '-t',
+        "--terminal",
+        "-t",
         choices=[
-            'alactritty', 'hyper', 'iterm', 'kitty', 'rio', 'terminal', 'vscode',
-            'warp', 'wezterm',
+            "alactritty",
+            "hyper",
+            "iterm",
+            "kitty",
+            "rio",
+            "terminal",
+            "vscode",
+            "warp",
+            "wezterm",
         ],
-        help='run only the selected terminal'
+        help="run only the selected terminal",
     )
     parser.add_argument(
-        '--payload', '-p',
-        choices=['dash-integral', 'spaced-dash-integral', 'arab-ligature'],
-        default='dash-integral',
-        help='select the payload to display',
+        "--payload",
+        "-p",
+        choices=["dash-integral", "spaced-dash-integral", "arab-ligature"],
+        default="dash-integral",
+        help="select the payload to display",
     )
-    parser.add_argument(
-        '--benchmark',
-        help='benchmark terminal performance'
-    )
+    parser.add_argument("--benchmark", help="benchmark terminal performance")
     options = parser.parse_args()
 
     # Check that we are running in right directory.
     project_root = Path.cwd()
-    msg = 'tool must run in root of demicode project'
-    assert (project_root / 'demicode').is_dir(), msg
-    assert (project_root / 'doc').is_dir(), msg
-    assert (project_root / 'script').is_dir(), msg
+    msg = "tool must run in root of demicode project"
+    assert (project_root / "demicode").is_dir(), msg
+    assert (project_root / "doc").is_dir(), msg
+    assert (project_root / "script").is_dir(), msg
 
     # Prevent the current terminal from leaking variable definitions to the
     # terminal being tested. Amazingly, macOS does propagate the environment
     # through AppleScript into activated applications.
-    os.environ.pop('TERM_PROGRAM', None)
-    os.environ.pop('TERM_PROGRAM_VERSION', None)
+    os.environ.pop("TERM_PROGRAM", None)
+    os.environ.pop("TERM_PROGRAM_VERSION", None)
 
     # Determine the terminals requiring orchestration
     if options.terminal:
@@ -472,7 +501,7 @@ def main() -> None:
                 _, height = os.get_terminal_size()
             except:
                 height = 60
-            print('\n' * height)
+            print("\n" * height)
 
     # -------------------------
     # Collect Performance Stats
@@ -486,32 +515,32 @@ def main() -> None:
             stats = terminal.benchmark(project_root, nonce)
             all_stats[terminal.name] = stats
 
-        path = project_root / f'perf-{nonce}.json'
-        with open(path, mode='w', encoding='utf8') as file:
+        path = project_root / f"perf-{nonce}.json"
+        with open(path, mode="w", encoding="utf8") as file:
             json.dump(all_stats, file)
 
-        print(f'Combined results written to {path}')
+        print(f"Combined results written to {path}")
         return
 
     # -------------------
     # Collect Screenshots
     # -------------------
 
-    screenshot_dir = project_root / 'doc' / 'screenshot'
+    screenshot_dir = project_root / "doc" / "screenshot"
     screenshot_dir.mkdir(parents=True, exist_ok=True)
 
     # Mr DeMille, the terminals are ready for their close-ups!
     for terminal in todo:
-        print(f'\x1b[1m{terminal.name} ({terminal.bundle})\x1b[0m')
-        screenshot = screenshot_dir / terminal.screenshot_name(options.payload, '-raw')
+        print(f"\x1b[1m{terminal.name} ({terminal.bundle})\x1b[0m")
+        screenshot = screenshot_dir / terminal.screenshot_name(options.payload, "-raw")
         screenshot = terminal.capture_output(project_root, options.payload, screenshot)
         if screenshot is not None:
             paths = terminal.crop_output(project_root, options.payload, screenshot)
-            if options.payload == 'dash-integral':
+            if options.payload == "dash-integral":
                 assert paths[1] is not None
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     try:
         main()
     except Exception as x:

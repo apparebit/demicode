@@ -37,7 +37,7 @@ HEX_CODEPOINTS = re.compile(
             \s+  (?: U[+] | 0x )?  [0-9A-Fa-f]+
         )*
     """,
-    re.VERBOSE
+    re.VERBOSE,
 )
 
 
@@ -51,7 +51,7 @@ class UserError(Exception):
     """
 
 
-class user_error(AbstractContextManager['user_error']):
+class user_error(AbstractContextManager["user_error"]):
     """
     A context manager to turn one or more exceptions into a user error. If the
     context manager tries to exit with one of the listed exception types, it
@@ -103,9 +103,10 @@ def configure_parser() -> argparse.ArgumentParser:
 
     tagline = i("It's not just Unicode, it's hemi-semi-demicode!")
     parser = argparse.ArgumentParser(
-        prog='demicode',
+        prog="demicode",
         description=f"""        "{tagline}\"""",
-        epilog=dedent(f"""
+        epilog=dedent(
+            f"""
             Demicode pages its output and, after rendering a page, waits for
             your {b("your keyboard input")} to determine what to do next. On Linux
             and macOS, use the left and right cursor keys to go backward and
@@ -133,197 +134,212 @@ def configure_parser() -> argparse.ArgumentParser:
 
                       <{a("https://github.com/apparebit/demicode")}>
              ​
-        """),
+            """
+        ),
         formatter_class=width_limited_formatter,
     )
 
     # ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~
 
-    ucd_group = parser.add_argument_group(b('configure UCD'))
+    ucd_group = parser.add_argument_group(b("configure UCD"))
     ucd_group.add_argument(
-        '--ucd-path',
-        help='use path for local UCD mirror instead of the\n'
-        'designated cache directory',
+        "--ucd-path",
+        help="use path for local UCD mirror instead of the\n"
+        "designated cache directory",
     )
     ucd_group.add_argument(
-        '--ucd-version',
-        help='use UCD version >= 4.1 even though the default,\n'
-        'i.e., latest, version yields best results'
+        "--ucd-version",
+        help="use UCD version >= 4.1 even though the default,\n"
+        "i.e., latest, version yields best results",
     )
     ucd_group.add_argument(
-        '--ucd-optimize',
+        "--ucd-optimize",
         action=argparse.BooleanOptionalAction,
         default=True,
-        help='optimize UCD data (default is to optimize)',
+        help="optimize UCD data (default is to optimize)",
     )
     ucd_group.add_argument(
-        '--ucd-validate',
-        action='store_true',
-        help='validate UCD data',
+        "--ucd-validate",
+        action="store_true",
+        help="validate UCD data",
     )
     ucd_group.add_argument(
-        '--ucd-mirror-all',
-        action='store_true',
-        help='eagerly mirror the files for all known UCD versions'
+        "--ucd-mirror-all",
+        action="store_true",
+        help="eagerly mirror the files for all known UCD versions",
     )
     ucd_group.add_argument(
-        '--ucd-list-versions',
-        action='store_true',
-        help='list UCD versions in mirror directory and exit'
+        "--ucd-list-versions",
+        action="store_true",
+        help="list UCD versions in mirror directory and exit",
     )
 
     # ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~
 
-    cp_group = parser.add_argument_group(b('select code points'))
+    cp_group = parser.add_argument_group(b("select code points"))
     cp_group.add_argument(
-        '--with-ucd-emoji-variation',
-        action='store_true',
-        help='include all code points that have text and emoji\nvariations'
+        "--with-ucd-emoji-variation",
+        action="store_true",
+        help="include all code points that have text and emoji\nvariations",
     )
     cp_group.add_argument(
-        '--with-ucd-extended-pictographic', '-x',
-        action='store_true',
-        help='include extended pictographic code points,\nincluding unassigned ones'
+        "--with-ucd-extended-pictographic",
+        "-x",
+        action="store_true",
+        help="include extended pictographic code points,\nincluding unassigned ones",
     )
     cp_group.add_argument(
-        '--with-ucd-keycaps',
-        action='store_true',
-        help='include code points that combine with U+20E3\ninto enclosing keycaps'
+        "--with-ucd-keycaps",
+        action="store_true",
+        help="include code points that combine with U+20E3\ninto enclosing keycaps",
     )
     cp_group.add_argument(
-        '--with-arrows',
-        action='store_true',
-        help='include code points for matching regular and\nlong arrows',
+        "--with-arrows",
+        action="store_true",
+        help="include code points for matching regular and\nlong arrows",
     )
     cp_group.add_argument(
-        '--with-chevrons',
-        action='store_true',
-        help='include a sample of code points representing\nrightward-pointing chevrons'
+        "--with-chevrons",
+        action="store_true",
+        help="include a sample of code points representing\nrightward-pointing chevrons",
     )
     cp_group.add_argument(
-        '--with-lingchi',
-        action='store_true',
-        help='include several highlights for incoherent and\ninconsistent widths'
+        "--with-lingchi",
+        action="store_true",
+        help="include several highlights for incoherent and\ninconsistent widths",
     )
     cp_group.add_argument(
-        '--with-mad-dash',
-        action='store_true',
-        help ='include indistinguishable dashes'
+        "--with-mad-dash", action="store_true", help="include indistinguishable dashes"
     )
     cp_group.add_argument(
-        '--with-taste-of-emoji',
-        action='store_true',
-        help ='include representative sample of emoji'
+        "--with-taste-of-emoji",
+        action="store_true",
+        help="include representative sample of emoji",
     )
     cp_group.add_argument(
-        '--with-version-oracle', '-o',
-        action='store_true',
-        help='include emoji that date supported Unicode version'
+        "--with-version-oracle",
+        "-o",
+        action="store_true",
+        help="include emoji that date supported Unicode version",
     )
     cp_group.add_argument(
-        '--with-curation', '-q',
-        action='store_true',
-        help='include curated selection of code points'
+        "--with-curation",
+        "-q",
+        action="store_true",
+        help="include curated selection of code points",
     )
     cp_group.add_argument(
-        'graphemes',
-        nargs='*',
-        help=dedent("""\
+        "graphemes",
+        nargs="*",
+        help=dedent(
+            """\
             include graphemes provided as space-separated
             hex numbers of 4-6 digits, optionally prefixed
             with "U+", or as literal strings
-        """)
+        """
+        ),
     )
 
     # ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~
 
-    in_group = parser.add_argument_group(b('control input'))
+    in_group = parser.add_argument_group(b("control input"))
     in_group.add_argument(
-        '--use-line-input',
-        action='store_true',
-        help='fall back onto line input even if raw input is\navailable',
-    )
-
-    # ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~
-
-    out_group = parser.add_argument_group(b('control presentation'))
-    out_group.add_argument(
-        '--incrementally', '-i',
-        action='store_true',
-        help='display blots incrementally, which is much slower\n'
-        'but enables blot size measurement'
-    )
-    out_group.add_argument(
-        '--in-grid', '-g',
-        action='store_true',
-        help='display as grid without further UCD information'
-    )
-    out_group.add_argument(
-        '--in-dark-mode', '-d',
-        default=None,
-        action='store_true',
-        help='use colors suitable for dark mode'
-    )
-    out_group.add_argument(
-        '--in-light-mode', '-l',
-        action='store_false',
-        dest='in_dark_mode',
-        help='use colors suitable for light mode',
-    )
-    out_group.add_argument(
-        '--in-more-color', '-c',
-        default=0,
-        action='count',
-        dest='in_color_intensity',
-        help='use brighter colors in output; may be used twice'
-    )
-    out_group.add_argument(
-        '--in-plain-text', '-p',
-        default=None,
-        action='store_false',
-        dest='in_style',
-        help='emit plain text without ANSI escape codes'
-    )
-    out_group.add_argument(
-        '--in-style',
-        default=None,
-        action='store_true',
-        help='style output with ANSI escapes',
-    )
-    out_group.add_argument(
-        '--in-verbose', '-v',
-        action='store_true',
-        help='use verbose mode to enable instructive logging',
-    )
-
-    # ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~
-
-    about_tool_group = parser.add_argument_group(b('about this tool'))
-    about_tool_group.add_argument(
-        '--inspect-version', '-V',
-        action='store_true',
-        help='display the tool version and exit'
-    )
-    about_tool_group.add_argument(
-        '--inspect-perf', '-T',
+        "--use-line-input",
         action="store_true",
-        help="determine page rendering latency and exit"
+        help="fall back onto line input even if raw input is\navailable",
+    )
+
+    # ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~
+
+    out_group = parser.add_argument_group(b("control presentation"))
+    out_group.add_argument(
+        "--incrementally",
+        "-i",
+        action="store_true",
+        help="display blots incrementally, which is much slower\n"
+        "but enables blot size measurement",
+    )
+    out_group.add_argument(
+        "--in-grid",
+        "-g",
+        action="store_true",
+        help="display as grid without further UCD information",
+    )
+    out_group.add_argument(
+        "--in-dark-mode",
+        "-d",
+        default=None,
+        action="store_true",
+        help="use colors suitable for dark mode",
+    )
+    out_group.add_argument(
+        "--in-light-mode",
+        "-l",
+        action="store_false",
+        dest="in_dark_mode",
+        help="use colors suitable for light mode",
+    )
+    out_group.add_argument(
+        "--in-more-color",
+        "-c",
+        default=0,
+        action="count",
+        dest="in_color_intensity",
+        help="use brighter colors in output; may be used twice",
+    )
+    out_group.add_argument(
+        "--in-plain-text",
+        "-p",
+        default=None,
+        action="store_false",
+        dest="in_style",
+        help="emit plain text without ANSI escape codes",
+    )
+    out_group.add_argument(
+        "--in-style",
+        default=None,
+        action="store_true",
+        help="style output with ANSI escapes",
+    )
+    out_group.add_argument(
+        "--in-verbose",
+        "-v",
+        action="store_true",
+        help="use verbose mode to enable instructive logging",
+    )
+
+    # ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~
+
+    about_tool_group = parser.add_argument_group(b("about this tool"))
+    about_tool_group.add_argument(
+        "--inspect-version",
+        "-V",
+        action="store_true",
+        help="display the tool version and exit",
     )
     about_tool_group.add_argument(
-        '--inspect-perf-nonce', '-N',
-        dest='nonce',
-        action='store',
-        help='nonce that uniquely marks a benchmark run, for use in filenames',
+        "--inspect-perf",
+        "-T",
+        action="store_true",
+        help="determine page rendering latency and exit",
     )
     about_tool_group.add_argument(
-        '--inspect-ucd', '-U',
-        action='store_true',
-        help='display UCD statistics and exit'
+        "--inspect-perf-nonce",
+        "-N",
+        dest="nonce",
+        action="store",
+        help="nonce that uniquely marks a benchmark run, for use in filenames",
     )
     about_tool_group.add_argument(
-        '--generate-code',
-        action='store_true',
-        help='generate Python modules based on Unicode data\nfiles and exit',
+        "--inspect-ucd",
+        "-U",
+        action="store_true",
+        help="display UCD statistics and exit",
+    )
+    about_tool_group.add_argument(
+        "--generate-code",
+        action="store_true",
+        help="generate Python modules based on Unicode data\nfiles and exit",
     )
 
     return parser
@@ -338,7 +354,7 @@ def run(arguments: Sequence[str]) -> int:
     options = parser.parse_args(arguments[1:])
 
     logging.basicConfig(
-        format='[%(levelname)s] %(name)s: %(message)s',
+        format="[%(levelname)s] %(name)s: %(message)s",
         level=logging.INFO if options.in_verbose else logging.WARNING,
     )
 
@@ -356,16 +372,16 @@ def run(arguments: Sequence[str]) -> int:
         renderer.newline()
         renderer.emit_error(x.args[0])
         if x.__context__:
-            renderer.writeln(f'In particular: {x.__context__.args[0]}')
+            renderer.writeln(f"In particular: {x.__context__.args[0]}")
         return 1
     except Exception as x:
         renderer.newline()
         renderer.emit_error(
-            'Demicode encountered an unexpected error. For details, please see the\n'
-            'exception trace below. If you can exclude your system as cause, please\n'
-            'file an issue at https://github.com/apparebit/demicode/issues.\n'
+            "Demicode encountered an unexpected error. For details, please see the\n"
+            "exception trace below. If you can exclude your system as cause, please\n"
+            "file an issue at https://github.com/apparebit/demicode/issues.\n"
         )
-        renderer.writeln('\n'.join(traceback.format_exception(x)))
+        renderer.writeln("\n".join(traceback.format_exception(x)))
         return 1
 
 
@@ -395,7 +411,7 @@ def process(options: argparse.Namespace, termio: TermIO, renderer: Renderer) -> 
 
     # ------------------------------------------------ Perform tool house keeping
     if options.inspect_version:
-        renderer.strong(f' demicode {__version__} ')
+        renderer.strong(f" demicode {__version__} ")
         renderer.newline()
         return 0
 
@@ -411,7 +427,7 @@ def process(options: argparse.Namespace, termio: TermIO, renderer: Renderer) -> 
         return 0
 
     # ------------------------------------------ Determine code points to display
-    codepoints: list[Iterable[CodePoint|CodePointSequence|str]] = []
+    codepoints: list[Iterable[CodePoint | CodePointSequence | str]] = []
     # Standard selections
     if options.with_ucd_emoji_variation:
         codepoints.append(sorted(ucd.with_emoji_variation))
@@ -454,17 +470,22 @@ def process(options: argparse.Namespace, termio: TermIO, renderer: Renderer) -> 
                 cluster = CodePointSequence.from_string(argument)
 
         if not ucd.is_grapheme_cluster(cluster):
-            raise UserError(f'{cluster!r} is more than one grapheme cluster!')
+            raise UserError(f"{cluster!r} is more than one grapheme cluster!")
         codepoints.append(
-            [cluster.to_singleton() if cluster.is_singleton() else cluster])
+            [cluster.to_singleton() if cluster.is_singleton() else cluster]
+        )
 
     # --------------------------------------- Make sure there is enough to display
     if len(codepoints) == 0:
-        raise UserError(dedent("""\
-            There are no code points to show.
-            Maybe try again with "1F49D" as argument——
-            or with "-h" to see all options.
-        """))
+        raise UserError(
+            dedent(
+                """\
+                There are no code points to show.
+                Maybe try again with "1F49D" as argument——
+                or with "-h" to see all options.
+                """
+            )
+        )
 
     if options.inspect_perf:
         codepoints.extend(codepoints)

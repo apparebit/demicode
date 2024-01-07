@@ -231,7 +231,7 @@ _EXTRA_TEST_POINTS = tuple(
         "\uFDFD",  # ARABIC LIGATURE BISMILLAH AR-RAHMAN AR-RAHEEM
         " ",
         "\uFF23",  # FULLWIDTH LATIN CAPITAL LETTER C
-        "",
+        " ",
         " ",
         "\U00012219",  # CUNEIFORM SIGN LUGAL OPPOSING LUGAL
         " ",

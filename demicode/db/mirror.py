@@ -369,13 +369,14 @@ class Manifest:
     ) -> Self:
         mirror = Path(mirror).resolve()
 
-        # If no manifest exists, previous will be a void manifest with a
-        # timestamp surprisingly close to the start of the epoch.
+        # If the mirror directory or its manifest do not exist, previous will be
+        # a void manifest with a timestamp close to the start of the epoch.
         previous = cls.from_file(mirror)
         if previous.younger_than(timedelta(weeks=1)):
             return previous
 
-        # Resulting manifest may differ from self!
+        # Determine latest UCD version (from_origin), ensure its files are
+        # locally mirrored (sync), and save the manifest (save_manifest).
         return (
             cls.from_origin(mirror)
             .sync(previous, tick)
@@ -539,6 +540,10 @@ class FileManager:
         Scan mirror for retrieved versions. Since this method does not check for
         a version's files, consider invoking retrieve_all() on the result.
         """
+        if not self.mirror.exists():
+            _logger.info('mirror "%s" does not (yet) exist', self.mirror)
+            return []
+
         _logger.info('scanning mirror "%s" for versions', self.mirror)
         result: list[Version] = []
 

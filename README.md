@@ -129,6 +129,11 @@ The output of the last command should look something like the first screenshot.
 
 ## Versions
 
+  - **v1.3.0** (2024/01/07):
+      - Automate running demicode in popular terminals on macOS and collecting
+        either performance data or screenshots.
+      - Fix crash when mirror directory has not yet been created. Thanks to
+        [yohann84L](https://github.com/yohann84L) for reporting this bug.
   - **v1.2.0** (2023/10/30):
       - Mirroring of UCD files has been refactored and now uses an [explicit
         manifest](ucd.manifest.json) for tracking locally available versions.

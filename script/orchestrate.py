@@ -23,15 +23,20 @@ import time
 import traceback
 from typing import Any, Literal, Self, TypeAlias
 
-from PIL import Image, ImageChops
-
 # Fix Python path to include project root
 sys.path.insert(0, str(Path.cwd()))
 
 from demicode.ui.terminal import Terminal as BaseTerminal
+import demicode.util.image as image
 
 
 # --------------------------------------------------------------------------------------
+
+
+_SIDE_MARGIN = 45
+_LEFT_VSCODE_MARGIN = 110
+_TRIM_PADDING = 10
+_PROBES = 5
 
 
 Rect: TypeAlias = tuple[int, int, int, int]
@@ -44,10 +49,6 @@ def _parse_rect(s: str) -> Rect:
         s = s[1:-1]
     n1, n2, n3, n4 = s.split(",")
     return int(n1), int(n2), int(n3), int(n4)
-
-
-def _grow_rect(rect: Rect, delta: int) -> Rect:
-    return rect[0] - delta, rect[1] - delta, rect[2] + delta, rect[3] + delta
 
 
 def _format_wh(w: int, h: int) -> str:
@@ -81,95 +82,13 @@ def _run_applescript(script: str, **kwargs: Any) -> subprocess.CompletedProcess[
 # --------------------------------------------------------------------------------------
 
 
-_DEBUG_COLOR = False
-_SIDE_MARGIN = 45
-_LEFT_VSCODE_MARGIN = 110
-_TRIM_PADDING = 10
-_PROBES = 5
-
-
-def _is_red_pixel(r: int, g: int, b: int) -> bool:
-    # iTerm renders the red as #E74025. It apparently is the most non-red.
-    return r > 0xE0 and g < 0x48 and b < 0x30
-
-
-def _find_regions_between_bars(
-    im: Image.Image,
-    left_margin: int = _SIDE_MARGIN,
-    right_margin: int = _SIDE_MARGIN,
-) -> tuple[None | Rect, None | Rect]:
-    step = im.width // (_PROBES + 1)
-
-    def is_red_bar(y: int) -> bool:
-        for x in range(1, _PROBES + 1):
-            pixel = x * step, y
-            color = im.getpixel(pixel)  # type: ignore
-            if _DEBUG_COLOR:
-                print(
-                    f"probe {x:2d}×{step}={pixel[0]:4d}, {pixel[1]:4d}: "
-                    f"#{color[0]:02x}{color[1]:02x}{color[2]:02x}"
-                )
-            if not _is_red_pixel(*color):  # type: ignore
-                return False
-        return True
-
-    hit_bar = False
-    upper1: None | int = None
-    lower1: None | int = None
-    upper2: None | int = None
-    lower2: None | int = None
-
-    for y in range(im.height):
-        bar = is_red_bar(y)
-
-        if not hit_bar:
-            if bar:
-                hit_bar = True
-        elif upper1 is None:
-            if not bar:
-                upper1 = y
-        elif lower1 is None:
-            if bar:
-                lower1 = y
-        elif upper2 is None:
-            if not bar:
-                upper2 = y
-        elif lower2 is None:
-            if bar:
-                lower2 = y
-                break
-
-    r1 = r2 = None
-    if upper1 is not None and lower1 is not None:
-        r1 = left_margin, upper1, im.width - right_margin, lower1
-    if upper2 is not None and lower2 is not None:
-        r2 = left_margin, upper2, im.width - right_margin, lower2
-    return r1, r2
-
-
-def _without_transparency(im: Image.Image) -> Image.Image:
-    assert im.mode == "RGBA"
-    bg = Image.new("RGBA", im.size, "WHITE")
-    bg.paste(im, (0, 0), im)
-    return bg.convert("RGB")
-
-
-def _find_content_bbox(im: Image.Image) -> None | tuple[int, int, int, int]:
-    bg = Image.new(im.mode, im.size, im.getpixel((10, 10)))  # type: ignore
-    diff = ImageChops.difference(im, bg)
-    diff = ImageChops.add(diff, diff, 2.0, -3)
-    return diff.getbbox()
-
-
-# --------------------------------------------------------------------------------------
-
-
 PayloadType: TypeAlias = Literal[
     "dash-integral", "spaced-dash-integral", "arab-ligature"
 ]
 
 
 class Terminal(BaseTerminal):
+
     def is_current(self) -> None | bool:
         if current_bundle := os.getenv("__CFBundleIdentifier"):
             return self.bundle == current_bundle
@@ -191,7 +110,7 @@ class Terminal(BaseTerminal):
                 activate
                 delay 4
             end tell
-        """
+            """
         )
 
         if self.is_iterm():
@@ -204,7 +123,7 @@ class Terminal(BaseTerminal):
                         delay 2
                     end tell
                 end tell
-            """
+                """
             )
 
         elif self.is_vscode():
@@ -233,7 +152,7 @@ class Terminal(BaseTerminal):
                         delay 2
                     end tell
                 end tell
-            """
+                """
             )
 
         return self
@@ -248,7 +167,7 @@ class Terminal(BaseTerminal):
                     delay 1
                 end tell
             end tell
-        """
+            """
         )
         return self
 
@@ -262,7 +181,7 @@ class Terminal(BaseTerminal):
                     delay 2
                 end tell
             end tell
-        """
+            """
         )
         return self
 
@@ -276,7 +195,7 @@ class Terminal(BaseTerminal):
                     return {{theX, ",", theY, ",", theW, ",", theH}} as text
                 end tell
             end tell
-        """
+            """
         )
 
         return _parse_rect(result.stdout.decode("utf8"))
@@ -306,7 +225,7 @@ class Terminal(BaseTerminal):
                     keystroke "q" using command down
                 end tell
             end tell
-        """
+            """
         )
         return self
 
@@ -317,7 +236,7 @@ class Terminal(BaseTerminal):
         demicode: Path,
         payload: PayloadType,
         screenshot: Path,
-    ) -> None | Path:
+    ) -> Path:
         if self.is_current():
             # This terminal is running this script. Don't activate or quit.
             # Just run show.py directly.
@@ -347,59 +266,47 @@ class Terminal(BaseTerminal):
 
     def crop_output(
         self, demicode: Path, payload: PayloadType, screenshot: Path
-    ) -> tuple[Path, None | Path]:
-        with Image.open(screenshot) as im:
-            # Extract dpi and ICC profile before converting to alpha-less image
+    ) -> list[Path]:
+        with image.open(screenshot) as im:
+            # Remember DPI for saving cropped images.
             dpi = im.info.get("dpi")
-            profile = im.info.get("icc_profile")
 
-            # Convert to image without alpha channel
-            if im.mode == "RGBA":
-                im = _without_transparency(im)
+            # Normalize colorspace and drop alpha channel
+            profile = image.get_profile(im)
+            im = image.convert_to_srgb(im, profile)
+            im = image.resolve_alpha(im)
 
             # Get rectangles between red horizontal bars
             print(f'    ⊙ Scan "{screenshot.relative_to(demicode)}" for red bars')
-            left_margin = _LEFT_VSCODE_MARGIN if self.is_vscode() else _SIDE_MARGIN
-            r1, r2 = _find_regions_between_bars(im, left_margin)
 
-            if r1 is None:
-                raise AssertionError("could not identify region between red bars")
-            to_scan = [r1]
-            if r2 is not None:
-                to_scan.append(r2)
+            x1 = _LEFT_VSCODE_MARGIN if self.is_vscode() else _SIDE_MARGIN
+            x2 = im.width - _SIDE_MARGIN
+            step = (x2 - x1) // _PROBES
+            ranges = image.scan_bars(im, slice(x1, x2, step))
 
-            p1: None | Path = None
-            p2: None | Path = None
-
-            for index, rect1 in enumerate(to_scan, start=1):
+            paths: list[Path] = []
+            for index, (y1, y2) in enumerate(ranges, start=1):
+                outer = (x1, y1, x2, y2)
+                bounds = _format_xywh(*outer)
                 suffix = "  (xywh)" if index == 1 else ""
-                print(f"    ⊙ Extract image #{index}:  {_format_xywh(*rect1)}{suffix}")
-                wim = im.copy() if index == 1 else im
-                wim = wim.crop(rect1)
-                rect2 = _find_content_bbox(wim)
-                assert rect2 is not None
+                print(f"    ⊙ Extract image #{index}:  {bounds}{suffix}")
+                extract = im.crop(outer)
 
-                print(f"    ⊙ Trim white space:  {_format_xywh(*rect2)}")
-                rect2 = _grow_rect(rect2, _TRIM_PADDING)
-                wim = wim.crop(rect2)
+                inner = image.size_matte(extract)
+                assert inner is not None
+                bounds = _format_xywh(*image.box_in_box(inner, outer))
+                print(f"    ⊙ Without matte:     {bounds}")
+                extract = image.crop_box(extract, inner, _TRIM_PADDING)
 
-                image_size = _format_wh(*wim.size)
-                print(f"    ⊙ Save image #{index}:     {image_size}")
-                suffix = f"-{index}" if len(to_scan) == 2 else ""
-                path = screenshot.with_name(self.screenshot_name(payload, suffix))
-                wim.save(path, dpi=dpi, icc_profile=profile)
+                bounds = _format_wh(*extract.size)
+                print(f"    ⊙ Save image #{index}:     {bounds}")
+                path = screenshot.with_name(self.screenshot_name(payload, f"-{index}"))
+                extract.save(path, dpi=dpi)  # TODO: set color profile for sRGB
+                paths.append(path)
 
-                if index == 1:
-                    p1 = path
-                else:
-                    p2 = path
-
-            assert p1 is not None, "could not extract first display string"
-            print(f'    ≫ "{p1.relative_to(demicode)}"')
-            if r2 is not None:
-                assert p2 is not None, "could not extract second display string"
-                print(f'    ≫ "{p2.relative_to(demicode)}"')
-            return p1, p2
+            for path in paths:
+                print(f'    ≫ "{path.relative_to(demicode)}"')
+            return paths
 
     def benchmark(self, demicode: Path, nonce: str) -> dict[str, object]:
         if not self.is_current():
@@ -534,11 +441,12 @@ def main() -> None:
         print(f"\x1b[1m{terminal.name} ({terminal.bundle})\x1b[0m")
         screenshot = screenshot_dir / terminal.screenshot_name(options.payload, "-raw")
         screenshot = terminal.capture_output(project_root, options.payload, screenshot)
-        if screenshot is not None:
-            paths = terminal.crop_output(project_root, options.payload, screenshot)
-            if options.payload == "dash-integral":
-                assert paths[1] is not None
-
+        paths = terminal.crop_output(project_root, options.payload, screenshot)
+        if options.payload == "dash-integral":
+            if len(paths) != 2:
+                raise AssertionError('could not extract two images')
+        elif len(paths) != 1:
+            raise AssertionError('could not extract image')
 
 if __name__ == "__main__":
     try:

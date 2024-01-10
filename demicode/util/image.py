@@ -41,6 +41,14 @@ SRGB = createProfile('sRGB')
 _DEBUG = True
 _XFORM_CACHE: dict[tuple[str, str], ImageCmsTransform] = {}
 
+# In the Mac-specific colorspaces, FF0000 becomes E74025 or EB3223. After
+# conversion of the screenshot to sRGB, the color is FF0000 again.
+_has_color_default: HasColorT
+if True:
+    _has_color_default = lambda c: c[0] > 0xF0 and c[1] < 0x10 and c[2] < 0x10
+else:
+    _has_color_default = lambda c: c[0] > 0xE0 and c[1] < 0x48 and c[2] < 0x30
+
 
 # Re-export for convenience
 open = openImage
@@ -72,17 +80,9 @@ def resolve_alpha(im: Image, color: ColorT = 'WHITE') -> Image:
     return bg.convert('RGB')
 
 
-def is_bar(
-    im: Image,
-    line: int,
-    probes: slice,
-    has_color: None | HasColorT = None,
-) -> bool:
+def is_bar(im: Image, line: int, probes: slice, has_color: HasColorT) -> bool:
     if im.mode != 'RGB':
         raise ValueError(f'unsupported mode "{im.mode}"')
-    if has_color is None:
-        # In the original Mac-specific colorspace, FF0000 turns into E74025 or EB3223.
-        has_color = lambda c: c[0] > 0xE0 and c[1] < 0x48 and c[2] < 0x30
 
     for probe in range(*probes.indices(im.width)):
         pixel = cast(tuple[int, int, int], im.getpixel((probe, line)))
@@ -104,6 +104,8 @@ def scan_bars(
 ) -> list[tuple[int, int]]:
     if im.mode != 'RGB':
         raise ValueError(f'unsupported mode "{im.mode}"')
+    if has_color is None:
+        has_color = _has_color_default
 
     indices: list[int] = []
 
@@ -117,6 +119,7 @@ def scan_bars(
             indices.append(y - 1 if bar else y)
         previously = bar
 
+    # Ignore any trailing, unmatched index
     return [(indices[i], indices[i+1]) for i in range(0, len(indices) & ~1, 2)]
 
 

@@ -1,7 +1,5 @@
-
 from enum import IntEnum
 from typing import BinaryIO, Literal
-
 from PIL import Image
 
 

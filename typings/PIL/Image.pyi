@@ -33,7 +33,9 @@ class Image:
     def paste(
         self, im: 'Image', box: _SizeT | _BoxT, mask: None | 'Image' = None
     ) -> 'Image': ...
-    def save(self, fp: str | Path, dpi: float, icc_profile: None | bytes) -> None: ...
+    def save(
+        self, fp: str | Path, dpi: float, icc_profile: None | bytes = None
+    ) -> None: ...
 
 
 def new(

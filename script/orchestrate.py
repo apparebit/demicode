@@ -62,21 +62,20 @@ def _format_xywh(x1: int, y1: int, x2: int, y2: int) -> str:
 # --------------------------------------------------------------------------------------
 
 
-def _run_applescript(script: str, **kwargs: Any) -> subprocess.CompletedProcess[bytes]:
+def _run_applescript(script: str, **kwargs: Any) -> str:
     result = subprocess.run(
         ["osascript", "-s", "s", "-"],
         input=dedent(script).encode("utf8"),  # sets stdin to PIPE
-        capture_output=True,  # sets stdout, stderr to PIPE
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
         **kwargs,
     )
 
+    output = result.stdout.decode("utf8")
     if result.returncode != 0:
-        stdout = result.stdout.decode("utf8")
-        stderr = result.stderr.decode("utf8")
-        print(f"\x1b[1mAppleScript failed:\n{stdout}\n{stderr}\x1b[0m")
+        print(f"\x1b[1mAppleScript failed:\x1b[0m\n{output}\n")
         result.check_returncode()
-
-    return result
+    return output
 
 
 # --------------------------------------------------------------------------------------
@@ -186,7 +185,7 @@ class Terminal(BaseTerminal):
         return self
 
     def window_rect_xywh(self) -> tuple[int, int, int, int]:
-        result = _run_applescript(
+        output = _run_applescript(
             f"""
             tell application "System Events"
                 tell (some process whose bundle identifier is "{self.bundle}")
@@ -197,8 +196,7 @@ class Terminal(BaseTerminal):
             end tell
             """
         )
-
-        return _parse_rect(result.stdout.decode("utf8"))
+        return _parse_rect(output)
 
     def screenshot_name(self, prefix: str, suffix: str = "") -> str:
         return f"{prefix}-{self.name.lower()}{suffix}.png"

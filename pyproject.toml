@@ -26,6 +26,7 @@ build-backend = "flit_core.buildapi"
 include = ["demicode/**/*.py", "test/*.py", "script/*.py", "runtest.py"]
 typeCheckingMode = "strict"
 pythonVersion = "3.11"
+stubPath = "./typings"
 
 [tool.mypy]
 python_version = "3.11"

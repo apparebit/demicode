@@ -16,9 +16,10 @@ class _CmsProfile:
 
 
 class ImageCmsProfile:
-    def __init__(self, profile: str | BinaryIO) -> None: ...
+    def __init__(self, profile: str | BinaryIO | _CmsProfile) -> None: ...
     @property
     def profile(self) -> _CmsProfile: ...
+    def tobytes(self) -> bytes: ...
 
 
 class ImageCmsTransform:
@@ -28,7 +29,7 @@ class ImageCmsTransform:
 def createProfile(
     colorSpace: Literal['LAB', 'XYZ', 'sRGB'],
     colorTemp: int = -1
-) -> ImageCmsProfile: ...
+) -> _CmsProfile: ...
 
 
 def buildTransform(

@@ -35,10 +35,10 @@ BoxT: TypeAlias = tuple[int, int, int, int]
 ColorT: TypeAlias = str | int | tuple[int, int, int] | tuple[int, int, int, int]
 HasColorT: TypeAlias = Callable[[tuple[int, int, int]], bool]
 
+# Strangely, createProfile() returns the underlying _CmsProfile type.
+SRGB = ImageCmsProfile(createProfile('sRGB'))
 
-SRGB = createProfile('sRGB')
-
-_DEBUG = True
+_DEBUG = False
 _XFORM_CACHE: dict[tuple[str, str], ImageCmsTransform] = {}
 
 # In the Mac-specific colorspaces, FF0000 becomes E74025 or EB3223. After

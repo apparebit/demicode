@@ -91,6 +91,7 @@ class Terminal:
                 ("iTerm", "com.googlecode.iterm2", "iTerm2"),
                 ("Kitty", "net.kovidgoyal.kitty"),
                 ("Rio", "com.raphaelamorim.rio"),
+                ("Tabby", "org.tabby"),
                 ("Terminal.app", "com.apple.Terminal", "Terminal", "Apple_Terminal"),
                 ("VSCode", "com.microsoft.VSCode", "Code", "Visual Studio Code"),
                 ("Warp", "dev.warp.Warp-Stable", "WarpTerminal"),

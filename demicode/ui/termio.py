@@ -64,6 +64,7 @@ class TermIO:
 
         # TODO: Consider querying terminal attributes via termios.tcgetattr()
         self._cbreak_mode = False
+        self._batching = False
         self._buffer_level = 0
 
     @property
@@ -257,7 +258,9 @@ class TermIO:
         """
         try:
             return (
-                self.check_not_buffering()
+                self
+                .check_not_batching()
+                .check_not_buffering()
                 .check_cbreak_mode()
                 .escape(*query)
                 .flush()
@@ -357,14 +360,18 @@ class TermIO:
     def batch(self) -> Iterator[Self]:
         """
         Batch all updates. The context manager instructs the terminal to delay
-        any updates until the with block is finished. Use `request_batch_mode()`
-        to determine whether a terminal supports batching.
+        any updates until the with block is finished. Batch mode cannot be
+        nested. Use `request_batch_mode()` to determine whether a terminal
+        supports batching.
         """
+        self.check_not_batching()
+        self._batching = True
         self.escape(CSI, "?2026h").flush()
         try:
             yield self
         finally:
             self.escape(CSI, "?2026l").flush()
+            self._batching = False
 
     def request_batch_mode(self) -> BatchMode:
         """Request the current batch mode."""
@@ -375,7 +382,12 @@ class TermIO:
         return BatchMode(report[0]) if len(report) == 1 else BatchMode.NOT_SUPPORTED
 
     def is_batching(self) -> bool:
-        return self.request_batch_mode().is_enabled()
+        return self._batching
+
+    def check_not_batching(self) -> Self:
+        if self.is_batching():
+            raise AssertionError("terminal is batching when it shouldn't")
+        return self
 
     # ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~
     # Positioning the Cursor, Erasing Content, and Styling Content
@@ -543,6 +555,7 @@ class TermIO:
 
         ticks = 0
         cursor = "█"
+        linger = 0
 
         with suppress(KeyboardInterrupt), self.alternate_screen(), self.hidden_cursor():
             self.home().erase_screen()
@@ -561,7 +574,11 @@ class TermIO:
                 # Update terminal size
                 w, h = self.update_size()
                 if w == width and h == height:
-                    return self
+                    linger += 1
+                    if linger == 3 * self.TICKS_PER_SECOND:
+                        return self
+                else:
+                    linger = 0
 
                 # Simulate blinking cursor
                 ticks += 1
@@ -570,20 +587,23 @@ class TermIO:
                     cursor = "█" if cursor == " " else " "
 
                 # Update size display
-                (
-                    self.cursor_at_line_start()
-                    .erase_line()
-                    .write("        ")
-                    .style("38;5;244" if w == width else "1")
-                    .write(f"{w:3d}")
-                    .plain()
-                    .write("x")
-                    .style("38;5;244" if h == height else "1")
-                    .write(f"{h:3d}")
-                    .plain()
-                    .write(" {cursor}")
-                    .flush()
-                )
+                self.cursor_at_line_start().erase_line().write("        ")
+
+                if w == width and h == height:
+                    self.style("48;5;156").write(f" {w:3d}×{h:3d} ").plain()
+                else:
+                    (
+                        self
+                        .style("38;5;244" if w == width else "1")
+                        .write(f" {w:3d}")
+                        .plain()
+                        .write("×")
+                        .style("38;5;244" if h == height else "1")
+                        .write(f"{h:3d} ")
+                        .plain()
+                    )
+
+                self.write(f"{cursor}").flush()
 
                 # Nap a little
                 time.sleep(1 / self.TICKS_PER_SECOND)

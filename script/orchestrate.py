@@ -33,7 +33,7 @@ import demicode.util.image as image
 # --------------------------------------------------------------------------------------
 
 
-_SIDE_MARGIN = 45
+_SIDE_MARGIN = 60
 _LEFT_VSCODE_MARGIN = 110
 _TRIM_PADDING = 10
 _PROBES = 5
@@ -265,6 +265,7 @@ class Terminal(BaseTerminal):
     def crop_output(
         self, demicode: Path, payload: PayloadType, screenshot: Path
     ) -> list[Path]:
+        print(f'    ⊙ Load "{screenshot.relative_to(demicode)}" and normalize colors')
         with image.open(screenshot) as im:
             # Remember DPI for saving cropped images.
             dpi = im.info.get("dpi")
@@ -275,7 +276,7 @@ class Terminal(BaseTerminal):
             im = image.resolve_alpha(im)
 
             # Get rectangles between red horizontal bars
-            print(f'    ⊙ Scan "{screenshot.relative_to(demicode)}" for red bars')
+            print(f'    ⊙ Scan for red bars')
 
             x1 = _LEFT_VSCODE_MARGIN if self.is_vscode() else _SIDE_MARGIN
             x2 = im.width - _SIDE_MARGIN
@@ -299,7 +300,7 @@ class Terminal(BaseTerminal):
                 bounds = _format_wh(*extract.size)
                 print(f"    ⊙ Save image #{index}:     {bounds}")
                 path = screenshot.with_name(self.screenshot_name(payload, f"-{index}"))
-                extract.save(path, dpi=dpi)  # TODO: set color profile for sRGB
+                extract.save(path, dpi=dpi, icc_profile=image.SRGB.tobytes())
                 paths.append(path)
 
             for path in paths:

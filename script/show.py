@@ -30,9 +30,9 @@ def mklabels() -> tuple[str, str]:
     terminal = Terminal.current()
     if terminal.version is None:
         return terminal.long_name, ''
-    combined = f'{terminal.long_name} ({terminal.version})'
-    if len(combined) <= WIDTH:
-        return combined, ''
+    display = terminal.display
+    if len(display) <= WIDTH:
+        return display, ''
     else:
         return terminal.long_name, terminal.version
 

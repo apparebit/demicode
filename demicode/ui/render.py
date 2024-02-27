@@ -87,6 +87,7 @@ class Style:
     RESET = _SGR("0")
     BOLD = _SGR("1")
     ITALIC = _SGR("3")
+    HBAR = _SGR("38;5;196")
 
     LIGHT = (
         Theme.of(_bg(252), _fg("246;3"), _bg(254), _fg(244), _fg(246), _fg("160;1")),
@@ -386,6 +387,9 @@ class Renderer:
     def link(self, href: str, text: None | str = None) -> None:
         self._output.write(href if text is None else text)
 
+    def emit_hbar(self) -> None:
+        pass
+
     def emit_legend(self, text: str) -> None:
         self._output.write(text)
 
@@ -502,6 +506,11 @@ class StyledRenderer(Renderer):
 
     def link(self, href: str, text: None | str = None) -> None:
         self._output.write(Style.link(href, text))
+
+    def emit_hbar(self) -> None:
+        self._output.write(
+            f"{Style.HBAR}{Padding.FOREGROUND * self.width}{Style.RESET}"
+        )
 
     def emit_legend(self, text: str) -> None:
         self._output.write(f"{self._theme.legend}{text}{Style.RESET}")

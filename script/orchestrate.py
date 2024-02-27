@@ -41,7 +41,7 @@ import demicode.util.image as image
 
 
 _SIDE_MARGIN = 60
-_LEFT_VSCODE_MARGIN = 110
+_LEFT_VSCODE_MARGIN = 140
 _TRIM_PADDING = 10
 _PROBES = 5
 
@@ -461,11 +461,9 @@ def main() -> None:
         screenshot = screenshot_dir / terminal.screenshot_name(options.payload, "-raw")
         screenshot = terminal.capture_output(project_root, options.payload, screenshot)
         paths = terminal.crop_output(project_root, options.payload, screenshot)
-        if options.payload == "dash-integral":
-            if len(paths) != 2:
-                raise AssertionError('could not extract two images')
-        elif len(paths) != 1:
-            raise AssertionError('could not extract image')
+
+        if (options.payload == "dash-integral" and len(paths) != 2) or len(paths) != 1:
+            print('    ⊙ \x1b[97;48;5;88mCould not extract any images!\x1b[0m')
 
 if __name__ == "__main__":
     try:

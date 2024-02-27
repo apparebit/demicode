@@ -120,7 +120,7 @@ def scan_bars(
         previously = bar
 
     # Ignore any trailing, unmatched index
-    return [(indices[i], indices[i+1]) for i in range(0, len(indices) & ~1, 2)]
+    return [(indices[i], indices[i+1]) for i in range(0, len(indices) - 1, 2)]
 
 
 def size_matte(
@@ -150,7 +150,11 @@ def crop_box(im: Image, box: BoxT, padding: int = 0) -> Image:
 
 
 def box_in_box(inner: BoxT, outer: BoxT) -> BoxT:
-    return cast(BoxT, tuple(
-        o + i
-        for o, i in zip(outer, inner)
-    ))
+    # Both corners of inner box are shifted by left upper corner of outer box:
+    return (
+        outer[0] + inner[0],
+        outer[1] + inner[1],
+        outer[0] + inner[2],
+        outer[1] + inner[3],
+    )
+

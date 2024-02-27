@@ -551,6 +551,7 @@ class TermIO:
 
         w, h = self.update_size()
         if w == width and h == height:
+            print(f'Terminal window already has target size {w:3d}×{h:3d}.')
             return self
 
         ticks = 0

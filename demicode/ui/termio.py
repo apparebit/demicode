@@ -584,7 +584,7 @@ class TermIO:
                 ticks += 1
                 if ticks == self.TICKS_PER_BLINK:
                     ticks = 0
-                    cursor = "█" if cursor == " " else " "
+                    cursor = " " if cursor == "█" else "█"
 
                 # Update size display
                 self.cursor_at_line_start().erase_line().write("        ")

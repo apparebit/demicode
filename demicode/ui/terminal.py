@@ -60,7 +60,7 @@ class Terminal:
     @classmethod
     def unknown(cls) -> Self:
         if cls._unknown is None:
-            cls._unknown = cls("someterm", "unknown.unknown")
+            cls._unknown = cls("Unknown Terminal", "unknown.unknown")
         return cls._unknown
 
     _registry: ClassVar[None | dict[str, Self]] = None

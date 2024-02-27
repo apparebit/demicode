@@ -45,7 +45,7 @@ _XFORM_CACHE: dict[tuple[str, str], ImageCmsTransform] = {}
 # conversion of the screenshot to sRGB, the color is FF0000 again.
 _has_color_default: HasColorT
 if True:
-    _has_color_default = lambda c: c[0] > 0xF0 and c[1] < 0x10 and c[2] < 0x10
+    _has_color_default = lambda c: c[0] > 0xF0 and c[1] < 0x30 and c[2] < 0x10
 else:
     _has_color_default = lambda c: c[0] > 0xE0 and c[1] < 0x48 and c[2] < 0x30
 

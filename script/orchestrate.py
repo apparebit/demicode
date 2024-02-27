@@ -1,11 +1,18 @@
 #!./venv/bin/python
 
 """
-Illustrate fixed-width rendering issues for nine different terminal emulators by
-producing screenshots that are ready for publication. In addition to depending
-on the Pillow package for image manipulation, this script makes extensive use of
-AppleScript for controlling other applications and the `screencapture` command
-line tool for taking screenshots. As a result, it only runs on macOS.
+Illustrate fixed-width rendering issues for lots of terminal emulators. This
+script automates the collection of screenshots by:
+
+ 1. Launch a terminal emulator with AppleScript on macOS.
+ 2. Run commands with AppleScript on macOS.
+ 3. Take screenshot with `screencapture` command line utility on macOS
+ 4. Crop screenshot to command output using Pillow library.
+
+Since the first three tasks are implemented with macOS-only technology, this
+script only runs on macOS. While there are cross-platform libraries for taking
+screenshots, how to automate the first two tasks on Linux or Windows is less
+clear.
 """
 
 import sys
@@ -82,7 +89,7 @@ def _run_applescript(script: str, **kwargs: Any) -> str:
 
 
 PayloadType: TypeAlias = Literal[
-    "dash-integral", "spaced-dash-integral", "arab-ligature"
+    "dash-integral", "spaced-dash-integral", "arab-ligature", "seven-languages"
 ]
 
 
@@ -177,7 +184,7 @@ class Terminal(BaseTerminal):
                 tell (some process whose bundle identifier is "{self.bundle}")
                     keystroke "{cmd}"
                     keystroke return
-                    delay 2
+                    delay 4
                 end tell
             end tell
             """
@@ -240,7 +247,13 @@ class Terminal(BaseTerminal):
             # Just run show.py directly.
             assert demicode == Path.cwd()
             print(f"    ⊙ Display {payload}")
-            subprocess.run(["./script/show.py", payload], check=True)
+            if payload == 'seven-languages':
+                subprocess.run(
+                    ["./script/highlight.py", "./script/en-es-ja-ru-he-zh-hi.txt"],
+                    check=True
+                )
+            else:
+                subprocess.run(["./script/show.py", payload], check=True)
 
             print("    ⊙ Capture screenshot")
             self.screenshot(screenshot)
@@ -251,7 +264,10 @@ class Terminal(BaseTerminal):
         self.change_dir(demicode)
 
         print(f"    ⊙ Make {self.name} display {payload}")
-        self.exec(f"./script/show.py {payload}")
+        if payload == 'seven-languages':
+            self.exec(f"./script/highlight.py ./script/en-es-ja-ru-he-zh-hi.txt")
+        else:
+            self.exec(f"./script/show.py {payload}")
 
         print(f"    ⊙ Capture screenshot of {self.name}")
         self.screenshot(screenshot)
@@ -354,6 +370,7 @@ def main() -> None:
             "iterm",
             "kitty",
             "rio",
+            "tabby",
             "terminal",
             "vscode",
             "warp",
@@ -364,7 +381,9 @@ def main() -> None:
     parser.add_argument(
         "--payload",
         "-p",
-        choices=["dash-integral", "spaced-dash-integral", "arab-ligature"],
+        choices=[
+            "dash-integral", "spaced-dash-integral", "arab-ligature", "seven-languages"
+        ],
         default="dash-integral",
         help="select the payload to display",
     )
@@ -380,11 +399,12 @@ def main() -> None:
 
     # Prevent the current terminal from leaking variable definitions to the
     # terminal being tested. Amazingly, macOS does propagate the environment
-    # through AppleScript into activated applications.
+    # variables from Python through the osascript subprocess and System Events
+    # helper process into the activated application.
     os.environ.pop("TERM_PROGRAM", None)
     os.environ.pop("TERM_PROGRAM_VERSION", None)
 
-    # Determine the terminals requiring orchestration
+    # Determine the terminals requiring orchestration.
     if options.terminal:
         if (t := Terminal.resolve(options.terminal)) is None:
             raise ValueError(f'unknown terminal "{options.terminal}"')

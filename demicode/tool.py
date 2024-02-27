@@ -19,7 +19,7 @@ from .db.codegen import generate_code
 from .db.codepoint import CodePoint, CodePointSequence
 from .db.ucd import UnicodeCharacterDatabase
 from .db.version import VersionError
-from .display import display
+from .display import display, display_for_screenshot
 from .selection import *
 from .statistics import collect_statistics, show_mirrored_versions, show_statistics
 from .ui.control import read_key_action, read_line_action
@@ -307,6 +307,11 @@ def configure_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="use verbose mode to enable instructive logging",
     )
+    out_group.add_argument(
+        "--in-screenshot",
+        action="store_true",
+        help="display blots without paging between red bars\nfor screenshot"
+    )
 
     # ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~
 
@@ -492,6 +497,15 @@ def process(options: argparse.Namespace, termio: TermIO, renderer: Renderer) -> 
         codepoints.extend(codepoints)
 
     # ------------------------------------------------------- Display code points
+    if options.in_screenshot:
+        display_for_screenshot(
+            itertools.chain.from_iterable(codepoints),
+            renderer,
+            ucd,
+            incrementally=options.incrementally,
+        )
+        return 0
+
     if options.inspect_perf:
         incrementally = False
         in_grid = False

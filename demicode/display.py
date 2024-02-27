@@ -19,6 +19,7 @@ from .db.model import Age, General_Category, Presentation
 from .db.ucd import UnicodeCharacterDatabase
 from .ui.control import Action, read_line_action
 from .ui.render import Padding, Renderer
+from .ui.terminal import Terminal
 from . import __version__
 
 
@@ -261,7 +262,7 @@ def emit_lines(
     *,
     legend: None | str,
     incrementally: bool,
-    probe: None | Probe,
+    probe: None | Probe = None,
 ) -> int:
     label = Probe.PAGE_LINE_BY_LINE if incrementally else Probe.PAGE_AT_ONCE
     lines_printed = 0
@@ -413,3 +414,30 @@ def display(
                 action = read_action(renderer)
                 if action is Action.TERMINATE:
                     return
+
+
+def display_for_screenshot(
+    stream: Iterable[str | CodePoint | CodePointSequence],
+    renderer: Renderer,
+    ucd: UnicodeCharacterDatabase,
+    *,
+    incrementally: bool = False,
+) -> None:
+    renderer.emit_hbar()
+    renderer.newline()
+    renderer.newline()
+
+    renderer.strong(Terminal.current().display.center(renderer.width))
+    renderer.newline()
+
+    emit_lines(
+        [*make_presentable(stream, ucd, headings=True)],
+        renderer,
+        ucd,
+        legend=format_legend(renderer),
+        incrementally=incrementally,
+    )
+
+    renderer.newline()
+    renderer.emit_hbar()
+    renderer.newline()

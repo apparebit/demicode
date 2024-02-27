@@ -16,4 +16,4 @@ sys.path.insert(0, str(Path.cwd()))
 from demicode.ui.termio import TermIO
 
 if __name__ == "__main__":
-    TermIO().resize_interactively(120, 40)
+    TermIO().resize_interactively(120, 76)

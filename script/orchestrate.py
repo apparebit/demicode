@@ -93,6 +93,65 @@ PayloadType: TypeAlias = Literal[
 ]
 
 
+def _mark_up_figure(
+    payload: PayloadType,
+    all_terminals: list[str],
+    all_paths: list[Path],
+    all_sizes: list[image.SizeT],
+) -> list[str]:
+    # The description of screenshot contents
+    desc2 = None
+    match payload:
+        case "dash-integral":
+            desc1 = "a sequence mixing punctuation and symbols"
+        case "spaced-dash-integral":
+            desc1 = "a sequence mixing punctuation and symbols"
+            desc2 = "with extra spaces to separate glyphs"
+        case "arab-ligature":
+            desc1 = "the code point with the largest glyph"
+        case "seven-languages":
+            desc1 = "the same (rather overdone) sentence"
+            desc2 = "about free software ensuring a free society in 7 major languages"
+        case _:  # type: ignore
+            raise ValueError(f"unexpected payload {payload}")
+
+    # Lines of markup
+    lines = ["<figure class=wide-figure>"]
+
+    # The images
+    for terminal, path, size in zip(all_terminals, all_paths, all_sizes):
+        lines.append(f'<img src="/blog/2024/terminals/{path.name}"')
+        lines.append(f'     width={size[0]} height={size[1]}')
+        if desc2 is None:
+            lines.append(f'     alt="screenshot of {terminal} displaying {desc1}">')
+        else:
+            lines.append(f'     alt="screenshot of {terminal} displaying {desc1}')
+            lines.append(f'          {desc2}">')
+
+    # The caption
+    terminals = list(dict.fromkeys(all_terminals).keys())
+    match len(terminals):
+        case 1:
+            names = terminals[0]
+        case 2:
+            names = f"{terminals[0]} and {terminals[1]}"
+        case _:
+            names = ", ".join(t for t in terminals[:-1]) + ", and " + terminals[-1]
+
+    lines.append(f'<figcaption>{names}')
+    if desc2 is None:
+        lines.append(f'display {desc1}</figcaption>')
+    else:
+        lines.append(f'display {desc1}')
+        lines.append(f'{desc2}</figcaption>')
+
+    lines.append("</figure>")
+    return lines
+
+
+# --------------------------------------------------------------------------------------
+
+
 class Terminal(BaseTerminal):
 
     def is_current(self) -> None | bool:
@@ -243,9 +302,12 @@ class Terminal(BaseTerminal):
         screenshot: Path,
     ) -> Path:
         if self.is_current():
-            # This terminal is running this script. Don't activate or quit.
-            # Just run show.py directly.
+            # This terminal is running this script. Run payload directly,
+            # without UI scripting. Don't quit.
+            print(f"    ⊙ Activate {self.name}")
+            self.activate()
             assert demicode == Path.cwd()
+
             print(f"    ⊙ Display {payload}")
             if payload == 'seven-languages':
                 subprocess.run(
@@ -280,7 +342,7 @@ class Terminal(BaseTerminal):
 
     def crop_output(
         self, demicode: Path, payload: PayloadType, screenshot: Path
-    ) -> list[Path]:
+    ) -> tuple[list[Path], list[image.SizeT]]:
         print(f'    ⊙ Load "{screenshot.relative_to(demicode)}" and normalize colors')
         with image.open(screenshot) as im:
             # Remember DPI for saving cropped images.
@@ -298,8 +360,10 @@ class Terminal(BaseTerminal):
             x2 = im.width - _SIDE_MARGIN
             step = (x2 - x1) // _PROBES
             ranges = image.scan_bars(im, slice(x1, x2, step))
+            only_one = len(ranges) == 1
 
             paths: list[Path] = []
+            sizes: list[image.SizeT] = []
             for index, (y1, y2) in enumerate(ranges, start=1):
                 outer = (x1, y1, x2, y2)
                 bounds = _format_xywh(*outer)
@@ -313,15 +377,17 @@ class Terminal(BaseTerminal):
                 print(f"    ⊙ Without matte:     {bounds}")
                 extract = image.crop_box(extract, inner, _TRIM_PADDING)
 
+                sizes.append(extract.size)
                 bounds = _format_wh(*extract.size)
                 print(f"    ⊙ Save image #{index}:     {bounds}")
-                path = screenshot.with_name(self.screenshot_name(payload, f"-{index}"))
+                suffix = "" if only_one else f"-{index}"
+                path = screenshot.with_name(self.screenshot_name(payload, suffix))
                 extract.save(path, dpi=dpi, icc_profile=image.SRGB.tobytes())
                 paths.append(path)
 
             for path in paths:
                 print(f'    ≫ "{path.relative_to(demicode)}"')
-            return paths
+            return paths, sizes
 
     def benchmark(self, demicode: Path, nonce: str) -> dict[str, object]:
         if not self.is_current():
@@ -456,14 +522,35 @@ def main() -> None:
     screenshot_dir.mkdir(parents=True, exist_ok=True)
 
     # Mr DeMille, the terminals are ready for their close-ups!
+    all_terminals: list[Terminal] = []
+    all_paths: list[Path] = []
+    all_sizes: list[image.SizeT] = []
+    failures = 0
+
     for terminal in todo:
         print(f"\x1b[1m{terminal.name} ({terminal.bundle})\x1b[0m")
         screenshot = screenshot_dir / terminal.screenshot_name(options.payload, "-raw")
         screenshot = terminal.capture_output(project_root, options.payload, screenshot)
-        paths = terminal.crop_output(project_root, options.payload, screenshot)
+        cropshots = terminal.crop_output(project_root, options.payload, screenshot)
+        all_paths.extend(cropshots[0])
+        all_sizes.extend(cropshots[1])
+        all_terminals.extend([terminal] * len(cropshots[0]))
 
-        if (options.payload == "dash-integral" and len(paths) != 2) or len(paths) != 1:
-            print('    ⊙ \x1b[97;48;5;88mCould not extract any images!\x1b[0m')
+        if (
+            (options.payload == "dash-integral" and len(cropshots[0]) != 2)
+            or len(cropshots[0]) != 1
+        ):
+            failures += 1
+            print("    ⊙ \x1b[97;48;5;88mCould not extract any images!\x1b[0m")
+
+    lines = _mark_up_figure(
+        options.payload,
+        [t.name for t in all_terminals],
+        all_paths,
+        all_sizes
+    )
+
+    print("\n".join(lines))
 
 if __name__ == "__main__":
     try:

@@ -16,6 +16,7 @@ from PIL.ImageCms import (
 
 
 __all__ = (
+    'SizeT',
     'BoxT',
     'ColorT',
     'HasColorT',
@@ -31,6 +32,7 @@ __all__ = (
 )
 
 
+SizeT: TypeAlias = tuple[int, int]
 BoxT: TypeAlias = tuple[int, int, int, int]
 ColorT: TypeAlias = str | int | tuple[int, int, int] | tuple[int, int, int, int]
 HasColorT: TypeAlias = Callable[[tuple[int, int, int]], bool]

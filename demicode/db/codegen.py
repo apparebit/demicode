@@ -45,7 +45,7 @@ def generate_code(mirror: Mirror) -> None:
     # Define properties and their values based on the most recent version.
     # Thanks to Unicode's stability policy, it is the most comprehensive.
     property_values = retrieve_property_values(mirror)
-    with open('demicode/_property.py', mode='w', encoding='utf8') as file:
+    with open('demicode/db/_property.py', mode='w', encoding='utf8') as file:
         for line in generate_property_values(property_values):
             print(line, file=file)
 
@@ -53,22 +53,21 @@ def generate_code(mirror: Mirror) -> None:
     # For now, we test grapheme breaks for 15.0 only. That should change.
     v15_0 = Version(15, 0, 0)
     v15_1 = Version(15, 1, 0)
+    v16_0 = Version(16, 0, 0)
 
     with open('test/grapheme_clusters.py', mode='w', encoding='utf8') as file:
         print('# This module is machine-generated. Do not edit by hand.\n', file=file)
-        with mirror.data('GraphemeBreakTest.txt', v15_0) as lines:
-            for line in grapheme_cluster_breaks(lines, v15_0):
-                print(line, file=file)
+        for version in (v15_0, v15_1, v16_0):
+            with mirror.data('GraphemeBreakTest.txt', version) as lines:
+                for line in grapheme_cluster_breaks(lines, version):
+                    print(line, file=file)
+            print('\n', file=file)
 
-        print('\n', file=file)
-        with mirror.data('GraphemeBreakTest.txt', v15_1) as lines:
-            for line in grapheme_cluster_breaks(lines, v15_1):
-                print(line, file=file)
         print(dedent("""
-
             GRAPHEME_CLUSTER_BREAKS = {
                 '15.0': _GRAPHEME_CLUSTER_BREAKS_15_0,
                 '15.1': _GRAPHEME_CLUSTER_BREAKS_15_1,
+                '16.0': _GRAPHEME_CLUSTER_BREAKS_16_0,
             }
         """), file=file)
 

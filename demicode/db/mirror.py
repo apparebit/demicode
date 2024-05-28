@@ -409,7 +409,10 @@ class Manifest:
 # --------------------------------------------------------------------------------------
 
 
-_CORE_EMOJI_FILES = ('emoji-data.txt', 'emoji-variation-sequences.txt')
+_CORE_EMOJI_FILES = (
+    'emoji-data.txt',
+    'emoji-variation-sequences.txt',
+)
 _EMOJI_FILES = _CORE_EMOJI_FILES + (
     'emoji-sequences.txt',
     'emoji-test.txt',
@@ -430,7 +433,7 @@ _UCD_FILES = _EMOJI_FILES + (
     'UnicodeData.txt',
 )
 
-_LOOSE_VERSION_PATTERN = re.compile(r'[0-9]+[.][0-9]+([.][0-9]+)')
+_LOOSE_VERSION_PATTERN = re.compile(r'[0-9]+[.][0-9]+([.][0-9]+)*')
 _STRICT_VERSION_PATTERN = re.compile(r'[1-9][0-9]*[.](0|[1-9][0-9]*)[.](0|[1-9][0-9]*)')
 
 

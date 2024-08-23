@@ -29,11 +29,26 @@ _HTTP_CLDR_ACCEPT = (
     'application/vnd.npm.install-v1+json; q=1.0, application/json; q=0.8'
 )
 
-
+@contextmanager
 def _make_request(url: str, **headers: str) -> Any:
     """Request the resource with the given URL and return the response."""
-    return urlopen(Request(url, None, {'User-Agent': _HTTP_USER_AGENT} | headers))
+    try:
+        with urlopen(Request(
+            url,
+            None,
+            {'User-Agent': _HTTP_USER_AGENT} | headers,
+        )) as response:
+            yield response
+    except Exception as x:
+        raise NetworkError(url) from x
 
+
+class NetworkError(Exception):
+    """Wrapper for all errors occuring during network access."""
+
+    def __init__(self, url: str) -> None:
+        super().__init__(f"Couldn't access {url}")
+        self.url = url
 
 # --------------------------------------------------------------------------------------
 
@@ -209,7 +224,7 @@ class Manifest:
 
             _check_ucd_version(self.ucd)
             for version in self.versions:
-                if not version.is_supported_ucd() or version > self.ucd:
+                if not version.is_supported_ucd() or version > self.ucd.next_major():
                     raise ValueError(
                         f'invalid mirrored version {version} (UCD {self.ucd})')
 
@@ -242,8 +257,9 @@ class Manifest:
     def check_version(self, version: Version) -> None:
         _check_ucd_version(version)
         self.check_not_void()
-        if version > self.ucd:
-            raise VersionError(f'v{version} is from future')
+        # Allow for version being one major tick larger to account for beta releases.
+        if version > self.ucd.next_major():
+            raise VersionError(f'v{version} is from far future')
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> Self:
@@ -426,6 +442,7 @@ _UCD_FILES = _EMOJI_FILES + (
     'DerivedGeneralCategory.txt',
     'EastAsianWidth.txt',
     'GraphemeBreakProperty.txt',
+    'GraphemeBreakTest.txt',
     'IndicSyllabicCategory.txt',
     'PropertyValueAliases.txt',
     'PropList.txt',
@@ -455,8 +472,8 @@ class FileManager:
         released for the UCD version.
         """
         _check_ucd_version(version)
-        if version > self.ucd:
-            raise VersionError(f'v{version} has not been released')
+        if version > self.ucd.next_major():
+            raise VersionError(f'v{version} probably has not been released')
         elif filename in ('GraphemeBreakProperty.txt', 'GraphemeBreakTest.txt'):
             path = f'{version}/ucd/auxiliary'
         elif filename in ('DerivedCombiningClass.txt', 'DerivedGeneralCategory.txt'):
@@ -565,7 +582,7 @@ class FileManager:
                 )
 
             version = Version.of(entry.name)
-            if not version.is_supported_ucd() or version > self.ucd:
+            if not version.is_supported_ucd() or version > self.ucd.next_major():
                 raise VersionError(
                     f'entry "{entry.name}" in mirror directory "{self.mirror}" '
                     'is not a valid UCD version; please remove'
@@ -646,6 +663,7 @@ class Mirror:
         if version is not None:
             self._manifest = self._manifest.require(version, tick)
         self._version = version or self._manifest.ucd
+        self._tick = tick
 
     @property
     def root(self) -> Path:
@@ -664,8 +682,13 @@ class Mirror:
     def retrieved_versions(self) -> list[Version]:
         return list(self._manifest.versions)
 
+    def retrieve(
+        self, version: Version, tick: None | Callable[[], None] = None
+    ) -> None:
+        self._manifest = self._manifest.require(version, tick or self._tick)
+
     def retrieve_all(self, tick: None | Callable[[], None] = None) -> None:
-        self._manifest = self._manifest.require_all(tick)
+        self._manifest = self._manifest.require_all(tick or self._tick)
 
     def data(self, filename: str, version: Version) -> AbstractContextManager[IO[str]]:
         return self._manifest.files.data(filename, version)

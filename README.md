@@ -242,5 +242,5 @@ I 💖 Unicode!
 
 ---
 
-Demicode is © 2023 [Robert Grimm](https://apparebit.com) and has been released
-under the Apache 2.0 license.
+Demicode is © 2023–2024 [Robert Grimm](https://apparebit.com) and has been
+released under the Apache 2.0 license.

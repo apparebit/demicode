@@ -131,9 +131,9 @@ def configure_parser() -> argparse.ArgumentParser:
             prefixed with E, the Unicode Emoji version that first defined a
             sequence.
 
-            Demicode requires {b("Python 3.11 or later")} and a terminal that supports
-            {b("ANSI escape codes")} including 256 colors. Demicode is © 2023 Robert
-            Grimm, licensed as open source under Apache 2.0.
+            Demicode requires {b("Python 3.11 or later")} and a terminal that
+            supports {b("ANSI escape codes")} including 256 colors. Demicode is
+            © 2023-2024 Robert Grimm, licensed as open source under Apache 2.0.
 
                       <{a("https://github.com/apparebit/demicode")}>
              ​

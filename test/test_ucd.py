@@ -207,7 +207,7 @@ class TestProperty(unittest.TestCase):
             self.assertEqual(actual_data, expected_data)
 
     def test_grapheme_cluster_breaks(self) -> None:
-        for version in ("15.0", "15.1"):
+        for version in ("15.0", "15.1", "16.0"):
             with self.subTest(version=version):
                 ucd = UnicodeCharacterDatabase("ucd", version)
                 for codepoints, expected in GRAPHEME_CLUSTER_BREAKS[version].items():

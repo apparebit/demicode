@@ -264,6 +264,10 @@ class Renderer:
             input = sys.stdin
         if output is None:
             output = sys.stdout
+
+        assert input is not None
+        assert output is not None
+
         if styled is None:
             styled = output.isatty()
         if dark is None:
@@ -343,12 +347,12 @@ class Renderer:
         def reader(self) -> Iterator[KeyPressReader]:
             input = self._input
             fileno = input.fileno()
-            settings = termios.tcgetattr(fileno)
-            tty.setcbreak(fileno)
+            settings = termios.tcgetattr(fileno) # pyright: ignore [reportPossiblyUnboundVariable]
+            tty.setcbreak(fileno) # pyright: ignore [reportPossiblyUnboundVariable]
             try:
                 yield UnixKeyPressReader(input)
             finally:
-                termios.tcsetattr(fileno, termios.TCSADRAIN, settings)
+                termios.tcsetattr(fileno, termios.TCSADRAIN, settings) # pyright: ignore [reportPossiblyUnboundVariable]
 
     else:
 

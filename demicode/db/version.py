@@ -1,5 +1,5 @@
 from collections.abc import Iterator
-from typing import NamedTuple
+from typing import NamedTuple, Self
 
 
 class VersionError(Exception):
@@ -35,6 +35,18 @@ class Version(NamedTuple):
             raise VersionError(f'too many components in version "{v}"')
 
         return cls(*components)
+
+    def next_major(self) -> Self:
+        """Get the next higher major version."""
+        return type(self)(self.major + 1, 0, 0)
+
+    def next_minor(self) -> Self:
+        """Get the next higher minor version."""
+        return type(self)(self.major, self.minor + 1, 0)
+
+    def next_patch(self) -> Self:
+        """Get the next higher patch version"""
+        return type(self)(self.major, self.minor, self.patch + 1)
 
     def is_ucd(self) -> bool:
         """Determine whether this version is a valid UCD version."""

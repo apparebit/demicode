@@ -49,11 +49,19 @@ def generate_code(mirror: Mirror) -> None:
         for line in generate_property_values(property_values):
             print(line, file=file)
 
-    # Algorithms can and do change. So tests always are version-specific.
-    # For now, we test grapheme breaks for 15.0 only. That should change.
+    # Algorithms can and do change. So tests always are version-specific. Hence
+    # we test grapheme breaks for every version from 15.0 onwards.
     v15_0 = Version(15, 0, 0)
     v15_1 = Version(15, 1, 0)
     v16_0 = Version(16, 0, 0)
+
+    # Technically, we only need GraphemeBreakTest.txt for each versions. But we
+    # mirror at the granularity of all needed files. Also, even though we know
+    # that the mirror's version already is cached locally, we avoid complex
+    # logic here and just issue requests for all needed versions.
+    mirror.retrieve(v15_0)
+    mirror.retrieve(v15_1)
+    mirror.retrieve(v16_0)
 
     with open('test/grapheme_clusters.py', mode='w', encoding='utf8') as file:
         print('# This module is machine-generated. Do not edit by hand.\n', file=file)

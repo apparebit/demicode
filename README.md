@@ -129,6 +129,18 @@ The output of the last command should look something like the first screenshot.
 
 ## Versions
 
+  - **v1.4.0** (2024/08/23): Prepare for the release of Unicode 16.0
+      - Demicode now works with "future" versions that already have UCD files
+        on the web. Hence `demicode --ucd-version 16.0.0` works today even
+        though Unicode 15.1.0 still is the current version and demicode's
+        default.
+      - Demicode's code generation is now distangled from UCD parsing and its
+        Unicode property definitions reflect the current pre-release data for
+        16.0.0.
+      - Grapheme cluster breaking now supports the 15.0.0, 15.1.0, and
+        pre-release 16.0.0 versions of the algorithm. It passes all official
+        tests. The only change necessary was getting code generation to work for
+        16.0.0. The resulting tests passed without changes to implementation.
   - **v1.3.0** (2024/01/07):
       - Automate running demicode in popular terminals on macOS and collecting
         either performance data or screenshots.

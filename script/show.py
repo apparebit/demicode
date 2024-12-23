@@ -18,7 +18,10 @@ BLUE = f'{CSI}38;5;63m'
 RESET = f'{CSI}0m'
 INDENT = '        '
 PREFIX = '\u2E3B\u2A0C{sep}\U0001F9D1\u200D\U0001F4BB'
-WIDTH = 29
+MARKERS1 = '▽▽▽▽▼▽▽▽▽▼'
+MARKERS2 = '△△△△▲△△△△▲'
+MARKERS3 = '    5    1    1    2    2    3    3    4    4    5'
+MARKERS4 = '         0    5    0    5    0    5    0    5    0'
 
 
 def mkbar() -> str:
@@ -26,12 +29,12 @@ def mkbar() -> str:
     return '\x1b[48;5;196m' + (' ' * width) + '\x1b[0m'
 
 
-def mklabels() -> tuple[str, str]:
+def mklabels(tens: int) -> tuple[str, str]:
     terminal = Terminal.current()
     if terminal.version is None:
         return terminal.long_name, ''
     display = terminal.display
-    if len(display) <= WIDTH:
+    if len(display) <= tens * 10:
         return display, ''
     else:
         return terminal.long_name, terminal.version
@@ -41,16 +44,19 @@ def mkprefix(spaces: int) -> str:
     return f'\u2E3B\u2A0C{" " * spaces}\U0001F9D1\u200D\U0001F4BB'
 
 
-def print_payload(bar1: str, label1: str, label2: str, payload: str, bar2: str) -> None:
+def print_payload(bar1: str, label1: str, label2: str, payload: str, bar2: str, tens: int) -> None:
     print(bar1)
     print('\n')
-    print(f'{INDENT}{LEGEND}{label1.center(WIDTH)}{RESET}')
+
+    width = 10 * tens
+    print(f'{INDENT}{LEGEND}{label1.center(width)}{RESET}')
     if label2 != '':
-        print(f'{INDENT}{LEGEND}{label2.center(WIDTH)}{RESET}')
-    print(f'{INDENT}{FAINT}▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼{RESET}')
+        print(f'{INDENT}{LEGEND}{label2.center(width)}{RESET}')
+    print(f'{INDENT}{FAINT}{MARKERS1 * tens}{RESET}')
     print(f'{INDENT}{payload}')
-    print(f'{INDENT}{FAINT}▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲{RESET}')
-    print(f'{INDENT}{FAINT}1 3 5 7 9 1 3 5 7 9 1 3 5 7 9{RESET}')
+    print(f'{INDENT}{FAINT}{MARKERS2 * tens}{RESET}')
+    print(f'{INDENT}{FAINT}{MARKERS3[0: width]}{RESET}')
+    print(f'{INDENT}{FAINT}{MARKERS4[0: width]}{RESET}')
     print('\n')
     if bar2:
         print(bar2)
@@ -60,27 +66,34 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument(
         'payload',
-        choices=['dash-integral', 'spaced-dash-integral', 'arab-ligature'],
+        choices=['dash-integral', 'spaced-dash-integral', 'arab-ligature', 'hello'],
     )
     options = parser.parse_args()
 
     bar = mkbar()
-    label1, label2 = mklabels()
 
     payload2 = None
     if options.payload == 'arab-ligature':
         payload1 = '\uFDFD'
+        tens = 2
     elif options.payload == 'spaced-dash-integral':
         payload1 = f' {FAINT}█{RESET} '.join(mkprefix(w) for w in range(3))
+        tens = 3
     elif options.payload == 'dash-integral':
         payload1 = mkprefix(0) + '\uFF0A𝔽𝕚𝕩𝕖𝕕-𝐖𝐢𝐝𝐭𝐡'
         payload2 = mkprefix(3) + f'{FAINT}█{RESET}\uFF0A{FAINT}█{RESET}𝔽𝕚𝕩𝕖𝕕-𝐖𝐢𝐝𝐭𝐡'
+        tens = 3
+    elif options.payload == 'hello':
+        payload1 = 'Hello  سلام  नमस्ते  שלום'
+        payload2 = 'こんにちは  Привет  你好'
+        tens = 3
     else:
         raise ValueError(f'invalid payload "{options.payload}"')
 
-    print_payload(bar, label1, label2, payload1, '' if payload2 else bar)
+    label1, label2 = mklabels(tens)
+    print_payload(bar, label1, label2, payload1, '' if payload2 else bar, tens)
     if payload2:
-        print_payload(bar, label1, label2, payload2, bar)
+        print_payload(bar, label1, label2, payload2, bar, tens)
 
 if __name__ == '__main__':
     main()

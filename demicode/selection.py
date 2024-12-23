@@ -195,6 +195,7 @@ VERSION_ORACLE = tuple(
         # 13.1 added new ZWJ sequences only
         "\U0001FAA9",  # MIRROR BALL, 14.0
         "\U0001FAE8",  # SHAKING FACE, 15.0
+        "\U0001FAC6",  # FINGERPRINT, 16.0
     )
 )
 

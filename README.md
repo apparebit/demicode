@@ -128,6 +128,9 @@ The output of the last command should look something like the first screenshot.
 
 
 ## Versions
+  - **v1.5.0** (2024/12/22): Recognize 16.0 as known Unicode version and update
+        Unicode version oracle for v16.0 (even if the necessary emoji still is
+        MIA).
 
   - **v1.4.0** (2024/08/23): Prepare for the release of Unicode 16.0
       - Demicode now works with "future" versions that already have UCD files

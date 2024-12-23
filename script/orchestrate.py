@@ -89,7 +89,7 @@ def _run_applescript(script: str, **kwargs: Any) -> str:
 
 
 PayloadType: TypeAlias = Literal[
-    "dash-integral", "spaced-dash-integral", "arab-ligature", "seven-languages"
+    "dash-integral", "spaced-dash-integral", "arab-ligature", "hello"
 ]
 
 
@@ -109,9 +109,8 @@ def _mark_up_figure(
             desc2 = "with extra spaces to separate glyphs"
         case "arab-ligature":
             desc1 = "the code point with the largest glyph"
-        case "seven-languages":
-            desc1 = "the same (rather overdone) sentence"
-            desc2 = "about free software ensuring a free society in 7 major languages"
+        case "hello":
+            desc1 = "hello in seven languages"
         case _:  # type: ignore
             raise ValueError(f"unexpected payload {payload}")
 
@@ -309,13 +308,7 @@ class Terminal(BaseTerminal):
             assert demicode == Path.cwd()
 
             print(f"    ⊙ Display {payload}")
-            if payload == 'seven-languages':
-                subprocess.run(
-                    ["./script/highlight.py", "./script/en-es-ja-ru-he-zh-hi.txt"],
-                    check=True
-                )
-            else:
-                subprocess.run(["./script/show.py", payload], check=True)
+            subprocess.run(["./script/show.py", payload], check=True)
 
             print("    ⊙ Capture screenshot")
             self.screenshot(screenshot)
@@ -326,10 +319,7 @@ class Terminal(BaseTerminal):
         self.change_dir(demicode)
 
         print(f"    ⊙ Make {self.name} display {payload}")
-        if payload == 'seven-languages':
-            self.exec(f"./script/highlight.py ./script/en-es-ja-ru-he-zh-hi.txt")
-        else:
-            self.exec(f"./script/show.py {payload}")
+        self.exec(f"./script/show.py {payload}")
 
         print(f"    ⊙ Capture screenshot of {self.name}")
         self.screenshot(screenshot)
@@ -448,7 +438,7 @@ def main() -> None:
         "--payload",
         "-p",
         choices=[
-            "dash-integral", "spaced-dash-integral", "arab-ligature", "seven-languages"
+            "dash-integral", "spaced-dash-integral", "arab-ligature", "hello"
         ],
         default="dash-integral",
         help="select the payload to display",

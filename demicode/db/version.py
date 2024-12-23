@@ -121,6 +121,7 @@ KNOWN_UCD_VERSIONS = tuple(Version(*vs) for vs in [
     (14, 0, 0),
     (15, 0, 0),
     (15, 1, 0),
+    (16, 0, 0),
 ])
 
 KNOWN_EMOJI_VERSIONS = tuple(Version(*vs) for vs in (
@@ -140,4 +141,5 @@ KNOWN_EMOJI_VERSIONS = tuple(Version(*vs) for vs in (
     (14, 0, 0),
     (15, 0, 0),
     (15, 1, 0),
+    (16, 0, 0),
 ))

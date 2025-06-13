@@ -613,66 +613,56 @@ class UnicodeCharacterDatabase:
 
         return result
 
-    # def combine(
-    #     self, *properties: BinaryProperty | PropertyValue
-    # ) -> list[tuple[CodePointRange, dict[str, PropertyValueTypes]]]:
-    #     """
-    #     Combine the internal range data for the given properties into a single
-    #     list of ranges and mappings containing the properties. The latter is
-    #     used in lieu of dataclasses so that this method can be used for
-    #     exploratory analysis of arbitrary properties.
-    #     """
-    #     # Collect properties by code point
-    #     by_codepoint: list[dict[str, PropertyValueTypes]] = [
-    #         dict() for _ in CodePointRange.ALL.codepoints()
-    #     ]
+    def count_combinations(self, *properties: PropertyId) -> tuple[int, int]:
+        by_codepoint: list[list[str]] = [
+            list() for _ in CodePointRange.ALL.codepoints()
+        ]
 
-    #     for codepoint in CodePointRange.ALL.codepoints():
-    #         property_values = by_codepoint[codepoint]
+        # For each code point, collect property value other than the default
+        for codepoint in CodePointRange.ALL.codepoints():
+            property_values = by_codepoint[codepoint]
 
-    #         for property in properties:
-    #             match property:
-    #                 case BinaryProperty():
-    #                     value: PropertyValueTypes = self.test(codepoint, property)
-    #                     property_values[property] = value
-    #                 case Property():
-    #                     value = self.resolve(codepoint, property)
-    #                     property_values[property] = value
+            for property in properties:
+                if isinstance(property, BinaryProperty):
+                    value = self.test(codepoint, property)
+                    if value:
+                        property_values.append(property.name)
+                else:
+                    value = self.resolve(codepoint, property)
+                    _, default = _PROPERTY_RANGES_AND_DEFAULT[property]
+                    if value != default:
+                        property_values.append(value)
 
-    #     # Compress properties per code point into consecutive ranges.
-    #     start: CodePoint = CodePoint.MIN
-    #     stop: CodePoint = CodePoint.MIN
-    #     pending: None | dict[str, PropertyValueTypes] = None
-    #     by_range: list[tuple[CodePointRange, dict[str, PropertyValueTypes]]] = []
-    #     for codepoint in CodePointRange.ALL.codepoints():
-    #         current = by_codepoint[codepoint]
-    #         if pending == current:
-    #             stop = codepoint
-    #             continue
-    #         if pending is not None:
-    #             by_range.append((CodePointRange(start, stop), pending))
-    #         start = stop = codepoint
-    #         pending = current
+        # Determine number of code points with at least one non-default property
+        # as well as number of ranges with same values
+        start = CodePoint.MIN
+        by_range: list[CodePointRange] = []
+        pending = None
 
-    #     if pending is not None:
-    #         by_range.append((CodePointRange(start, stop), pending))
+        count = 0
+        for codepoint in CodePointRange.ALL.codepoints():
+            current = by_codepoint[codepoint]
+            if len(current) == 0:
+                if pending is not None:
+                    by_range.append(CodePointRange.of(start, codepoint.previous()))
+                    pending = None
+                continue
 
-    #     # Validate the resulting data.
-    #     discontinuities = 0
-    #     prev: None | CodePointRange = None
-    #     for range, property_values in by_range:
-    #         if prev is None or prev.stop + 1 == range.start:
-    #             prev = range
-    #             continue
-    #         discontinuities += 1
-    #         logger.error('{0!r} does not abut {1!r}', prev.stop, range.start)
-    #         prev = range
+            count += 1
+            if current == pending:
+                continue
+            if pending is None:
+                pending = current
+                start = codepoint
+            elif current != pending:
+                by_range.append(CodePointRange.of(start, codepoint.previous()))
+                pending = current
+                start = codepoint
 
-    #     if discontinuities > 0:
-    #         raise ValueError(
-    #             f'range compression left {discontinuities} discontinuities')
+        if pending is not None:
+            by_range.append(CodePointRange.of(start, CodePoint.MAX))
 
-    #     return by_range
+        return count, len(by_range)
 
     def count_nondefault_values(self, property: PropertyId) -> tuple[int, int]:
         """

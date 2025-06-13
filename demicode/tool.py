@@ -421,7 +421,7 @@ def process(options: argparse.Namespace, termio: TermIO, renderer: Renderer) -> 
     except VersionError:
         raise UserError(f'"{options.ucd_version}" is not a valid UCD version')
 
-    if options.ucd_optimize:
+    if options.ucd_optimize and not options.inspect_ucd:
         ucd.optimize()
     if options.ucd_validate:
         ucd.validate()
@@ -441,9 +441,9 @@ def process(options: argparse.Namespace, termio: TermIO, renderer: Renderer) -> 
         return 0
 
     if options.inspect_ucd:
-        prop_counts = collect_statistics(ucd.mirror.root, ucd.version)
+        prop_counts = collect_statistics(ucd)
         overlap = ucd.count_break_overlap()
-        show_statistics(ucd.version, prop_counts, overlap, renderer)
+        show_statistics(ucd, prop_counts, overlap, renderer)
         return 0
 
     # ------------------------------------------ Determine code points to display

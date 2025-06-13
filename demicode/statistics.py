@@ -1,5 +1,4 @@
 import math
-from pathlib import Path
 from typing import cast, NamedTuple
 
 import demicode.db.model as model
@@ -19,7 +18,6 @@ from .db.model import (
     to_property_name,
 )
 from .db.ucd import OverlapCounter, UnicodeCharacterDatabase
-from .db.version import Version
 from .ui.render import Renderer
 
 
@@ -52,7 +50,7 @@ class PropertyInfo(NamedTuple):
     max_ranges: int  # The number of code point ranges after combining adjacent ones
 
 
-def collect_statistics(root: Path, version: Version) -> dict[PropertyId, PropertyInfo]:
+def collect_statistics(ucd: UnicodeCharacterDatabase) -> dict[PropertyId, PropertyInfo]:
     """
     For the UCD version cached at the given path and for each of several Unicode
     properties, collect the number of distinct values for the Unicode property,
@@ -60,7 +58,6 @@ def collect_statistics(root: Path, version: Version) -> dict[PropertyId, Propert
     code point ranges in the UCD file, and the number of code point ranges after
     combining adjacent ranges for the same property value.
     """
-    ucd = UnicodeCharacterDatabase(root, version).validate()
     if ucd.is_optimized:
         raise AssertionError("UCD claims to be optimized without call to optimize()")
     counts: list[tuple[int, int]] = []
@@ -96,13 +93,13 @@ def collect_statistics(root: Path, version: Version) -> dict[PropertyId, Propert
 
 
 def show_statistics(
-    version: Version,
+    ucd: UnicodeCharacterDatabase,
     prop_counts: dict[PropertyId, PropertyInfo],
     overlap: OverlapCounter,
     renderer: Renderer,
 ) -> None:
     renderer.newline()
-    v = version.in_short_format()
+    v = ucd.version.in_short_format()
     renderer.strong(f"UCD {v} Properties (Before / After Range Optimization)")
     renderer.newline()
 
@@ -126,17 +123,19 @@ def show_statistics(
             f"{ranges:6,d}  {max_ranges:6,d}"
         )
 
-    def show_total() -> None:
+    def show_total(label: str = "Sum", margin: bool = True) -> None:
         renderer.write(f' {" " * 28}  ')
         renderer.faint("–" * (2 + 2 + 9 + 2 + 6 + 2 + 6))
         renderer.newline()
 
-        renderer.faint(f' {"Subtotal":<28}')
+        renderer.faint(f' {label:<28}')
+        rs = "      " if sum_ranges == 0 else f"{sum_ranges:6,d}"
         renderer.writeln(
             f"  {sum_bits:2,d}  {sum_points:9,d}  "
-            f"{sum_ranges:6,d}  {sum_max_ranges:6,d}"
+            f"{rs}  {sum_max_ranges:6,d}"
         )
-        renderer.writeln("\n")
+        if margin:
+            renderer.writeln("\n")
 
     # ----------------------------------------------------------------------------------
 
@@ -198,21 +197,24 @@ def show_statistics(
 
     # ----------------------------------------------------------------------------------
 
+    properties = (
+        BinaryProperty.Emoji_Presentation,
+        BinaryProperty.Extended_Pictographic,
+        East_Asian_Width,
+        General_Category,
+        Grapheme_Cluster_Break,
+        Indic_Conjunct_Break,
+    )
+
     show_heading("Required Properties II")
     sum_bits = sum_points = sum_ranges = sum_max_ranges = 0
-    for property in cast(
-        tuple[PropertyId, ...],
-        (
-            BinaryProperty.Emoji_Presentation,
-            BinaryProperty.Extended_Pictographic,
-            East_Asian_Width,
-            General_Category,
-            Grapheme_Cluster_Break,
-            Indic_Conjunct_Break,
-        ),
-    ):
+    for property in cast(tuple[PropertyId, ...], properties):
         show_counts(property)
-    show_total()
+    show_total(margin=False)
+
+    sum_points, sum_max_ranges = ucd.count_combinations(*properties)
+    sum_ranges = 0
+    show_total("Combination")
 
     # ----------------------------------------------------------------------------------
 

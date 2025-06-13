@@ -72,7 +72,6 @@ class testunit:
         try:
             message = json.dumps(self.message) if self.message else ""
         except:
-            print("***", self.message)
             message = ""
         params = ", ".join(f"{k}={v}" for k, v in self.params.items())
         between = f"{message}, {params}" if message and params else message + params

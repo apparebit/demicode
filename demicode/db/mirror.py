@@ -490,7 +490,10 @@ class FileManager:
             ):
                 return None
 
-            path = f'emoji/{emo_version.in_short_format()}'
+            if filename not in _CORE_EMOJI_FILES and version >= (17, 0, 0):
+                path = f'{version}/emoji'
+            else:
+                path = f'emoji/{emo_version.in_short_format()}'
         elif filename == 'IndicSyllabicCategory.txt' and version < (6, 0, 0):
             # File was provisional in 6.0 and became normative in 7.0
             return None

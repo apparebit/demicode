@@ -89,7 +89,7 @@ def _run_applescript(script: str, **kwargs: Any) -> str:
 
 
 PayloadType: TypeAlias = Literal[
-    "dash-integral", "spaced-dash-integral", "arab-ligature", "hello"
+    "dash-integral", "spaced-dash-integral", "arab-ligature", "hello", "oracle"
 ]
 
 
@@ -111,6 +111,8 @@ def _mark_up_figure(
             desc1 = "the code point with the largest glyph"
         case "hello":
             desc1 = "hello in seven languages"
+        case "oracle":
+            desc1 = "the Unicode version oracle in action"
         case _:  # type: ignore
             raise ValueError(f"unexpected payload {payload}")
 
@@ -226,6 +228,9 @@ class Terminal(BaseTerminal):
             f"""
             tell application "System Events"
                 tell (some process whose bundle identifier is "{self.bundle}")
+                    keystroke "clear"
+                    keystroke return
+                    delay 1
                     keystroke "cd {cwd}"
                     keystroke return
                     delay 1
@@ -308,7 +313,13 @@ class Terminal(BaseTerminal):
             assert demicode == Path.cwd()
 
             print(f"    ⊙ Display {payload}")
-            subprocess.run(["./script/show.py", payload], check=True)
+            if payload == "oracle":
+                subprocess.run([
+                    "python", "-m", "demicode", "--in-screenshot", "--with-version-oracle"],
+                    check=True
+                )
+            else:
+                subprocess.run(["./script/show.py", payload], check=True)
 
             print("    ⊙ Capture screenshot")
             self.screenshot(screenshot)
@@ -319,7 +330,10 @@ class Terminal(BaseTerminal):
         self.change_dir(demicode)
 
         print(f"    ⊙ Make {self.name} display {payload}")
-        self.exec(f"./script/show.py {payload}")
+        if payload == "oracle":
+            self.exec("python -m demicode --in-screenshot --with-version-oracle")
+        else:
+            self.exec(f"./script/show.py {payload}")
 
         print(f"    ⊙ Capture screenshot of {self.name}")
         self.screenshot(screenshot)
@@ -346,8 +360,15 @@ class Terminal(BaseTerminal):
             # Get rectangles between red horizontal bars
             print(f'    ⊙ Scan for red bars')
 
-            x1 = _LEFT_VSCODE_MARGIN if self.is_vscode() else _SIDE_MARGIN
-            x2 = im.width - _SIDE_MARGIN
+            if payload == "oracle":
+                left_margin = 40 if self.is_warp() else 20
+                right_margin = 40
+            else:
+                left_margin = _LEFT_VSCODE_MARGIN if self.is_vscode() else _SIDE_MARGIN
+                right_margin = _SIDE_MARGIN
+
+            x1 = left_margin
+            x2 = im.width - right_margin
             step = (x2 - x1) // _PROBES
             ranges = image.scan_bars(im, slice(x1, x2, step))
             only_one = len(ranges) == 1
@@ -421,7 +442,7 @@ def main() -> None:
         "--terminal",
         "-t",
         choices=[
-            "alactritty",
+            "alacritty",
             "hyper",
             "iterm",
             "kitty",
@@ -438,7 +459,7 @@ def main() -> None:
         "--payload",
         "-p",
         choices=[
-            "dash-integral", "spaced-dash-integral", "arab-ligature", "hello"
+            "dash-integral", "spaced-dash-integral", "arab-ligature", "hello", "oracle"
         ],
         default="dash-integral",
         help="select the payload to display",

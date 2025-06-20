@@ -558,6 +558,7 @@ class UnicodeCharacterDatabase:
             return self._resolve(codepoint, ranges, default)
 
     def count(self, selection: Property) -> int:
+        """Count the number of code points with that property value."""
         attribute, default = _PROPERTY_RANGES_AND_DEFAULT[selection.__class__]
         ranges = getattr(self, attribute)
         result = 0
@@ -579,6 +580,7 @@ class UnicodeCharacterDatabase:
     def materialize(
         self, selection: BinaryProperty | Property
     ) -> set[CodePoint]:
+        """Access all code points with that property value."""
         result: set[CodePoint] = set()
 
         if isinstance(selection, BinaryProperty):

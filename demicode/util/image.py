@@ -130,6 +130,8 @@ def size_matte(
     color: None | tuple[int, int, int] = None,
     tolerance: int = 3,
 ) -> None | BoxT:
+    # https://stackoverflow.com/questions/10615901/trim-whitespace-using-pil
+
     if im.mode != 'RGB':
         raise ValueError(f'unsupported mode "{im.mode}"')
 

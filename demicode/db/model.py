@@ -205,11 +205,11 @@ class Presentation(Enum):
       * `KEYCAP` adds U+FE0F variation selector-16 and U+20E3 combining
         enclosing keycap
 
-    `CORNER` and `CENTER` are only valid with the full-width forms of of
-    `!,.:;?` (U+FF01, U+FF0C, U+FF0E, U+FF1A, U+FF1B, U+FF1F). `TEXT` and
-    `EMOJI` are only valid with the code points included in
-    `USD.with_emoji_variation`, and `KEYCAP` only with `#*0123456789`, which
-    also are in `USD.with_emoji_variation`.
+    `CORNER` and `CENTER` are only valid with the full-width forms of `!,.:;?`
+    (U+FF01, U+FF0C, U+FF0E, U+FF1A, U+FF1B, U+FF1F). `TEXT` and `EMOJI` are
+    only valid with the code points included in `UCD.with_emoji_variation`, and
+    `KEYCAP` only with `#*0123456789`, which also are in
+    `UCD.with_emoji_variation`.
 
     `NONE` means displaying a grapheme cluster without extra combining
     characters. `HEADING` is *not* associated with code points but rather a

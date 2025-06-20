@@ -423,11 +423,12 @@ def display_for_screenshot(
     *,
     incrementally: bool = False,
 ) -> None:
+    renderer.newline()
     renderer.emit_hbar()
     renderer.newline()
     renderer.newline()
 
-    renderer.strong(Terminal.current().display.center(renderer.width))
+    renderer.strong(f" {Terminal.current().display}")
     renderer.newline()
 
     emit_lines(
@@ -440,4 +441,5 @@ def display_for_screenshot(
 
     renderer.newline()
     renderer.emit_hbar()
+    renderer.newline()
     renderer.newline()

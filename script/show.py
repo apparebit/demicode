@@ -45,6 +45,7 @@ def mkprefix(spaces: int) -> str:
 
 
 def print_payload(bar1: str, label1: str, label2: str, payload: str, bar2: str, tens: int) -> None:
+    print('\n')
     print(bar1)
     print('\n')
 
@@ -60,7 +61,7 @@ def print_payload(bar1: str, label1: str, label2: str, payload: str, bar2: str, 
     print('\n')
     if bar2:
         print(bar2)
-
+        print('\n')
 
 def main() -> None:
     parser = argparse.ArgumentParser()

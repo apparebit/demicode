@@ -54,6 +54,7 @@ def generate_code(mirror: Mirror) -> None:
     v15_0 = Version(15, 0, 0)
     v15_1 = Version(15, 1, 0)
     v16_0 = Version(16, 0, 0)
+    v17_0 = Version(17, 0, 0)
 
     # Technically, we only need GraphemeBreakTest.txt for each versions. But we
     # mirror at the granularity of all needed files. Also, even though we know
@@ -62,10 +63,11 @@ def generate_code(mirror: Mirror) -> None:
     mirror.retrieve(v15_0)
     mirror.retrieve(v15_1)
     mirror.retrieve(v16_0)
+    mirror.retrieve(v17_0)
 
     with open('test/grapheme_clusters.py', mode='w', encoding='utf8') as file:
         print('# This module is machine-generated. Do not edit by hand.\n', file=file)
-        for version in (v15_0, v15_1, v16_0):
+        for version in (v15_0, v15_1, v16_0, v17_0):
             with mirror.data('GraphemeBreakTest.txt', version) as lines:
                 for line in grapheme_cluster_breaks(lines, version):
                     print(line, file=file)
@@ -76,6 +78,7 @@ def generate_code(mirror: Mirror) -> None:
                 '15.0': _GRAPHEME_CLUSTER_BREAKS_15_0,
                 '15.1': _GRAPHEME_CLUSTER_BREAKS_15_1,
                 '16.0': _GRAPHEME_CLUSTER_BREAKS_16_0,
+                '17.0': _GRAPHEME_CLUSTER_BREAKS_17_0,
             }
         """), file=file)
 

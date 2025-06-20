@@ -22,12 +22,13 @@
     "14.0.0",
     "15.0.0",
     "15.1.0",
-    "16.0.0"
+    "16.0.0",
+    "17.0.0"
   ],
   "cldr": {
     "version": "45.0.0",
     "annotations": "https://registry.npmjs.org/cldr-annotations-modern/-/cldr-annotations-modern-45.0.0.tgz",
     "derived-annotations": "https://registry.npmjs.org/cldr-annotations-derived-modern/-/cldr-annotations-derived-modern-45.0.0.tgz"
   },
-  "timestamp": "2024-09-29T19:20:16.989792+00:00"
+  "timestamp": "2025-06-20T17:19:17.791133+00:00"
 }

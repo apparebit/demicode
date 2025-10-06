@@ -3,10 +3,12 @@
 import argparse
 import os
 import sys
+from typing import Callable
 
 sys.path.insert(0, '')
 
 from demicode.ui.terminal import Terminal
+from demicode.ui.termio import TermIO
 
 
 CSI = '\x1b['
@@ -22,7 +24,7 @@ MARKERS1 = '▽▽▽▽▼▽▽▽▽▼'
 MARKERS2 = '△△△△▲△△△△▲'
 MARKERS3 = '    5    1    1    2    2    3    3    4    4    5'
 MARKERS4 = '         0    5    0    5    0    5    0    5    0'
-
+CHAREND = '┣━━꩟'
 
 def mkbar() -> str:
     width, _ = os.get_terminal_size()
@@ -44,7 +46,14 @@ def mkprefix(spaces: int) -> str:
     return f'\u2E3B\u2A0C{" " * spaces}\U0001F9D1\u200D\U0001F4BB'
 
 
-def print_payload(bar1: str, label1: str, label2: str, payload: str, bar2: str, tens: int) -> None:
+def print_payload(
+    bar1: str,
+    label1: str,
+    label2: str,
+    payload: str | Callable[[], None],
+    bar2: str,
+    tens: int,
+) -> None:
     print('\n')
     print(bar1)
     print('\n')
@@ -54,7 +63,10 @@ def print_payload(bar1: str, label1: str, label2: str, payload: str, bar2: str, 
     if label2 != '':
         print(f'{INDENT}{LEGEND}{label2.center(width)}{RESET}')
     print(f'{INDENT}{FAINT}{MARKERS1 * tens}{RESET}')
-    print(f'{INDENT}{payload}')
+    if isinstance(payload, str):
+        print(f'{INDENT}{payload}')
+    else:
+        payload()
     print(f'{INDENT}{FAINT}{MARKERS2 * tens}{RESET}')
     print(f'{INDENT}{FAINT}{MARKERS3[0: width]}{RESET}')
     print(f'{INDENT}{FAINT}{MARKERS4[0: width]}{RESET}')
@@ -63,11 +75,44 @@ def print_payload(bar1: str, label1: str, label2: str, payload: str, bar2: str, 
         print(bar2)
         print('\n')
 
+
+def show_rainbow(set_column: bool = False) -> None:
+    termio = TermIO()
+
+    # Write rainbow flag emoji
+    termio.write(INDENT)
+    termio.write('\U0001F3F3\uFE0F\u200D\U0001F308')
+    if not set_column:
+        termio.writeln(CHAREND)
+        return
+
+    # Determine cursor position
+    try:
+        with termio.cbreak_mode():
+            position = termio.request_cursor_position()
+    except TimeoutError:
+        position = None
+
+    # Move cursor to next column
+    if position is not None:
+        column, _ = position
+        if set_column:
+            termio.cursor_at_column(column)
+        termio.write(f'{CHAREND} width={column - len(INDENT) - 1}')
+    termio.writeln()
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument(
         'payload',
-        choices=['dash-integral', 'spaced-dash-integral', 'arab-ligature', 'hello'],
+        choices=[
+            'dash-integral',
+            'spaced-dash-integral',
+            'arab-ligature',
+            'hello',
+            'rainbow',
+        ],
     )
     options = parser.parse_args()
 
@@ -88,6 +133,10 @@ def main() -> None:
         payload1 = 'Hello  سلام  नमस्ते  שלום'
         payload2 = 'こんにちは  Привет  你好'
         tens = 3
+    elif options.payload == 'rainbow':
+        payload1 = lambda: show_rainbow(set_column=False)
+        payload2 = lambda: show_rainbow(set_column=True)
+        tens = 2
     else:
         raise ValueError(f'invalid payload "{options.payload}"')
 

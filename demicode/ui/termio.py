@@ -58,8 +58,8 @@ class TermIO:
         input: None | TextIO = None,
         output: None | TextIO = None,
     ) -> None:
-        self._input = input or sys.__stdin__
-        self._output = output or sys.__stderr__
+        self._input = cast(TextIO, input or sys.__stdin__)
+        self._output = cast(TextIO, output or sys.__stderr__)
         self._width, self._height = self.query_size()
 
         # TODO: Consider querying terminal attributes via termios.tcgetattr()
